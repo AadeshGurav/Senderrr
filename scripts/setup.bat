@@ -48,17 +48,29 @@ playwright install chromium
 echo [INFO]  Playwright Chromium installed.
 
 REM ---------------------------------------------------------------
-REM 4. Start Redis via Docker Compose
+REM 4. Start Redis via Docker Compose (v2 plugin or v1 standalone)
 REM ---------------------------------------------------------------
 where docker >nul 2>nul
 if %ERRORLEVEL% equ 0 (
     echo [INFO]  Starting Redis via Docker Compose...
-    docker compose up -d redis
+    docker compose version >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        docker compose up -d redis
+    ) else (
+        where docker-compose >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+            docker-compose up -d redis
+        ) else (
+            echo [WARN]  Docker found but neither 'docker compose' (v2) nor 'docker-compose' (v1) available.
+            goto skip_redis
+        )
+    )
     echo [INFO]  Redis is running.
 ) else (
     echo [WARN]  Docker not found. Install Docker Desktop for Redis:
     echo [WARN]  https://www.docker.com/products/docker-desktop
 )
+:skip_redis
 
 REM ---------------------------------------------------------------
 REM 5. Environment file

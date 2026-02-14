@@ -31,17 +31,66 @@ PROJECT_DIR="$(pwd)"
 info "Project directory: ${PROJECT_DIR}"
 
 # ---------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------
+
+resolve_compose_cmd() {
+    if docker compose version &>/dev/null 2>&1; then
+        echo "docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        echo "docker-compose"
+    else
+        echo ""
+    fi
+}
+
+ensure_pip_in_venv() {
+    local pip_bin=".venv/bin/pip"
+    if [ -x "$pip_bin" ]; then
+        return 0
+    fi
+
+    warn "pip not found inside venv — bootstrapping with get-pip.py..."
+    local get_pip="/tmp/get-pip.py"
+    if command -v curl &>/dev/null; then
+        curl -sS https://bootstrap.pypa.io/get-pip.py -o "$get_pip"
+    elif command -v wget &>/dev/null; then
+        wget -qO "$get_pip" https://bootstrap.pypa.io/get-pip.py
+    else
+        error "Neither curl nor wget found. Install one of them, then re-run."
+    fi
+    .venv/bin/python "$get_pip" --quiet
+    rm -f "$get_pip"
+
+    [ -x "$pip_bin" ] || error "Failed to bootstrap pip."
+    info "pip bootstrapped successfully."
+}
+
+# ---------------------------------------------------------------
 # 1. Python virtual environment
 # ---------------------------------------------------------------
 if [ ! -d ".venv" ]; then
     info "Creating Python virtual environment..."
-    python3 -m venv .venv
+    if ! python3 -m venv .venv 2>/dev/null; then
+        # Debian/Ubuntu ships venv as a separate apt package
+        if [ -f /etc/debian_version ]; then
+            PY_MINOR="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+            warn "python3-venv not found. Installing python${PY_MINOR}-venv..."
+            sudo apt-get update -qq && sudo apt-get install -y -qq "python${PY_MINOR}-venv"
+            python3 -m venv .venv || error "Failed to create virtual environment even after installing python${PY_MINOR}-venv."
+        else
+            error "Failed to create virtual environment. Ensure python3-venv (or equivalent) is installed."
+        fi
+    fi
 else
     info "Virtual environment already exists."
 fi
 
 source .venv/bin/activate
 info "Activated venv: $(python --version)"
+
+# Ensure pip is available (ensurepip may be missing on Debian/Ubuntu)
+ensure_pip_in_venv
 
 # ---------------------------------------------------------------
 # 2. Install Python dependencies
@@ -62,9 +111,15 @@ info "Playwright Chromium installed."
 # 4. Start Redis via Docker Compose
 # ---------------------------------------------------------------
 if command -v docker &> /dev/null; then
-    info "Starting Redis via Docker Compose..."
-    docker compose up -d redis
-    info "Redis is running."
+    COMPOSE_CMD="$(resolve_compose_cmd)"
+    if [ -n "$COMPOSE_CMD" ]; then
+        info "Starting Redis via Docker Compose ($COMPOSE_CMD)..."
+        $COMPOSE_CMD up -d redis
+        info "Redis is running."
+    else
+        warn "Docker found but neither 'docker compose' (v2) nor 'docker-compose' (v1) available."
+        warn "Install docker-compose or the Docker Compose plugin, then run: docker compose up -d redis"
+    fi
 else
     warn "Docker not found. Please install Redis manually:"
     warn "  Mac:   brew install redis && brew services start redis"

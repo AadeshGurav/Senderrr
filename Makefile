@@ -5,6 +5,7 @@
 SHELL := /bin/bash
 PYTHON := .venv/bin/python
 CELERY := .venv/bin/celery
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
 .PHONY: help setup doctor start stop health groups migrate shell clean
 
@@ -22,7 +23,7 @@ start:  ## Start all services (Django + Celery + Beat)
 	.venv/bin/honcho start
 
 stop:  ## Stop Redis container
-	docker compose down
+	$(COMPOSE) down
 
 health:  ## Run system health check
 	$(PYTHON) manage.py health_check

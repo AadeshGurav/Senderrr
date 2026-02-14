@@ -62,6 +62,17 @@ def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _resolve_compose_cmd() -> str:
+    """Return the available Docker Compose command (v2 plugin or v1 standalone)."""
+    if shutil.which("docker"):
+        result = _run(["docker", "compose", "version"])
+        if result.returncode == 0:
+            return "docker compose"
+    if shutil.which("docker-compose"):
+        return "docker-compose"
+    return ""
+
+
 # ── Checks ────────────────────────────────────────────────────────────
 
 
@@ -76,18 +87,44 @@ def check_python_version() -> bool:
 
 
 def check_venv(*, fix: bool) -> bool:
-    """Virtual environment exists."""
+    """Virtual environment exists with a working pip."""
     if VENV_DIR.is_dir() and PYTHON_BIN.is_file():
-        ok(f"Virtual environment at {VENV_DIR.name}/")
-        return True
+        if PIP_BIN.is_file():
+            ok(f"Virtual environment at {VENV_DIR.name}/")
+            return True
+        if not fix:
+            fail("Virtual environment exists but pip is missing (ensurepip absent)")
+            return False
+        return _bootstrap_pip()
     if not fix:
         fail("Virtual environment missing")
         return False
     _run([sys.executable, "-m", "venv", str(VENV_DIR)])
-    if PYTHON_BIN.is_file():
-        fixed("Created virtual environment")
+    if not PYTHON_BIN.is_file():
+        fail("Could not create virtual environment")
+        return False
+    fixed("Created virtual environment")
+    if PIP_BIN.is_file():
         return True
-    fail("Could not create virtual environment")
+    return _bootstrap_pip()
+
+
+def _bootstrap_pip() -> bool:
+    """Download get-pip.py and bootstrap pip into the venv."""
+    import urllib.request
+
+    get_pip = Path("/tmp/get-pip.py")
+    try:
+        urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", str(get_pip))
+    except Exception as exc:
+        fail(f"Failed to download get-pip.py: {exc}")
+        return False
+    result = _run([str(PYTHON_BIN), str(get_pip), "--quiet"])
+    get_pip.unlink(missing_ok=True)
+    if result.returncode == 0 and PIP_BIN.is_file():
+        fixed("Bootstrapped pip via get-pip.py")
+        return True
+    fail(f"pip bootstrap failed: {result.stderr.strip()[:200]}")
     return False
 
 
@@ -182,9 +219,9 @@ def check_redis() -> bool:
         ok("Redis responding on localhost:6379")
         return True
 
-    docker = shutil.which("docker")
-    if docker:
-        warn("Redis not responding — try: docker compose up -d redis")
+    compose_cmd = _resolve_compose_cmd()
+    if compose_cmd:
+        warn(f"Redis not responding — try: {compose_cmd} up -d redis")
     else:
         warn("Redis not responding — install Docker or Redis manually")
     return False
