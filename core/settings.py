@@ -133,8 +133,7 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 600  # 10 min hard limit per task
 CELERY_TASK_SOFT_TIME_LIMIT = 540  # 9 min soft limit
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 50  # Recycle workers to free Playwright memory
-CELERY_WORKER_CONCURRENCY = 1  # Single worker — browser is not thread-safe
+CELERY_WORKER_CONCURRENCY = 1  # Solo pool — browser singleton lives in main process
 
 CELERY_BEAT_SCHEDULE = {
     "check-for-new-articles": {

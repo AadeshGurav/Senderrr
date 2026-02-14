@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 WHATSAPP_WEB_URL = "https://web.whatsapp.com"
 
-# WhatsApp Web DOM selectors — covers personal and Business variants.
+# WhatsApp Web DOM selectors — ordered from most-specific to broadest.
+# WhatsApp frequently changes its DOM; keep multiple fallbacks.
 SELECTORS = {
     "search_box": ", ".join([
         '[data-testid="chat-list-search"]',
@@ -39,10 +40,16 @@ SELECTORS = {
         '[data-testid="conversation-compose-box-input"]',
         'div[role="textbox"][data-tab="10"]',
         '#main footer div[contenteditable="true"]',
+        'div[role="textbox"][data-tab="1"]',
+        '[data-testid="lexical-rich-text-input"]',
+        '#main div[contenteditable="true"][role="textbox"]',
+        '#main div[contenteditable="true"]',
     ]),
     "send_button": ", ".join([
         '[data-testid="send"]',
+        '[data-testid="compose-btn-send"]',
         'button[aria-label="Send"]',
+        '#main footer button span[data-icon="send"]',
     ]),
 }
 
@@ -125,8 +132,8 @@ def _ensure_whatsapp_loaded(page) -> None:  # noqa: ANN001
         logger.info("WhatsApp Web loaded.")
 
 
-def _search_and_open_chat(page, group_jid: str) -> bool:  # noqa: ANN001
-    """Search for a group and click into its chat.
+def _search_and_open_chat(page, group_name: str) -> bool:  # noqa: ANN001
+    """Search for a group by name and click into its chat.
 
     Returns ``True`` if the chat was opened successfully.
     """
@@ -136,40 +143,127 @@ def _search_and_open_chat(page, group_jid: str) -> bool:  # noqa: ANN001
 
         search_input = page.wait_for_selector(SELECTORS["search_input"], timeout=5_000)
         search_input.fill("")
-        _type_slowly(search_input, group_jid)
+        search_input.fill(group_name)
 
+        time.sleep(3)
+
+        # Find the search result that contains the group name
+        result = page.locator(
+            f'{SELECTORS["chat_row"]} >> text="{group_name}"'
+        ).first
+        try:
+            result.wait_for(state="visible", timeout=10_000)
+        except PlaywrightTimeout:
+            # Fallback: click any row with matching title attribute
+            result = page.locator(f'span[title="{group_name}"]').first
+            result.wait_for(state="visible", timeout=5_000)
+
+        result.click()
         time.sleep(2)
 
-        chat = page.wait_for_selector(SELECTORS["chat_row"], timeout=10_000)
-        chat.click()
-        time.sleep(1)
+        # Verify the chat panel actually loaded
+        try:
+            page.wait_for_selector("#main", timeout=5_000)
+        except PlaywrightTimeout:
+            logger.warning(
+                "Chat panel (#main) did not appear after clicking: %s", group_name
+            )
+            return False
+
         return True
     except PlaywrightTimeout:
-        logger.warning("Timed out searching for group: %s", group_jid)
+        logger.warning("Timed out searching for group: %s", group_name)
         return False
     except Exception as exc:
-        logger.error("Error opening chat %s: %s", group_jid, exc, exc_info=True)
+        logger.error("Error opening chat %s: %s", group_name, exc, exc_info=True)
         return False
+
+
+def _dump_main_dom(page) -> None:  # noqa: ANN001
+    """Log the DOM structure of #main for debugging stale selectors."""
+    try:
+        snippet = page.evaluate("""() => {
+            const main = document.querySelector('#main');
+            if (!main) return 'NO #main ELEMENT FOUND';
+            const footer = main.querySelector('footer');
+            if (!footer) return 'NO footer INSIDE #main. main innerHTML (500 chars): '
+                + main.innerHTML.substring(0, 500);
+            return 'footer innerHTML (1000 chars): '
+                + footer.innerHTML.substring(0, 1000);
+        }""")
+        logger.error("DOM DIAGNOSTIC:\n%s", snippet)
+    except Exception as exc:
+        logger.error("DOM diagnostic failed: %s", exc)
+
+
+def _find_compose_box(page):  # noqa: ANN001, ANN202
+    """Locate the message compose box using multiple strategies.
+
+    Tries CSS selectors first, then falls back to Playwright's
+    role-based locator API for resilience against DOM changes.
+    """
+    try:
+        box = page.wait_for_selector(SELECTORS["message_input"], timeout=8_000)
+        if box:
+            return box
+    except PlaywrightTimeout:
+        logger.debug("CSS selector strategy failed, trying role-based fallback.")
+
+    # Fallback: role-based locator scoped to #main
+    main = page.locator("#main")
+    textbox = main.get_by_role("textbox").first
+    try:
+        textbox.wait_for(state="visible", timeout=5_000)
+        return textbox
+    except PlaywrightTimeout:
+        pass
+
+    # Last resort: any contenteditable inside footer
+    editable = page.locator("#main footer [contenteditable='true']").first
+    try:
+        editable.wait_for(state="visible", timeout=3_000)
+        return editable
+    except PlaywrightTimeout:
+        pass
+
+    _dump_main_dom(page)
+    return None
 
 
 def _type_message_human_like(page, message: str) -> None:  # noqa: ANN001
     """Type the message into the compose box with random delays."""
-    try:
-        compose_box = page.wait_for_selector(SELECTORS["message_input"], timeout=10_000)
-        compose_box.click()
-        _type_slowly(compose_box, message)
-    except PlaywrightTimeout:
+    compose_box = _find_compose_box(page)
+    if compose_box is None:
         raise RuntimeError("Message input box not found — DOM may have changed.")
+    compose_box.click()
+    _type_slowly(compose_box, message)
+
+
+def _find_send_button(page):  # noqa: ANN001, ANN202
+    """Locate the send button using multiple strategies."""
+    try:
+        btn = page.wait_for_selector(SELECTORS["send_button"], timeout=4_000)
+        if btn:
+            return btn
+    except PlaywrightTimeout:
+        logger.debug("CSS selector strategy failed for send button, trying fallback.")
+
+    # Fallback: aria-label locator
+    send = page.get_by_role("button", name="Send").first
+    try:
+        send.wait_for(state="visible", timeout=3_000)
+        return send
+    except PlaywrightTimeout:
+        return None
 
 
 def _click_send(page) -> None:  # noqa: ANN001
     """Click the send button."""
-    try:
-        send_btn = page.wait_for_selector(SELECTORS["send_button"], timeout=5_000)
-        send_btn.click()
-        time.sleep(1)
-    except PlaywrightTimeout:
+    send_btn = _find_send_button(page)
+    if send_btn is None:
         raise RuntimeError("Send button not found — DOM may have changed.")
+    send_btn.click()
+    time.sleep(1)
 
 
 def _type_slowly(element, text: str) -> None:  # noqa: ANN001
