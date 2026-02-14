@@ -26,6 +26,14 @@ def fetch_page_content(url: str) -> str:
     Raises:
         requests.RequestException: After all retries are exhausted.
     """
+    return _extract_visible_text(_fetch_raw_html(url))
+
+
+def _fetch_raw_html(url: str) -> str:
+    """Fetch a URL and return the raw HTML response body.
+
+    Retries up to ``SCRAPER_MAX_RETRIES`` on transient failures.
+    """
     last_exception: Exception | None = None
 
     max_retries = get_config("SCRAPER_MAX_RETRIES", int)
@@ -39,7 +47,7 @@ def fetch_page_content(url: str) -> str:
                 headers={"User-Agent": "WhatsAppAutomation/1.0"},
             )
             response.raise_for_status()
-            return _extract_visible_text(response.text)
+            return response.text
         except requests.RequestException as exc:
             last_exception = exc
             logger.warning(
@@ -80,7 +88,8 @@ def detect_and_store_change(url: str) -> ScrapedArticle | None:
         The newly created ``ScrapedArticle`` if content changed,
         or ``None`` if there is no change.
     """
-    content = fetch_page_content(url)
+    raw_html = _fetch_raw_html(url)
+    content = _extract_visible_text(raw_html)
     new_hash = compute_content_hash(content)
 
     stored, _created = ArticleHash.objects.get_or_create(
@@ -94,11 +103,12 @@ def detect_and_store_change(url: str) -> ScrapedArticle | None:
 
     logger.info("Change detected for %s — storing new article.", url)
 
-    title = _extract_title(content)
+    title, article_url, body = _extract_structured_data(url, raw_html, content)
+
     article = ScrapedArticle.objects.create(
-        url=url,
+        url=article_url,
         title=title,
-        body=content,
+        body=body,
         content_hash=new_hash,
     )
 
@@ -115,3 +125,30 @@ def _extract_title(text: str) -> str:
         if stripped:
             return stripped[:500]
     return ""
+
+
+def _extract_structured_data(
+    url: str, raw_html: str, text_content: str
+) -> tuple[str, str, str]:
+    """Extract structured data if a site-specific parser exists.
+
+    Returns:
+        (title, article_url, body) — falls back to generic extraction
+        if no parser matches or parsing fails.
+    """
+    # DEMO: Hacker News parser — delete this block to remove HN support
+    if "news.ycombinator.com" in url:
+        try:
+            from apps.scraper.parsers import format_hn_message, parse_top_story
+
+            story = parse_top_story(raw_html)
+            if story:
+                return story.title, story.url, format_hn_message(story)
+        except ImportError:
+            logger.debug("HN parser not installed — using generic extraction.")
+        except Exception as exc:
+            logger.warning("HN parser failed, falling back: %s", exc)
+
+    # Generic fallback
+    title = _extract_title(text_content)
+    return title, url, text_content

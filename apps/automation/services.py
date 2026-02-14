@@ -13,6 +13,12 @@ from django.conf import settings
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from apps.automation.browser_manager import PlaywrightBrowserManager
+from apps.automation.rate_limiter import check_rate_limit, increment_send_counter
+from apps.automation.safety_guards import (
+    capture_screenshot,
+    check_session_health,
+    dump_main_dom,
+)
 from utils.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -58,24 +64,34 @@ def send_message_to_group(group_jid: str, message: str) -> bool:
     """Send a message to a WhatsApp group with human-like behaviour.
 
     Steps:
-        1. Apply anti-ban jitter delay.
-        2. Open WhatsApp Web (if not already open).
-        3. Search for the group by its JID/name.
-        4. Type the message with randomised per-character delay.
-        5. Click send.
+        1. Check rate limits (daily/hourly).
+        2. Apply anti-ban jitter delay.
+        3. Open WhatsApp Web (if not already open).
+        4. Verify session health (QR, CAPTCHA, bans).
+        5. Search for the group by its name.
+        6. Type the message with randomised per-character delay.
+        7. Click send and increment rate counters.
 
     Returns:
         ``True`` on success, ``False`` on recoverable failure.
 
     Raises:
-        Exception: On unrecoverable errors (propagated to the caller).
+        RuntimeError: On rate limit exceeded or session issues.
     """
+    allowed, reason = check_rate_limit()
+    if not allowed:
+        raise RuntimeError(f"Rate limit exceeded: {reason}")
+
     _apply_anti_ban_jitter()
 
     manager = PlaywrightBrowserManager()
     page = manager.get_page()
 
     _ensure_whatsapp_loaded(page)
+
+    healthy, issue = check_session_health(page)
+    if not healthy:
+        raise RuntimeError(f"Session unhealthy: {issue}")
 
     if not _search_and_open_chat(page, group_jid):
         logger.error("Could not find group: %s", group_jid)
@@ -84,17 +100,31 @@ def send_message_to_group(group_jid: str, message: str) -> bool:
     _type_message_human_like(page, message)
     _click_send(page)
 
+    increment_send_counter()
     logger.info("Message sent to group: %s", group_jid)
     return True
 
 
 def _apply_anti_ban_jitter() -> None:
-    """Sleep a random duration between sends to mimic human pacing."""
-    delay = random.uniform(
-        get_config("AUTOMATION_JITTER_MIN", float),
-        get_config("AUTOMATION_JITTER_MAX", float),
+    """Sleep a random duration between sends with progressive scaling.
+
+    Jitter increases as more messages are sent in the current hour,
+    making high-volume sends appear more natural over time.
+    """
+    from apps.automation.rate_limiter import get_hourly_count
+
+    batch_size = getattr(settings, "AUTOMATION_BATCH_SIZE", 50)
+    multiplier = getattr(settings, "AUTOMATION_JITTER_MULTIPLIER", 1.5)
+    batches_completed = get_hourly_count() // batch_size
+    scale = multiplier ** batches_completed
+
+    jitter_min = get_config("AUTOMATION_JITTER_MIN", float) * scale
+    jitter_max = get_config("AUTOMATION_JITTER_MAX", float) * scale
+
+    delay = random.uniform(jitter_min, jitter_max)
+    logger.debug(
+        "Anti-ban jitter: sleeping %.1fs (scale=%.1fx)", delay, scale
     )
-    logger.debug("Anti-ban jitter: sleeping %.1fs", delay)
     time.sleep(delay)
 
 
@@ -143,7 +173,7 @@ def _search_and_open_chat(page, group_name: str) -> bool:  # noqa: ANN001
 
         search_input = page.wait_for_selector(SELECTORS["search_input"], timeout=5_000)
         search_input.fill("")
-        search_input.fill(group_name)
+        _type_slowly(search_input, group_name)
 
         time.sleep(3)
 
@@ -179,21 +209,6 @@ def _search_and_open_chat(page, group_name: str) -> bool:  # noqa: ANN001
         return False
 
 
-def _dump_main_dom(page) -> None:  # noqa: ANN001
-    """Log the DOM structure of #main for debugging stale selectors."""
-    try:
-        snippet = page.evaluate("""() => {
-            const main = document.querySelector('#main');
-            if (!main) return 'NO #main ELEMENT FOUND';
-            const footer = main.querySelector('footer');
-            if (!footer) return 'NO footer INSIDE #main. main innerHTML (500 chars): '
-                + main.innerHTML.substring(0, 500);
-            return 'footer innerHTML (1000 chars): '
-                + footer.innerHTML.substring(0, 1000);
-        }""")
-        logger.error("DOM DIAGNOSTIC:\n%s", snippet)
-    except Exception as exc:
-        logger.error("DOM diagnostic failed: %s", exc)
 
 
 def _find_compose_box(page):  # noqa: ANN001, ANN202
@@ -226,7 +241,7 @@ def _find_compose_box(page):  # noqa: ANN001, ANN202
     except PlaywrightTimeout:
         pass
 
-    _dump_main_dom(page)
+    dump_main_dom(page)
     return None
 
 
@@ -234,6 +249,7 @@ def _type_message_human_like(page, message: str) -> None:  # noqa: ANN001
     """Type the message into the compose box with random delays."""
     compose_box = _find_compose_box(page)
     if compose_box is None:
+        capture_screenshot(page, "compose_box_missing")
         raise RuntimeError("Message input box not found — DOM may have changed.")
     compose_box.click()
     _type_slowly(compose_box, message)
@@ -266,10 +282,17 @@ def _click_send(page) -> None:  # noqa: ANN001
     time.sleep(1)
 
 
-def _type_slowly(element, text: str) -> None:  # noqa: ANN001
-    """Simulate human typing: one character at a time with random delay."""
+def _type_slowly(element, text: str, *, page=None) -> None:  # noqa: ANN001
+    """Simulate human typing: one character at a time with random delay.
+
+    Newlines are sent as Shift+Enter so WhatsApp creates a line break
+    instead of sending the message prematurely.
+    """
     for char in text:
-        element.type(char, delay=0)
+        if char == "\n":
+            element.press("Shift+Enter")
+        else:
+            element.type(char, delay=0)
         delay = random.uniform(
             settings.AUTOMATION_TYPING_DELAY_MIN,
             settings.AUTOMATION_TYPING_DELAY_MAX,

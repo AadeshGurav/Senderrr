@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,6 +56,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("\nAll checks passed. Starting services..."))
         self.stdout.write("Dashboard: http://localhost:8000\n")
 
+        self._kill_stale_services()
         os.execvp("honcho", ["honcho", "start"])
         return "Started"
 
@@ -89,24 +91,25 @@ class Command(BaseCommand):
             return pw
 
     def _check_whatsapp_session(self) -> None:
-        """Open browser, verify session or wait for QR scan, then close.
+        """Verify WhatsApp session, launching non-headless only for QR scan.
 
-        Single non-headless browser — WhatsApp Web blocks headless
-        Chromium, so we always launch visible. If the session is valid
-        the chat list appears in a few seconds and we close immediately.
-        If not, the QR code is shown and we wait up to 5 minutes.
+        If PLAYWRIGHT_HEADLESS is True, we check the session headlessly.
+        A visible window only opens when QR scanning is actually needed.
         """
         from playwright.sync_api import sync_playwright
 
         user_data_dir = settings.PLAYWRIGHT_USER_DATA_DIR
+        headless = settings.PLAYWRIGHT_HEADLESS
         Path(user_data_dir).mkdir(parents=True, exist_ok=True)
+
+        self._kill_stale_browsers(user_data_dir)
 
         self.stdout.write("\nChecking WhatsApp session...")
 
         pw = sync_playwright().start()
         ctx = pw.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
-            headless=False,
+            headless=headless,
             viewport={"width": 1280, "height": 900},
             locale="en-US",
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
@@ -114,7 +117,6 @@ class Command(BaseCommand):
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto(WHATSAPP_WEB_URL, wait_until="domcontentloaded", timeout=60_000)
 
-        # Phase 1: quick check (30s) — enough for a valid session to load.
         state = self._detect_login_state(page, timeout_ms=30_000)
 
         if state == "logged_in":
@@ -124,12 +126,25 @@ class Command(BaseCommand):
             pw.stop()
             return
 
-        if state == "qr":
-            self.stdout.write(self.style.WARNING("Session expired — scan the QR code now."))
-        else:
-            self.stdout.write(self.style.WARNING("Waiting for WhatsApp to load..."))
+        # Session expired — must scan QR code in a visible window.
+        ctx.close()
+        pw.stop()
 
-        # Phase 2: wait for login (5 min).
+        if headless:
+            self.stdout.write("Session needs QR scan — opening visible browser...")
+            self._kill_stale_browsers(user_data_dir)
+            pw = sync_playwright().start()
+            ctx = pw.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir,
+                headless=False,
+                viewport={"width": 1280, "height": 900},
+                locale="en-US",
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+            )
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.goto(WHATSAPP_WEB_URL, wait_until="domcontentloaded", timeout=60_000)
+
+        self.stdout.write(self.style.WARNING("Session expired — scan the QR code now."))
         self.stdout.write("Waiting up to 5 minutes...\n")
         state = self._detect_login_state(page, timeout_ms=300_000)
 
@@ -170,6 +185,41 @@ class Command(BaseCommand):
             if page.query_selector(sel):
                 return "qr"
         return "unknown"
+
+    def _kill_stale_browsers(self, user_data_dir: str) -> None:
+        """Kill any leftover Chrome processes and remove lock files."""
+        try:
+            subprocess.run(
+                ["pkill", "-f", f"user-data-dir={user_data_dir}"],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass
+
+        for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+            lock = Path(user_data_dir) / name
+            lock.unlink(missing_ok=True)
+
+    def _kill_stale_services(self) -> None:
+        """Kill leftover Django/Celery processes from a previous run."""
+        for cmd in (
+            ["lsof", "-ti", ":8000"],
+            ["pgrep", "-f", "celery.*worker"],
+            ["pgrep", "-f", "celery.*beat"],
+        ):
+            try:
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=5,
+                )
+                pids = result.stdout.strip().split()
+                for pid in pids:
+                    if pid.isdigit() and int(pid) != os.getpid():
+                        subprocess.run(
+                            ["kill", "-9", pid],
+                            capture_output=True, timeout=5,
+                        )
+            except Exception:
+                continue
 
     def _write_status(self, user_data_dir: str, *, logged_in: bool) -> None:
         """Write session status JSON for the dashboard to read."""

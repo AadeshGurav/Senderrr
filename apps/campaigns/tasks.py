@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from apps.campaigns.models import BroadcastEvent, MessageTask
@@ -34,12 +35,19 @@ def fan_out_broadcast(self, article_pk: int) -> str:  # noqa: ANN001
 
     broadcast = create_broadcast_event(article)
 
-    task_ids = broadcast.message_tasks.values_list("pk", flat=True)
-    for task_pk in task_ids:
-        dispatch_message.delay(task_pk)
+    task_pks = list(broadcast.message_tasks.values_list("pk", flat=True))
+    batch_size = getattr(settings, "AUTOMATION_BATCH_SIZE", 50)
+    batch_cooldown = getattr(settings, "AUTOMATION_BATCH_COOLDOWN", 900)
+
+    for index, task_pk in enumerate(task_pks):
+        batch_number = index // batch_size
+        delay_seconds = batch_number * batch_cooldown
+        dispatch_message.apply_async(args=[task_pk], countdown=delay_seconds)
 
     return (
-        f"Broadcast #{broadcast.pk} — " f"{broadcast.total_groups} send tasks enqueued."
+        f"Broadcast #{broadcast.pk} — "
+        f"{broadcast.total_groups} send tasks enqueued "
+        f"in {(len(task_pks) - 1) // batch_size + 1} batch(es)."
     )
 
 
@@ -79,8 +87,11 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
             exc,
             exc_info=True,
         )
-        _mark_failed(msg_task, str(exc))
-        raise self.retry(exc=exc)
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            _mark_failed(msg_task, str(exc))
+            return f"Permanently failed for {msg_task.group.name}"
 
     if success:
         _mark_sent(msg_task)
@@ -91,7 +102,14 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
 
 
 def _compose_message(article: ScrapedArticle) -> str:
-    """Build the message text from the scraped article."""
+    """Build the message text from the scraped article.
+
+    If the body already contains a formatted message (from a site-specific
+    parser), use it directly. Otherwise fall back to a simple format.
+    """
+    if article.body and article.body.startswith("🔶"):
+        return article.body
+
     title = article.title or "New Article"
     return f"📰 *{title}*\n\n{article.url}"
 

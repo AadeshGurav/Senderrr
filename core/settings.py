@@ -178,3 +178,26 @@ AUTOMATION_TYPING_DELAY_MIN = float(
 AUTOMATION_TYPING_DELAY_MAX = float(
     os.environ.get("AUTOMATION_TYPING_DELAY_MAX", "0.12")
 )
+
+# Rate limits — prevents WhatsApp bans from high-volume sends
+AUTOMATION_HOURLY_LIMIT = int(os.environ.get("AUTOMATION_HOURLY_LIMIT", "30"))
+AUTOMATION_DAILY_LIMIT = int(os.environ.get("AUTOMATION_DAILY_LIMIT", "150"))
+
+# Batch settings — pauses between groups to appear human
+AUTOMATION_BATCH_SIZE = int(os.environ.get("AUTOMATION_BATCH_SIZE", "50"))
+AUTOMATION_BATCH_COOLDOWN = int(
+    os.environ.get("AUTOMATION_BATCH_COOLDOWN", "900")
+)  # seconds between batches (15 min)
+
+# Progressive jitter — sends get slower as batch progresses
+AUTOMATION_JITTER_MULTIPLIER = float(
+    os.environ.get("AUTOMATION_JITTER_MULTIPLIER", "1.5")
+)  # jitter grows by this factor every BATCH_SIZE messages
+
+# Quiet hours (UTC) — no sends during these hours
+AUTOMATION_QUIET_HOUR_START = int(
+    os.environ.get("AUTOMATION_QUIET_HOUR_START", "1")
+)  # 1 AM UTC
+AUTOMATION_QUIET_HOUR_END = int(
+    os.environ.get("AUTOMATION_QUIET_HOUR_END", "7")
+)  # 7 AM UTC
