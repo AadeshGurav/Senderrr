@@ -1,0 +1,30 @@
+<tr id="group-row-{{ group.pk }}">
+  <td>{{ group.name }}</td>
+  <td><code>{{ group.group_jid }}</code></td>
+  <td>
+    {% if group.is_active %}
+    <span class="wa-badge connected">Active</span>
+    {% else %}
+    <span class="wa-badge disconnected">Inactive</span>
+    {% endif %}
+  </td>
+  <td>
+    <div class="group-actions">
+      <button class="outline secondary"
+              hx-post="{% url 'dashboard:toggle_group' group.pk %}"
+              hx-target="#group-row-{{ group.pk }}"
+              hx-swap="outerHTML"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        {% if group.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+      <button class="outline secondary"
+              hx-post="{% url 'dashboard:delete_group' group.pk %}"
+              hx-target="#group-section"
+              hx-swap="innerHTML"
+              hx-confirm="Delete group '{{ group.name }}'?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Delete
+      </button>
+    </div>
+  </td>
+</tr>

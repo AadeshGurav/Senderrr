@@ -29,6 +29,11 @@ _load_dotenv()
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
 
+# Python 3.12+ changed asyncio event loop detection, causing Django's
+# async safety check to falsely flag Celery's synchronous prefork workers
+# as async contexts.  This is safe — the worker is genuinely synchronous.
+os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+
 app = Celery("whatsapp_automation")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()

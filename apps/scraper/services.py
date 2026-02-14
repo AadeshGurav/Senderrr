@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 import requests
 from bs4 import BeautifulSoup
-from django.conf import settings
 
 from apps.scraper.models import ArticleHash, ScrapedArticle
+from utils.config import get_config
 from utils.hashing import sha256_digest
 
 if TYPE_CHECKING:
@@ -28,11 +28,14 @@ def fetch_page_content(url: str) -> str:
     """
     last_exception: Exception | None = None
 
-    for attempt in range(1, settings.SCRAPER_MAX_RETRIES + 1):
+    max_retries = get_config("SCRAPER_MAX_RETRIES", int)
+    timeout = get_config("SCRAPER_REQUEST_TIMEOUT", int)
+
+    for attempt in range(1, max_retries + 1):
         try:
             response = requests.get(
                 url,
-                timeout=settings.SCRAPER_REQUEST_TIMEOUT,
+                timeout=timeout,
                 headers={"User-Agent": "WhatsAppAutomation/1.0"},
             )
             response.raise_for_status()
@@ -42,7 +45,7 @@ def fetch_page_content(url: str) -> str:
             logger.warning(
                 "Fetch attempt %d/%d failed for %s: %s",
                 attempt,
-                settings.SCRAPER_MAX_RETRIES,
+                max_retries,
                 url,
                 exc,
             )

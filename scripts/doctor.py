@@ -207,23 +207,64 @@ def check_playwright_browser(*, fix: bool) -> bool:
     return False
 
 
-def check_redis() -> bool:
-    """Redis is reachable on the configured broker URL."""
+def _redis_is_up() -> bool:
+    """Return True if Redis responds to PING."""
     result = _run([str(PYTHON_BIN), "-c", (
         "import redis; "
         "r = redis.Redis(); "
         "assert r.ping(); "
         "print('ok')"
     )])
-    if result.returncode == 0 and "ok" in result.stdout:
+    return result.returncode == 0 and "ok" in result.stdout
+
+
+def check_redis(*, fix: bool) -> bool:
+    """Redis is reachable on the configured broker URL."""
+    if _redis_is_up():
         ok("Redis responding on localhost:6379")
         return True
 
+    if not fix:
+        fail("Redis not responding on localhost:6379")
+        return False
+
+    # Try Docker Compose first
     compose_cmd = _resolve_compose_cmd()
     if compose_cmd:
-        warn(f"Redis not responding — try: {compose_cmd} up -d redis")
-    else:
-        warn("Redis not responding — install Docker or Redis manually")
+        print(f"  {CYAN}FIX{NC}     Starting Redis via {compose_cmd}...")
+        cmd = compose_cmd.split() + ["up", "-d", "redis"]
+        _run(cmd)
+        import time
+        time.sleep(2)
+        if _redis_is_up():
+            fixed(f"Started Redis via {compose_cmd}")
+            return True
+
+    # Fallback: native install on Debian/Ubuntu
+    if Path("/etc/debian_version").exists():
+        print(f"  {CYAN}FIX{NC}     Installing redis-server via apt...")
+        _run(["sudo", "apt-get", "update", "-qq"])
+        result = _run(["sudo", "apt-get", "install", "-y", "-qq", "redis-server"])
+        if result.returncode == 0:
+            _run(["sudo", "systemctl", "enable", "redis-server", "--now"])
+            import time
+            time.sleep(1)
+            if _redis_is_up():
+                fixed("Installed and started redis-server via apt")
+                return True
+
+    # Fallback: Homebrew on macOS
+    if platform.system() == "Darwin" and shutil.which("brew"):
+        print(f"  {CYAN}FIX{NC}     Installing Redis via Homebrew...")
+        _run(["brew", "install", "redis", "--quiet"])
+        _run(["brew", "services", "start", "redis"])
+        import time
+        time.sleep(1)
+        if _redis_is_up():
+            fixed("Installed and started Redis via Homebrew")
+            return True
+
+    warn("Could not start Redis automatically — install it manually")
     return False
 
 
@@ -318,7 +359,7 @@ def main() -> None:
     results.append(("Pip packages", check_pip_packages(fix=fix)))
     results.append(("Playwright Chromium", check_playwright_browser(fix=fix)))
     results.append(("Docker", check_docker()))
-    results.append(("Redis", check_redis()))
+    results.append(("Redis", check_redis(fix=fix)))
     results.append((".env file", check_env_file(fix=fix)))
     results.append(("Django migrations", check_migrations(fix=fix)))
 

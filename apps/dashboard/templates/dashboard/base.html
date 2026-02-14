@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}WhatsApp Automation{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'dashboard/css/style.css' %}">
+</head>
+<body>
+  <nav class="container-fluid">
+    <ul>
+      <li><strong>WhatsApp Automation</strong></li>
+    </ul>
+    <ul>
+      {% if user.is_authenticated %}
+      <li><a href="{% url 'dashboard:index' %}">Dashboard</a></li>
+      <li><a href="{% url 'dashboard:settings' %}" hx-get="{% url 'dashboard:settings' %}" hx-target="#main-content" hx-push-url="true">Settings</a></li>
+      <li><a href="{% url 'admin:index' %}">Admin</a></li>
+      <li>
+        <form method="post" action="{% url 'logout' %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="outline secondary" style="margin:0;padding:0.25rem 0.75rem">Logout</button>
+        </form>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+
+  <main class="container" id="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="container">
+    <small>WhatsApp Automation Dashboard</small>
+  </footer>
+</body>
+</html>

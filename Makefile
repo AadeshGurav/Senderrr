@@ -20,7 +20,7 @@ doctor:  ## Diagnose and auto-repair environment
 	$(PYTHON) scripts/doctor.py
 
 start:  ## Start all services (Django + Celery + Beat)
-	.venv/bin/honcho start
+	$(PYTHON) manage.py start
 
 stop:  ## Stop Redis container
 	$(COMPOSE) down

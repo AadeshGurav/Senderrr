@@ -1,0 +1,52 @@
+/* Dashboard custom styles — minimal layer on top of Pico CSS */
+
+.wa-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.wa-badge.connected {
+    background: #d4edda;
+    color: #155724;
+}
+
+.wa-badge.disconnected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.wa-badge.unknown {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.group-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.group-actions button {
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.error {
+    color: var(--pico-del-color, #c62828);
+}
+
+.settings-saved {
+    background: #d4edda;
+    color: #155724;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+}
+
+footer.container {
+    text-align: center;
+    padding: 1rem 0;
+    opacity: 0.6;
+}

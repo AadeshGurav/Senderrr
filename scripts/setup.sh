@@ -108,20 +108,59 @@ playwright install chromium
 info "Playwright Chromium installed."
 
 # ---------------------------------------------------------------
-# 4. Start Redis via Docker Compose
+# 4. Start Redis
 # ---------------------------------------------------------------
-if command -v docker &> /dev/null; then
+_redis_running() {
+    # Returns 0 if Redis responds to PING on localhost:6379
+    (echo PING | nc -w 1 localhost 6379 2>/dev/null | grep -q PONG) 2>/dev/null
+}
+
+REDIS_OK=false
+
+if _redis_running; then
+    info "Redis already running on localhost:6379."
+    REDIS_OK=true
+elif command -v docker &> /dev/null; then
     COMPOSE_CMD="$(resolve_compose_cmd)"
     if [ -n "$COMPOSE_CMD" ]; then
         info "Starting Redis via Docker Compose ($COMPOSE_CMD)..."
         $COMPOSE_CMD up -d redis
+        REDIS_OK=true
         info "Redis is running."
-    else
-        warn "Docker found but neither 'docker compose' (v2) nor 'docker-compose' (v1) available."
-        warn "Install docker-compose or the Docker Compose plugin, then run: docker compose up -d redis"
     fi
-else
-    warn "Docker not found. Please install Redis manually:"
+fi
+
+# Fallback: install Redis natively on Debian/Ubuntu
+if [ "$REDIS_OK" = false ] && [ -f /etc/debian_version ]; then
+    info "Installing Redis server natively (apt)..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq redis-server
+    sudo systemctl enable redis-server --now 2>/dev/null || sudo service redis-server start 2>/dev/null || true
+    sleep 1
+    if _redis_running; then
+        REDIS_OK=true
+        info "Redis installed and running."
+    else
+        warn "Installed redis-server but it doesn't seem to be responding."
+    fi
+fi
+
+# Fallback: install Redis via Homebrew on macOS
+if [ "$REDIS_OK" = false ] && [ "$(uname)" = "Darwin" ]; then
+    if command -v brew &> /dev/null; then
+        info "Installing Redis via Homebrew..."
+        brew install redis --quiet
+        brew services start redis
+        sleep 1
+        if _redis_running; then
+            REDIS_OK=true
+            info "Redis installed and running."
+        fi
+    fi
+fi
+
+if [ "$REDIS_OK" = false ]; then
+    warn "Could not start Redis automatically."
+    warn "Install Redis manually, then run: honcho start"
     warn "  Mac:   brew install redis && brew services start redis"
     warn "  Linux: sudo apt install redis-server && sudo systemctl start redis"
 fi
@@ -153,9 +192,8 @@ info "  Setup complete!"
 info "=========================================="
 echo ""
 info "Next steps:"
-info "  1. Edit .env and set SCRAPER_TARGET_URL"
-info "  2. Start all services:  honcho start"
-info "  3. Scan the WhatsApp QR code in the browser window"
-info '  4. Add groups:  python manage.py add_group "Group Name"'
-info "  5. Verify:  python manage.py health_check"
+info "  1. Run:   make start"
+info "     (First run will prompt for a dashboard password and QR scan)"
+info "  2. Open:  http://localhost:8000"
+info "     (Manage groups, settings, and broadcasts from the dashboard)"
 echo ""

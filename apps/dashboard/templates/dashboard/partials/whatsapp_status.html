@@ -1,0 +1,7 @@
+<span class="wa-badge {{ wa_status.status }}">
+  {% if wa_status.status == "connected" %}Connected
+  {% elif wa_status.status == "disconnected" %}Disconnected
+  {% else %}Unknown
+  {% endif %}
+</span>
+{% if wa_status.checked_at %}<br><small>Last check: {{ wa_status.checked_at }}</small>{% endif %}

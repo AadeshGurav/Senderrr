@@ -1,0 +1,47 @@
+{% if saved %}
+<p role="alert" class="settings-saved">Settings saved successfully.</p>
+{% endif %}
+
+<form hx-post="{% url 'dashboard:settings' %}"
+      hx-target="#main-content"
+      hx-swap="innerHTML">
+  {% csrf_token %}
+  <article>
+    <header><h2>Settings</h2></header>
+
+    <h3>Scraper</h3>
+    <label for="id_SCRAPER_TARGET_URL">{{ settings_form.SCRAPER_TARGET_URL.label }}</label>
+    {{ settings_form.SCRAPER_TARGET_URL }}
+    {% if settings_form.SCRAPER_TARGET_URL.help_text %}<small>{{ settings_form.SCRAPER_TARGET_URL.help_text }}</small>{% endif %}
+    {% if settings_form.SCRAPER_TARGET_URL.errors %}<small class="error">{{ settings_form.SCRAPER_TARGET_URL.errors.0 }}</small>{% endif %}
+
+    <div class="grid">
+      <div>
+        <label for="id_SCRAPER_REQUEST_TIMEOUT">{{ settings_form.SCRAPER_REQUEST_TIMEOUT.label }}</label>
+        {{ settings_form.SCRAPER_REQUEST_TIMEOUT }}
+      </div>
+      <div>
+        <label for="id_SCRAPER_MAX_RETRIES">{{ settings_form.SCRAPER_MAX_RETRIES.label }}</label>
+        {{ settings_form.SCRAPER_MAX_RETRIES }}
+      </div>
+    </div>
+
+    <h3>Anti-Ban Delays</h3>
+    <div class="grid">
+      <div>
+        <label for="id_AUTOMATION_JITTER_MIN">{{ settings_form.AUTOMATION_JITTER_MIN.label }}</label>
+        {{ settings_form.AUTOMATION_JITTER_MIN }}
+        {% if settings_form.AUTOMATION_JITTER_MIN.help_text %}<small>{{ settings_form.AUTOMATION_JITTER_MIN.help_text }}</small>{% endif %}
+      </div>
+      <div>
+        <label for="id_AUTOMATION_JITTER_MAX">{{ settings_form.AUTOMATION_JITTER_MAX.label }}</label>
+        {{ settings_form.AUTOMATION_JITTER_MAX }}
+        {% if settings_form.AUTOMATION_JITTER_MAX.help_text %}<small>{{ settings_form.AUTOMATION_JITTER_MAX.help_text }}</small>{% endif %}
+      </div>
+    </div>
+
+    <footer>
+      <button type="submit">Save Settings</button>
+    </footer>
+  </article>
+</form>

@@ -1,0 +1,25 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Login — WhatsApp Automation{% endblock %}
+
+{% block content %}
+<article style="max-width: 400px; margin: 2rem auto;">
+  <header>
+    <h2>Login</h2>
+  </header>
+  {% if form.errors %}
+  <p class="error">Invalid username or password.</p>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <label for="id_username">Username</label>
+    <input type="text" name="username" id="id_username" autofocus required>
+    <label for="id_password">Password</label>
+    <input type="password" name="password" id="id_password" required>
+    <button type="submit">Log in</button>
+    {% if next %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {% endif %}
+  </form>
+</article>
+{% endblock %}

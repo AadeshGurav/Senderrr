@@ -1,0 +1,41 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Dashboard — WhatsApp Automation{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<!-- Stats row -->
+<div class="grid">
+  <article>
+    <header>Groups</header>
+    <p><strong>{{ active_groups }}</strong> active / {{ total_groups }} total</p>
+  </article>
+  <article>
+    <header>Broadcasts</header>
+    <p><strong>{{ total_broadcasts }}</strong> total</p>
+  </article>
+  <article>
+    <header>WhatsApp</header>
+    <div hx-get="{% url 'dashboard:whatsapp_status' %}" hx-trigger="load, every 30s" hx-swap="innerHTML">
+      <span class="wa-badge unknown">Checking...</span>
+    </div>
+  </article>
+</div>
+
+<!-- Groups section -->
+<section>
+  <h2>WhatsApp Groups</h2>
+  <div id="group-section">
+    {% include "dashboard/partials/group_list.html" %}
+  </div>
+</section>
+
+<!-- Broadcasts section -->
+<section>
+  <h2>Recent Broadcasts</h2>
+  <div id="broadcast-section" hx-get="{% url 'dashboard:broadcasts' %}" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    {% include "dashboard/partials/broadcast_list.html" %}
+  </div>
+</section>
+{% endblock %}

@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 
 from celery import shared_task
-from django.conf import settings
 
 from apps.scraper.services import detect_and_store_change
+from utils.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def check_for_new_articles(self) -> str:  # noqa: ANN001
 
     If a change is detected, triggers the campaign fan-out pipeline.
     """
-    url = settings.SCRAPER_TARGET_URL
+    url = get_config("SCRAPER_TARGET_URL")
     logger.info("Checking for new articles at %s", url)
 
     try:

@@ -1,0 +1,30 @@
+{% if broadcasts %}
+<table role="grid">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Article</th>
+      <th>Status</th>
+      <th>Progress</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in broadcasts %}
+    <tr>
+      <td>{{ b.pk }}</td>
+      <td>{{ b.article.title|truncatechars:50 }}</td>
+      <td>
+        <span class="wa-badge {% if b.status == 'completed' %}connected{% elif b.status == 'failed' %}disconnected{% elif b.status == 'in_progress' %}unknown{% else %}unknown{% endif %}">
+          {{ b.get_status_display }}
+        </span>
+      </td>
+      <td>{{ b.sent_count }}/{{ b.total_groups }}{% if b.failed_count %} ({{ b.failed_count }} failed){% endif %}</td>
+      <td>{{ b.created_at|timesince }} ago</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No broadcasts yet. They will appear here when content changes are detected.</p>
+{% endif %}

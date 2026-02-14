@@ -1,0 +1,20 @@
+<form hx-post="{% url 'dashboard:add_group' %}"
+      hx-target="#group-section"
+      hx-swap="innerHTML">
+  {% csrf_token %}
+  <div class="grid">
+    <div>
+      {{ group_form.name.label_tag }}
+      {{ group_form.name }}
+      {% if group_form.name.errors %}<small class="error">{{ group_form.name.errors.0 }}</small>{% endif %}
+    </div>
+    <div>
+      {{ group_form.group_jid.label_tag }}
+      {{ group_form.group_jid }}
+      {% if group_form.group_jid.errors %}<small class="error">{{ group_form.group_jid.errors.0 }}</small>{% endif %}
+    </div>
+    <div style="display:flex;align-items:end">
+      <button type="submit">Add Group</button>
+    </div>
+  </div>
+</form>
