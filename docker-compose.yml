@@ -1,0 +1,23 @@
+# Redis service for the Celery task queue.
+# The Django app, Celery worker, and Playwright browser run on the host
+# (Playwright needs a visible window for WhatsApp QR code scanning).
+#
+# Usage:
+#   docker compose up -d
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis_data:

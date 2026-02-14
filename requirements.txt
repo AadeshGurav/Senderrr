@@ -1,0 +1,21 @@
+# Core
+Django>=5.1,<6.0
+celery>=5.4,<6.0
+redis>=5.0,<6.0
+django-celery-beat>=2.6,<3.0
+
+# Scraping
+requests>=2.32,<3.0
+beautifulsoup4>=4.12,<5.0
+lxml>=5.0,<6.0
+
+# Browser Automation
+playwright>=1.48,<2.0
+
+# Environment & Process Management
+python-dotenv>=1.0,<2.0
+honcho>=2.0,<3.0
+
+# Dev & Quality
+black>=24.0
+ruff>=0.8
