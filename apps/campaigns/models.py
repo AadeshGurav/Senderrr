@@ -1,8 +1,22 @@
 """Campaigns app — models for broadcast orchestration."""
 
+from __future__ import annotations
+
 from django.db import models
 
 from apps.scraper.models import ScrapedArticle
+
+
+class ErrorCategory(models.TextChoices):
+    """Categorisation of message delivery failures."""
+
+    RATE_LIMITED = "rate_limited", "Rate Limited"
+    SESSION_EXPIRED = "session_expired", "Session Expired"
+    GROUP_NOT_FOUND = "group_not_found", "Group Not Found"
+    TIMEOUT = "timeout", "Timeout"
+    SEND_FAILED = "send_failed", "Send Failed"
+    BOT_DETECTED = "bot_detected", "Bot Detected"
+    UNKNOWN = "unknown", "Unknown"
 
 
 class WhatsAppGroup(models.Model):
@@ -21,6 +35,18 @@ class WhatsAppGroup(models.Model):
         help_text="Inactive groups are excluded from broadcasts.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # --- Delivery tracking (updated atomically by attempt_tracker) ---
+    total_sent = models.PositiveIntegerField(default=0)
+    total_failed = models.PositiveIntegerField(default=0)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    last_failed_at = models.DateTimeField(null=True, blank=True)
+    consecutive_failures = models.PositiveIntegerField(default=0)
+    is_healthy = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Auto-set False after N consecutive failures.",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -95,7 +121,23 @@ class MessageTask(models.Model):
         default=Status.QUEUED,
         db_index=True,
     )
+    worker_id = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Celery worker that handled this send.",
+    )
     error_message = models.TextField(blank=True, default="")
+    error_category = models.CharField(
+        max_length=30,
+        choices=ErrorCategory.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    attempt_count = models.PositiveIntegerField(default=0)
+    last_attempted_at = models.DateTimeField(null=True, blank=True)
+    next_retry_at = models.DateTimeField(null=True, blank=True)
     queued_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)
 
@@ -106,3 +148,45 @@ class MessageTask(models.Model):
 
     def __str__(self) -> str:
         return f"Msg #{self.pk} → {self.group.name} [{self.status}]"
+
+
+class MessageAttempt(models.Model):
+    """Immutable audit record for a single send attempt."""
+
+    class Status(models.TextChoices):
+        STARTED = "started", "Started"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    message_task = models.ForeignKey(
+        MessageTask,
+        on_delete=models.CASCADE,
+        related_name="attempts",
+    )
+    attempt_number = models.PositiveSmallIntegerField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.STARTED,
+    )
+    error_category = models.CharField(
+        max_length=30,
+        choices=ErrorCategory.choices,
+        null=True,
+        blank=True,
+    )
+    error_message = models.TextField(blank=True, default="")
+    screenshot_path = models.CharField(max_length=512, blank=True, default="")
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["started_at"]
+        verbose_name = "Message Attempt"
+        verbose_name_plural = "Message Attempts"
+
+    def __str__(self) -> str:
+        return (
+            f"Attempt #{self.attempt_number} for Msg #{self.message_task_id} "
+            f"[{self.status}]"
+        )

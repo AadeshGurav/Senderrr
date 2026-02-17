@@ -9,15 +9,35 @@
 <div class="grid">
   <article>
     <header>Groups</header>
-    <p><strong>{{ active_groups }}</strong> active / {{ total_groups }} total</p>
+    <p>
+      <strong>{{ active_groups }}</strong> active / {{ total_groups }} total
+    </p>
+    {% if unhealthy_groups %}
+    <p><span class="wa-badge disconnected">{{ unhealthy_groups }} unhealthy</span></p>
+    {% endif %}
   </article>
   <article>
     <header>Broadcasts</header>
     <p><strong>{{ total_broadcasts }}</strong> total</p>
+    {% if total_failed %}
+    <p>
+      <span class="wa-badge disconnected">{{ total_failed }} failed</span>
+      {% if retryable_failed %}
+      <button class="retry-btn outline secondary"
+              hx-post="{% url 'dashboard:retry_all' %}"
+              hx-target="#broadcast-section"
+              hx-swap="innerHTML"
+              hx-confirm="Retry all {{ retryable_failed }} eligible failed messages?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Retry {{ retryable_failed }}
+      </button>
+      {% endif %}
+    </p>
+    {% endif %}
   </article>
   <article>
-    <header>WhatsApp</header>
-    <div hx-get="{% url 'dashboard:whatsapp_status' %}" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    <header>Workers</header>
+    <div hx-get="{% url 'dashboard:worker_statuses' %}" hx-trigger="load, every 30s" hx-swap="innerHTML">
       <span class="wa-badge unknown">Checking...</span>
     </div>
   </article>

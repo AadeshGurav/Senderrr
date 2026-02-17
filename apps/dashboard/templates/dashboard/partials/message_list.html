@@ -1,0 +1,16 @@
+<table role="grid" class="message-table">
+  <thead>
+    <tr>
+      <th>Group</th>
+      <th>Status</th>
+      <th>Attempts</th>
+      <th>Error</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for msg in messages %}
+    {% include "dashboard/partials/message_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>

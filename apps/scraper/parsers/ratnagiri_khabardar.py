@@ -1,0 +1,185 @@
+"""Ratnagiri Khabardar parser — Marathi regional news site.
+
+Extracts articles from ratnagirikhabardar.com (WordPress/TagDiv theme).
+Homepage lists articles at /news/{id}/ URLs.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+
+from bs4 import BeautifulSoup
+
+from apps.scraper.parsers.base import (
+    ArticlePreview,
+    BaseSiteParser,
+    ParsedArticle,
+)
+from apps.scraper.parsers.registry import register
+
+logger = logging.getLogger(__name__)
+
+ARTICLE_URL_PATTERN = re.compile(r"/news/\d+/?$")
+
+
+@register
+class RatnagiriKhabardarParser(BaseSiteParser):
+    """Structured extraction for ratnagirikhabardar.com."""
+
+    name = "Ratnagiri Khabardar"
+    domains = ["ratnagirikhabardar.com"]
+
+    def parse_listing(self, html: str) -> list[ArticlePreview]:
+        soup = BeautifulSoup(html, "lxml")
+        seen_urls: set[str] = set()
+        previews: list[ArticlePreview] = []
+
+        for anchor in soup.select("a[href]"):
+            href = anchor.get("href", "").strip()
+            if not ARTICLE_URL_PATTERN.search(href):
+                continue
+            if href in seen_urls:
+                continue
+
+            title = anchor.get_text(strip=True)
+            if not title or len(title) < 5:
+                continue
+
+            seen_urls.add(href)
+            previews.append(ArticlePreview(title=title, url=href))
+
+        return previews
+
+    def parse_article(self, html: str, url: str) -> ParsedArticle | None:
+        soup = BeautifulSoup(html, "lxml")
+
+        title = _extract_title(soup)
+        if not title:
+            logger.warning("No title found for %s", url)
+            return None
+
+        summary = _extract_summary(soup)
+        author = _extract_author(soup)
+        category = _extract_category(soup)
+        image_url = _extract_featured_image(soup)
+        published_at = _extract_date(soup)
+
+        return ParsedArticle(
+            title=title,
+            url=url,
+            body=summary,
+            author=author,
+            category=category,
+            image_url=image_url,
+            published_at=published_at,
+        )
+
+    def format_message(self, article: ParsedArticle) -> str:
+        parts = [f"📰 *{article.title}*", ""]
+
+        meta = []
+        if article.category:
+            meta.append(f"📂 {article.category}")
+        if article.author:
+            meta.append(f"✍️ {article.author}")
+        if article.published_at:
+            meta.append(f"🗓️ {article.published_at}")
+        if meta:
+            parts.append("  •  ".join(meta))
+            parts.append("")
+
+        if article.body:
+            parts.append(article.body)
+            parts.append("")
+
+        # URL must be LAST for WhatsApp link-preview generation
+        parts.append(f"🔗 {article.url}")
+        return "\n".join(parts)
+
+
+def _extract_title(soup: BeautifulSoup) -> str:
+    h1 = soup.select_one("h1.entry-title") or soup.select_one("h1")
+    return h1.get_text(strip=True) if h1 else ""
+
+
+def _extract_summary(soup: BeautifulSoup) -> str:
+    """Use OG description for a clean, noise-free summary."""
+    og_desc = soup.select_one("meta[property='og:description']")
+    if og_desc and og_desc.get("content", "").strip():
+        return og_desc["content"].strip()
+
+    meta_desc = soup.select_one("meta[name='description']")
+    if meta_desc and meta_desc.get("content", "").strip():
+        return meta_desc["content"].strip()
+
+    # Fallback: first paragraph from article body
+    content = soup.select_one(".td-post-content") or soup.select_one(".entry-content")
+    if content:
+        first_p = content.select_one("p")
+        if first_p:
+            return _truncate(first_p.get_text(strip=True), max_chars=300)
+
+    return ""
+
+
+def _extract_author(soup: BeautifulSoup) -> str:
+    author_el = soup.select_one(".td-post-author-name a") or soup.select_one(
+        "a[href*='/author/']"
+    )
+    return author_el.get_text(strip=True) if author_el else ""
+
+
+def _extract_category(soup: BeautifulSoup) -> str:
+    cat_link = (
+        soup.select_one(".td-post-category")
+        or soup.select_one("a[rel='category tag']")
+        or soup.select_one(".post-categories a")
+    )
+    return cat_link.get_text(strip=True) if cat_link else ""
+
+
+def _extract_featured_image(soup: BeautifulSoup) -> str:
+    og_image = soup.select_one("meta[property='og:image']")
+    if og_image and og_image.get("content", "").strip():
+        return og_image["content"].strip()
+
+    td_img = soup.select_one(".td-post-featured-image img")
+    if td_img:
+        return td_img.get("src", "")
+
+    return ""
+
+
+def _extract_date(soup: BeautifulSoup) -> str:
+    """Extract human-readable publish date."""
+    time_el = soup.select_one("time.entry-date")
+    if time_el:
+        return time_el.get_text(strip=True)
+
+    meta_date = soup.select_one("meta[property='article:published_time']")
+    if meta_date and meta_date.get("content", ""):
+        return _format_iso_date(meta_date["content"])
+
+    td_date = soup.select_one(".td-post-date")
+    if td_date:
+        return td_date.get_text(strip=True)
+
+    return ""
+
+
+def _format_iso_date(iso_string: str) -> str:
+    """Convert ISO datetime to readable format."""
+    try:
+        from datetime import datetime
+
+        dt = datetime.fromisoformat(iso_string)
+        return dt.strftime("%d %b %Y, %I:%M %p")
+    except (ValueError, TypeError):
+        return iso_string
+
+
+def _truncate(text: str, max_chars: int = 300) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rsplit(" ", 1)[0] + "…"

@@ -23,6 +23,11 @@
     color: #856404;
 }
 
+.wa-badge.retrying {
+    background: #cce5ff;
+    color: #004085;
+}
+
 .group-actions {
     display: flex;
     gap: 0.5rem;
@@ -49,4 +54,83 @@ footer.container {
     text-align: center;
     padding: 1rem 0;
     opacity: 0.6;
+}
+
+/* Delivery stats */
+.stat-sent {
+    color: #155724;
+    font-weight: 600;
+}
+
+.stat-failed {
+    color: #721c24;
+    font-weight: 600;
+}
+
+/* Retry buttons */
+.retry-btn {
+    margin: 0;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+/* Worker cards */
+.worker-card {
+    margin-bottom: 0.5rem;
+    padding: 0.4rem 0;
+}
+
+.worker-stats {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.2rem;
+    flex-wrap: wrap;
+}
+
+.worker-stats small {
+    color: var(--pico-muted-color, #666);
+}
+
+/* Responsive table wrapper */
+.table-responsive {
+    overflow-x: auto;
+}
+
+/* Expandable rows */
+.expand-btn {
+    margin: 0;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.messages-container {
+    padding: 1rem !important;
+    background-color: var(--pico-card-background-color);
+    border-top: 1px solid var(--pico-table-border-color);
+}
+
+.message-table {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+.message-table td, .message-table th {
+    padding: 0.5rem;
+}
+
+.error-cell small {
+    display: block;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--pico-del-color);
+}
+
+.action-cell {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
 }

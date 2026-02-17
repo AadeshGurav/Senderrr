@@ -1,0 +1,24 @@
+<tr id="msg-row-{{ msg.pk }}">
+    <td>{{ msg.group.name }}</td>
+    <td>
+        <span
+            class="wa-badge {% if msg.status == 'sent' %}connected{% elif msg.status == 'failed' %}disconnected{% elif msg.status == 'sending' %}unknown{% else %}unknown{% endif %}">
+            {{ msg.get_status_display }}
+        </span>
+    </td>
+    <td>{{ msg.attempt_count }}/{{ max_attempts }}</td>
+    <td class="error-cell">
+        {% if msg.error_message %}
+        <small title="{{ msg.error_message }}">{{ msg.error_message|truncatechars:40 }}</small>
+        {% endif %}
+        {% if error %}<small class="stat-failed">{{ error }}</small>{% endif %}
+    </td>
+    <td>
+        {% if msg.can_retry %}
+        <button class="retry-btn outline secondary" hx-post="{% url 'dashboard:retry_message' msg.pk %}"
+            hx-target="#msg-row-{{ msg.pk }}" hx-swap="outerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            ↻ Retry
+        </button>
+        {% endif %}
+    </td>
+</tr>

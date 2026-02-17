@@ -37,3 +37,23 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 app = Celery("whatsapp_automation")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
+
+
+from celery.signals import worker_shutdown  # noqa: E402
+
+
+@worker_shutdown.connect
+def _shutdown_browser(**kwargs: object) -> None:  # noqa: ARG001
+    """Close the Playwright browser when the Celery worker stops.
+
+    Without this, Ctrl+C kills the worker mid-task, leaving orphaned
+    Chrome processes and causing ``TargetClosedError`` in flight.
+    """
+    try:
+        from apps.automation.browser_manager import PlaywrightBrowserManager
+
+        manager = PlaywrightBrowserManager()
+        if manager._initialized and manager._page is not None:
+            manager.shutdown()
+    except Exception:
+        pass

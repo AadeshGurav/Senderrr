@@ -1,0 +1,27 @@
+{% for w in workers %}
+<div class="worker-card">
+  <div style="display: flex; align-items: center; gap: 0.5rem;">
+    <span class="wa-badge {{ w.status }}">
+      {% if w.status == "connected" %}Connected
+      {% elif w.status == "disconnected" %}Disconnected
+      {% else %}Unknown
+      {% endif %}
+    </span>
+    <strong>Worker {{ w.worker_id }}</strong>
+  </div>
+  <div class="worker-stats">
+    <small>{{ w.msgs_hr }} msgs/hr</small>
+    {% if w.total_sent or w.total_failed %}
+    <small>{{ w.total_sent }} sent / {{ w.total_failed }} failed</small>
+    {% endif %}
+    {% if w.browser_status %}
+    <small>Browser: {{ w.browser_status }}</small>
+    {% endif %}
+    {% if w.current_group %}
+    <small>Sending to: {{ w.current_group }}</small>
+    {% endif %}
+  </div>
+</div>
+{% empty %}
+<span class="wa-badge unknown">No workers configured</span>
+{% endfor %}

@@ -22,11 +22,24 @@ def create_broadcast_event(article: ScrapedArticle) -> BroadcastEvent:
     Returns:
         The newly created ``BroadcastEvent``.
     """
-    active_groups = WhatsAppGroup.objects.filter(is_active=True)
+    all_active = WhatsAppGroup.objects.filter(is_active=True)
+    unhealthy_count = all_active.filter(is_healthy=False).count()
+    if unhealthy_count:
+        logger.info(
+            "Skipping %d unhealthy group(s) from broadcast.", unhealthy_count
+        )
+
+    active_groups = all_active.filter(is_healthy=True)
     group_count = active_groups.count()
 
     if group_count == 0:
-        logger.warning("No active WhatsApp groups — broadcast skipped.")
+        logger.warning("No active/healthy WhatsApp groups — broadcast skipped.")
+        broadcast = BroadcastEvent.objects.create(
+            article=article,
+            status=BroadcastEvent.Status.COMPLETED,
+            total_groups=0,
+        )
+        return broadcast
 
     broadcast = BroadcastEvent.objects.create(
         article=article,

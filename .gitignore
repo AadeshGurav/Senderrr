@@ -15,6 +15,7 @@ ENV/
 *.swp
 *.swo
 *~
+.claude/
 
 # Django
 db.sqlite3
@@ -27,7 +28,7 @@ media/
 .env
 
 # Playwright session (contains WhatsApp login cookies)
-.playwright_session/
+.playwright*/
 
 # Celery
 celerybeat-schedule

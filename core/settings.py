@@ -42,6 +42,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -108,7 +109,13 @@ USE_TZ = True
 # Static files
 # ---------------------------------------------------------------------------
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS: list[str] = []
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ---------------------------------------------------------------------------
@@ -140,6 +147,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.scraper.tasks.check_for_new_articles",
         "schedule": crontab(minute="*/5"),
     },
+    "worker-heartbeat": {
+        "task": "apps.automation.tasks.worker_heartbeat",
+        "schedule": crontab(minute="*/2"),
+    },
 }
 
 
@@ -150,6 +161,7 @@ SCRAPER_TARGET_URL = os.environ.get(
     "SCRAPER_TARGET_URL",
     "https://example.com/articles",
 )
+SCRAPER_TARGET_URLS = os.environ.get("SCRAPER_TARGET_URLS", "")
 SCRAPER_REQUEST_TIMEOUT = int(os.environ.get("SCRAPER_REQUEST_TIMEOUT", "30"))
 SCRAPER_MAX_RETRIES = int(os.environ.get("SCRAPER_MAX_RETRIES", "3"))
 
@@ -194,10 +206,33 @@ AUTOMATION_JITTER_MULTIPLIER = float(
     os.environ.get("AUTOMATION_JITTER_MULTIPLIER", "1.5")
 )  # jitter grows by this factor every BATCH_SIZE messages
 
-# Quiet hours (UTC) — no sends during these hours
+# Quiet hours (local timezone from TIME_ZONE) — no sends during these hours
 AUTOMATION_QUIET_HOUR_START = int(
     os.environ.get("AUTOMATION_QUIET_HOUR_START", "1")
-)  # 1 AM UTC
+)  # 1 AM local time
 AUTOMATION_QUIET_HOUR_END = int(
     os.environ.get("AUTOMATION_QUIET_HOUR_END", "7")
-)  # 7 AM UTC
+)  # 7 AM local time
+
+# Multi-window parallel sending
+AUTOMATION_WORKER_COUNT = int(os.environ.get("AUTOMATION_WORKER_COUNT", "1"))
+AUTOMATION_WORKER_STAGGER = int(os.environ.get("AUTOMATION_WORKER_STAGGER", "45"))
+AUTOMATION_MAX_CONCURRENT_SENDS = int(
+    os.environ.get("AUTOMATION_MAX_CONCURRENT_SENDS", "2")
+)
+
+# ---------------------------------------------------------------------------
+# Group health
+# ---------------------------------------------------------------------------
+GROUP_MAX_CONSECUTIVE_FAILURES = int(
+    os.environ.get("GROUP_MAX_CONSECUTIVE_FAILURES", "5")
+)
+GROUP_AUTO_DISABLE_ON_UNHEALTHY = os.environ.get(
+    "GROUP_AUTO_DISABLE_ON_UNHEALTHY", "True"
+).lower() in ("true", "1", "yes")
+
+# ---------------------------------------------------------------------------
+# Retry settings
+# ---------------------------------------------------------------------------
+MESSAGE_MAX_RETRY_ATTEMPTS = int(os.environ.get("MESSAGE_MAX_RETRY_ATTEMPTS", "3"))
+RATE_LIMIT_RETRY_DELAY = int(os.environ.get("RATE_LIMIT_RETRY_DELAY", "3600"))

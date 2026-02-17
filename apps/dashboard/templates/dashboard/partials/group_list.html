@@ -5,12 +5,15 @@
 
 <!-- Group table -->
 {% if groups %}
+<div class="table-responsive">
 <table role="grid">
   <thead>
     <tr>
       <th>Name</th>
       <th>Group JID</th>
       <th>Status</th>
+      <th>Health</th>
+      <th>Sent / Failed</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -20,6 +23,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}
 <p>No groups added yet. Add one above to get started.</p>
 {% endif %}

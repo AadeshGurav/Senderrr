@@ -28,6 +28,7 @@ class ScrapedArticle(models.Model):
     url = models.URLField(db_index=True)
     title = models.CharField(max_length=500, blank=True, default="")
     body = models.TextField(help_text="Raw extracted text content.")
+    image_url = models.URLField(blank=True, default="", help_text="Poster/tile image URL.")
     content_hash = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -1,13 +1,16 @@
-"""Singleton Playwright browser manager with crash recovery.
+"""Singleton Playwright browser manager with per-worker session isolation.
 
 Maintains a single persistent Chromium context backed by a user-data
-directory so WhatsApp Web stays logged in across restarts.
+directory so WhatsApp Web stays logged in across restarts.  Each Celery
+worker process gets its own singleton bound to a worker-specific session.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from django.conf import settings
@@ -16,6 +19,18 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Page, Playwright
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_user_data_dir(worker_id: int) -> str:
+    """Return the session directory for a given worker.
+
+    Worker 0 uses the base ``PLAYWRIGHT_USER_DATA_DIR`` (backward
+    compatible).  Workers 1..N use ``{base}_worker_{N}``.
+    """
+    base = settings.PLAYWRIGHT_USER_DATA_DIR
+    if worker_id == 0:
+        return base
+    return f"{base}_worker_{worker_id}"
 
 
 class PlaywrightBrowserManager:
@@ -30,7 +45,9 @@ class PlaywrightBrowserManager:
         manager.shutdown()
 
     The session is persisted via ``user_data_dir`` so QR-code scanning
-    only happens once (unless the directory is deleted).
+    only happens once (unless the directory is deleted).  The
+    ``WA_WORKER_ID`` environment variable selects which session dir
+    to use (set automatically by the Procfile).
     """
 
     _instance: PlaywrightBrowserManager | None = None
@@ -53,8 +70,17 @@ class PlaywrightBrowserManager:
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
+        self._worker_id: int = int(os.environ.get("WA_WORKER_ID", "0"))
         self._initialized = True
-        logger.info("PlaywrightBrowserManager singleton created.")
+        logger.info(
+            "PlaywrightBrowserManager singleton created (worker_id=%d).",
+            self._worker_id,
+        )
+
+    @property
+    def worker_id(self) -> int:
+        """Return the worker ID this manager is bound to."""
+        return self._worker_id
 
     def get_page(self) -> Page:
         """Return a ready-to-use Page, launching the browser if needed.
@@ -87,7 +113,8 @@ class PlaywrightBrowserManager:
         logger.info("Launching Playwright browser …")
         self._playwright = sync_playwright().start()
 
-        user_data_dir = settings.PLAYWRIGHT_USER_DATA_DIR
+        user_data_dir = resolve_user_data_dir(self._worker_id)
+        Path(user_data_dir).mkdir(parents=True, exist_ok=True)
         headless = settings.PLAYWRIGHT_HEADLESS
 
         self._context = self._playwright.chromium.launch_persistent_context(
@@ -104,7 +131,12 @@ class PlaywrightBrowserManager:
         self._page = (
             self._context.pages[0] if self._context.pages else self._context.new_page()
         )
-        logger.info("Browser launched (headless=%s, data=%s).", headless, user_data_dir)
+        logger.info(
+            "Browser launched (worker=%d, headless=%s, data=%s).",
+            self._worker_id,
+            headless,
+            user_data_dir,
+        )
         return self._page
 
     def shutdown(self) -> None:

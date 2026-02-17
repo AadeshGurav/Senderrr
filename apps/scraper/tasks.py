@@ -6,10 +6,24 @@ import logging
 
 from celery import shared_task
 
-from apps.scraper.services import detect_and_store_change
+from apps.scraper.parsers import get_parser_for_url
+from apps.scraper.services import detect_and_store_change, detect_new_articles
 from utils.config import get_config
 
 logger = logging.getLogger(__name__)
+
+
+def _get_target_urls() -> list[str]:
+    """Read target URLs from config, supporting comma-separated values."""
+    raw = str(get_config("SCRAPER_TARGET_URLS", str))
+    urls = [u.strip() for u in raw.split(",") if u.strip()]
+
+    if not urls:
+        single = str(get_config("SCRAPER_TARGET_URL"))
+        if single and single != "https://example.com/articles":
+            urls = [single]
+
+    return urls
 
 
 @shared_task(
@@ -20,24 +34,45 @@ logger = logging.getLogger(__name__)
     acks_late=True,
 )
 def check_for_new_articles(self) -> str:  # noqa: ANN001
-    """Periodic task: check the target URL for new content.
+    """Periodic task: check all target URLs for new content.
 
-    If a change is detected, triggers the campaign fan-out pipeline.
+    Uses listing-based detection for sites with a registered parser,
+    hash-based detection for everything else.
     """
-    url = get_config("SCRAPER_TARGET_URL")
-    logger.info("Checking for new articles at %s", url)
+    urls = _get_target_urls()
+    if not urls:
+        return "No target URLs configured."
 
-    try:
-        article = detect_and_store_change(url)
-    except Exception as exc:
-        logger.error("Scraper failed for %s: %s", url, exc, exc_info=True)
-        raise self.retry(exc=exc)
+    results = []
+    for url in urls:
+        try:
+            result = _check_single_url(url)
+            results.append(result)
+        except Exception as exc:
+            logger.error("Scraper failed for %s: %s", url, exc, exc_info=True)
+            results.append(f"ERROR: {url} — {exc}")
 
+    return " | ".join(results)
+
+
+def _check_single_url(url: str) -> str:
+    """Run the appropriate detection strategy for a single URL."""
+    parser = get_parser_for_url(url)
+
+    if parser:
+        articles = detect_new_articles(url)
+        if not articles:
+            return f"No new articles at {url}"
+        for article in articles:
+            _trigger_broadcast(article.pk)
+        titles = ", ".join(a.title[:40] for a in articles)
+        return f"{len(articles)} new from {parser.name}: {titles}"
+
+    article = detect_and_store_change(url)
     if article is None:
-        return f"No change detected for {url}"
-
+        return f"No change at {url}"
     _trigger_broadcast(article.pk)
-    return f"New article detected: {article.title!r} (pk={article.pk})"
+    return f"Change detected at {url}: {article.title!r}"
 
 
 def _trigger_broadcast(article_pk: int) -> None:

@@ -44,6 +44,22 @@ def toggle_group(request: HttpRequest, pk: int) -> HttpResponse:
 
 
 @login_required
+def mark_healthy(request: HttpRequest, pk: int) -> HttpResponse:
+    """Reset a group's health: clear failures, mark healthy and active."""
+    group = get_object_or_404(WhatsAppGroup, pk=pk)
+    if request.method == "POST":
+        group.is_healthy = True
+        group.is_active = True
+        group.consecutive_failures = 0
+        group.save(update_fields=["is_healthy", "is_active", "consecutive_failures"])
+    return render(
+        request,
+        "dashboard/partials/group_row.html",
+        {"group": group},
+    )
+
+
+@login_required
 def delete_group(request: HttpRequest, pk: int) -> HttpResponse:
     """Delete a group and return the updated list partial."""
     group = get_object_or_404(WhatsAppGroup, pk=pk)

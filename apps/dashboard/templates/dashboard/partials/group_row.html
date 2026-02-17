@@ -9,7 +9,28 @@
     {% endif %}
   </td>
   <td>
+    {% if group.is_healthy %}
+    <span class="wa-badge connected">Healthy</span>
+    {% else %}
+    <span class="wa-badge disconnected">Unhealthy ({{ group.consecutive_failures }})</span>
+    {% endif %}
+  </td>
+  <td>
+    <span class="stat-sent">{{ group.total_sent }}</span> /
+    <span class="stat-failed">{{ group.total_failed }}</span>
+  </td>
+  <td>
     <div class="group-actions">
+      {% if not group.is_healthy %}
+      <button class="outline"
+              hx-post="{% url 'dashboard:mark_healthy' group.pk %}"
+              hx-target="#group-row-{{ group.pk }}"
+              hx-swap="outerHTML"
+              hx-confirm="Reset health for '{{ group.name }}'? This clears failure count and re-activates the group."
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Mark Healthy
+      </button>
+      {% endif %}
       <button class="outline secondary"
               hx-post="{% url 'dashboard:toggle_group' group.pk %}"
               hx-target="#group-row-{{ group.pk }}"
