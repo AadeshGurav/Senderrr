@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
@@ -35,19 +36,22 @@ class RatnagiriKhabardarParser(BaseSiteParser):
         seen_urls: set[str] = set()
         previews: list[ArticlePreview] = []
 
+        base_url = f"https://{self.domains[0]}"
         for anchor in soup.select("a[href]"):
             href = anchor.get("href", "").strip()
             if not ARTICLE_URL_PATTERN.search(href):
                 continue
-            if href in seen_urls:
+
+            absolute_url = urljoin(base_url, href)
+            if absolute_url in seen_urls:
                 continue
 
             title = anchor.get_text(strip=True)
             if not title or len(title) < 5:
                 continue
 
-            seen_urls.add(href)
-            previews.append(ArticlePreview(title=title, url=href))
+            seen_urls.add(absolute_url)
+            previews.append(ArticlePreview(title=title, url=absolute_url))
 
         return previews
 

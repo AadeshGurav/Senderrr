@@ -269,6 +269,26 @@ ruff check . --fix
 
 ---
 
+## Debugging
+
+VS Code `launch.json` is configured to mimic `make start` with full debugger attachment.
+
+### Configurations
+-   **Django Web Server**: Runs `manage.py runserver` (auto-reload enabled).
+-   **Celery Worker 0**: Runs a single worker process (solo pool) handling `wa-worker-0` and `celery` queues.
+-   **Celery Beat**: Runs the periodic task scheduler.
+-   **Full Stack (Django + Celery)**: Launches all three simultaneously.
+
+### How to Debug
+1.  Go to **Run and Debug** sidebar.
+2.  Select **Full Stack (Django + Celery)**.
+3.  Press `F5` or click Play.
+4.  Set breakpoints in Django views, Celery tasks, or Services.
+
+> **Note**: Worker 0 is configured with `pool=solo` to ensure breakpoints work reliably.
+
+---
+
 ## What NOT To Do
 
 -   ❌ Put business logic in Celery tasks — tasks are thin wrappers.

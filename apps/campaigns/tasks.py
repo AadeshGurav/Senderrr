@@ -42,6 +42,20 @@ def fan_out_broadcast(self, article_pk: int) -> str:  # noqa: ANN001
         logger.error("Article pk=%d not found — aborting broadcast.", article_pk)
         return f"Article pk={article_pk} not found"
 
+    # Idempotency guard — prevents duplicate broadcasts if the task is retried.
+    existing = (
+        BroadcastEvent.objects.filter(article=article)
+        .exclude(status=BroadcastEvent.Status.FAILED)
+        .first()
+    )
+    if existing:
+        logger.info(
+            "Broadcast for article pk=%d already exists (#%d) — skipping.",
+            article_pk,
+            existing.pk,
+        )
+        return f"Broadcast #{existing.pk} already exists for article pk={article_pk}"
+
     broadcast = create_broadcast_event(article)
 
     task_pks = list(broadcast.message_tasks.values_list("pk", flat=True))
@@ -157,10 +171,11 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
             exc_info=True,
         )
         try:
-            record_task_end(worker_name, success=False)
-            raise self.retry(exc=exc, countdown=120)
+            backoff = 120 * (2 ** self.request.retries)
+            raise self.retry(exc=exc, countdown=backoff)
         except self.MaxRetriesExceededError:
             _mark_failed(msg_task, str(exc), category)
+            record_task_end(worker_name, success=False)
             return f"Permanently failed for {msg_task.group.name}"
 
     finally:

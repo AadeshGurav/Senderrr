@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
 import random
+import subprocess
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,7 +82,6 @@ SELECTORS = {
             '[data-testid="conversation-compose-box-input"]',
             'div[role="textbox"][data-tab="10"]',
             '#main footer div[contenteditable="true"]',
-            'div[role="textbox"][data-tab="1"]',
             '[data-testid="lexical-rich-text-input"]',
             '#main div[contenteditable="true"][role="textbox"]',
             '#main div[contenteditable="true"]',
@@ -218,28 +220,7 @@ def send_image_to_group(
 
 # WhatsApp Web attachment selectors
 ATTACHMENT_SELECTORS = {
-    "paperclip": ", ".join(
-        [
-            # Legacy selectors
-            '[data-testid="clip"]',
-            'div[title="Attach"]',
-            '#main header button span[data-icon="clip"]',
-            # Modern WhatsApp Web / Business (2024+)
-            'span[data-icon="attach-menu-plus"]',
-            '#main footer span[data-icon="attach-menu-plus"]',
-            '#main span[data-icon="plus"]',
-            '#main footer span[data-icon="plus"]',
-            '[data-testid="attach"]',
-            'button[aria-label="Attach"]',
-        ]
-    ),
-    "media_input": ", ".join(
-        [
-            # Original: 'input[accept*="image"], input[accept*="video"]'
-            # Modified: Require *both* so we don't accidentally pick the Sticker input (which is image-only).
-            'input[accept*="image"][accept*="video"]',
-        ]
-    ),
+    # Caption input inside the image preview modal.
     "caption_input": ", ".join(
         [
             '[data-testid="media-caption-input-container"] div[contenteditable="true"]',
@@ -247,61 +228,90 @@ ATTACHMENT_SELECTORS = {
             '#app div[contenteditable="true"][role="textbox"]',
         ]
     ),
-    "image_send": ", ".join(
-        [
-            '[data-testid="send"]',
-            'div[role="button"] span[data-icon="send"]',
-        ]
-    ),
 }
 
 
-def _attach_and_send_image(page, image_path: str, caption: str) -> None:  # noqa: ANN001
-    """Type caption in compose box, attach image, confirm caption, and send.
+def _copy_image_to_clipboard(image_path: str) -> None:
+    """Copy an image file to the macOS system clipboard via osascript.
 
-    Typing the caption first anchors browser focus to the chat compose area so
-    that subsequent clicks (paperclip, file chooser) land in the right element
-    instead of the search input.
+    WEBP images are first converted to JPEG using the macOS ``sips`` tool
+    because AppleScript cannot read WEBP natively.
+
+    Args:
+        image_path: Absolute path to the image file.
+
+    Raises:
+        SendFailedError: If the platform is not macOS or the copy fails.
     """
-    # Step 1 — type caption in compose box to anchor focus to the chat.
-    if caption:
-        try:
-            compose_box = page.wait_for_selector(
-                SELECTORS["message_input"], timeout=3_000
-            )
-            if compose_box:
-                _type_slowly(compose_box, caption)
-                time.sleep(0.3)
-        except PlaywrightTimeout:
-            logger.warning("Compose box not found for pre-typing caption.")
+    if platform.system() != "Darwin":
+        raise SendFailedError("Clipboard image paste requires macOS (osascript).")
 
-    # Step 2 — click paperclip / plus button to open attachment menu.
+    suffix = Path(image_path).suffix.lower()
+    effective_path = image_path
+    tmp_path: Path | None = None
+
     try:
-        clip_btn = page.wait_for_selector(
-            ATTACHMENT_SELECTORS["paperclip"], timeout=15_000
+        if suffix == ".webp":
+            # sips is a macOS built-in — no extra dependencies needed.
+            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            tmp.close()
+            tmp_path = Path(tmp.name)
+            result = subprocess.run(
+                ["sips", "-s", "format", "jpeg", image_path, "--out", str(tmp_path)],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                raise SendFailedError(
+                    f"WEBP→JPEG conversion failed: {result.stderr.decode().strip()}"
+                )
+            effective_path = str(tmp_path)
+            suffix = ".jpg"
+
+        as_type_map = {
+            ".jpg": "JPEG picture",
+            ".jpeg": "JPEG picture",
+            ".png": "«class PNGf»",
+            ".gif": "«class GIFf»",
+        }
+        as_type = as_type_map.get(suffix, "JPEG picture")
+        script = (
+            f'set the clipboard to (read (POSIX file "{effective_path}") as {as_type})'
         )
-    except PlaywrightTimeout:
-        dump_main_dom(page)
-        capture_screenshot(page, "attach_btn_missing")
-        raise SendFailedError("Attachment button not found — check screenshot in logs/screenshots/.")
-    clip_btn.click()
-    time.sleep(1)
+        result = subprocess.run(
+            ["osascript", "-e", script], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            raise SendFailedError(
+                f"osascript clipboard copy failed: {result.stderr.strip()}"
+            )
+    finally:
+        if tmp_path:
+            tmp_path.unlink(missing_ok=True)
 
-    # Step 3 — use Playwright's file chooser to upload the image.
-    with page.expect_file_chooser(timeout=5_000) as fc_info:
-        media_input = page.locator(ATTACHMENT_SELECTORS["media_input"]).first
-        media_input.dispatch_event("click")
 
-    file_chooser = fc_info.value
-    file_chooser.set_files(image_path)
-    logger.debug("Image file set via file chooser: %s", image_path)
+def _attach_and_send_image(page, image_path: str, caption: str) -> None:  # noqa: ANN001
+    """Send an image by pasting from the clipboard into the compose box.
+
+    Copies the image to the macOS clipboard then presses Cmd+V in the compose
+    box. WhatsApp opens the same preview modal as the attachment menu — without
+    needing to navigate the attachment popup at all.
+    """
+    # Step 1 — copy image to clipboard.
+    _copy_image_to_clipboard(image_path)
+    logger.debug("Image copied to clipboard: %s", image_path)
+
+    # Step 2 — focus compose box and paste.
+    compose_box = _find_compose_box(page)
+    if compose_box is None:
+        raise SendFailedError("Compose box not found for clipboard paste.")
+    compose_box.click()
+    time.sleep(0.3)
+    page.keyboard.press("Meta+v")
 
     # Wait for the image preview modal to load.
     time.sleep(3)
 
-    # Step 4 — handle caption in the preview modal.
-    # WhatsApp may have pre-filled the caption from the compose box; clear and
-    # retype to guarantee the correct content regardless of WhatsApp version.
+    # Step 3 — type caption in the preview modal's caption field.
     if caption:
         try:
             caption_box = page.wait_for_selector(
@@ -309,32 +319,18 @@ def _attach_and_send_image(page, image_path: str, caption: str) -> None:  # noqa
             )
             if caption_box:
                 caption_box.click()
-                caption_box.press("Control+a")
-                caption_box.press("Delete")
                 time.sleep(0.1)
                 _type_slowly(caption_box, caption)
         except PlaywrightTimeout:
             logger.warning("Caption input not found — sending image without caption.")
 
-    # Step 5 — send from the image preview screen.
+    # Step 4 — send from the image preview screen.
     time.sleep(1)
     send_btn = _find_send_button(page)
     if send_btn is None:
         raise SendFailedError("Send button not found on image preview.")
     send_btn.click()
     time.sleep(2)
-
-    # Step 6 — clear compose box in case WhatsApp left the pre-typed caption there.
-    try:
-        compose_box = page.wait_for_selector(
-            SELECTORS["message_input"], timeout=2_000
-        )
-        if compose_box:
-            compose_box.click()
-            compose_box.press("Control+a")
-            compose_box.press("Delete")
-    except PlaywrightTimeout:
-        pass
 
 
 def _apply_anti_ban_jitter() -> None:
@@ -428,22 +424,19 @@ def _search_and_open_chat(page, group_name: str) -> bool:  # noqa: ANN001
 
         # Verify the chat panel actually loaded
         try:
-            page.wait_for_selector("#main", timeout=5_000)
+            page.wait_for_selector("#main", timeout=8_000)
         except PlaywrightTimeout:
             logger.warning(
                 "Chat panel (#main) did not appear after clicking: %s", group_name
             )
             return False
 
-        # Click the compose box to dismiss the search overlay and anchor focus
-        # to the chat area — prevents subsequent text from going to the search input.
-        try:
-            compose = page.wait_for_selector(SELECTORS["message_input"], timeout=3_000)
-            if compose:
-                compose.click()
-                time.sleep(0.3)
-        except PlaywrightTimeout:
-            pass  # Non-fatal — continue with caution
+        # Use the multi-strategy compose-box finder (all selectors are scoped to
+        # #main so this cannot accidentally target the search input).
+        compose = _find_compose_box(page)
+        if compose:
+            compose.click()
+            time.sleep(0.3)
 
         return True
     except PlaywrightTimeout:

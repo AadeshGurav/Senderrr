@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 @shared_task(
     bind=True,
     name="apps.automation.tasks.send_whatsapp_message",
-    max_retries=1,
+    max_retries=2,
     default_retry_delay=180,
     acks_late=True,
 )
@@ -27,13 +27,22 @@ def send_whatsapp_message(
     This task exists so the automation layer can also be invoked
     independently (outside of the campaign pipeline) if needed.
     """
-    from apps.automation.services import send_message_to_group
+    from apps.automation.services import (
+        BotDetectedError,
+        SessionExpiredError,
+        send_message_to_group,
+    )
 
     try:
         success = send_message_to_group(group_jid=group_jid, message=message)
+    except (SessionExpiredError, BotDetectedError) as exc:
+        # Unrecoverable — re-authentication required; do not retry.
+        logger.error("Unrecoverable automation error: %s", exc)
+        raise
     except Exception as exc:
         logger.error("Automation task failed: %s", exc, exc_info=True)
-        raise self.retry(exc=exc)
+        backoff = 180 * (2 ** self.request.retries)
+        raise self.retry(exc=exc, countdown=backoff)
 
     if success:
         return f"Sent to {group_jid}"

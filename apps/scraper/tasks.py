@@ -44,6 +44,8 @@ def check_for_new_articles(self) -> str:  # noqa: ANN001
         return "No target URLs configured."
 
     results = []
+    fatal_exc: Exception | None = None
+
     for url in urls:
         try:
             result = _check_single_url(url)
@@ -51,6 +53,18 @@ def check_for_new_articles(self) -> str:  # noqa: ANN001
         except Exception as exc:
             logger.error("Scraper failed for %s: %s", url, exc, exc_info=True)
             results.append(f"ERROR: {url} — {exc}")
+            # Preserve the first fatal exception so we can retry the whole task
+            # if infrastructure-level failures (DB, Redis) occur.
+            if fatal_exc is None:
+                fatal_exc = exc
+
+    all_failed = fatal_exc is not None and all(
+        r.startswith("ERROR:") for r in results
+    )
+    if all_failed:
+        # Every URL failed — likely an infrastructure outage; retry the task.
+        backoff = 60 * (2 ** self.request.retries)
+        raise self.retry(exc=fatal_exc, countdown=backoff)
 
     return " | ".join(results)
 

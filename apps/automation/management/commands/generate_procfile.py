@@ -45,10 +45,7 @@ class Command(BaseCommand):
             )
             lines.append(line)
 
-        lines.append(
-            "beat: celery -A core beat -l info "
-            "--scheduler django_celery_beat.schedulers:DatabaseScheduler"
-        )
+        lines.append("beat: celery -A core beat -l info")
 
         PROCFILE_PATH.write_text("\n".join(lines) + "\n")
 

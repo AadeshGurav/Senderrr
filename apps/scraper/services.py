@@ -189,7 +189,12 @@ def detect_and_store_change(url: str) -> ScrapedArticle | None:
         defaults={"content_hash": new_hash},
     )
 
-    if stored.content_hash == new_hash and not _created:
+    if _created:
+        # First visit — seed the hash without broadcasting.
+        logger.info("First visit for %s — seeded hash. No broadcast triggered.", url)
+        return None
+
+    if stored.content_hash == new_hash:
         logger.info("No change detected for %s", url)
         return None
 
