@@ -1,0 +1,22 @@
+<form hx-post="{% url 'dashboard:add_community' %}"
+      hx-target="#community-section"
+      hx-swap="innerHTML"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {% csrf_token %}
+  <div class="grid">
+    <label>
+      Community name
+      {{ community_form.name }}
+    </label>
+    <label>
+      Community JID / Search name
+      {{ community_form.community_jid }}
+    </label>
+    <div style="display:flex;align-items:flex-end">
+      <button type="submit">Add Community</button>
+    </div>
+  </div>
+  {% if community_form.errors %}
+  <small class="wa-badge disconnected">{{ community_form.errors }}</small>
+  {% endif %}
+</form>

@@ -17,6 +17,12 @@
     {% endif %}
   </article>
   <article>
+    <header>Communities</header>
+    <p>
+      <strong>{{ active_communities }}</strong> active / {{ total_communities }} total
+    </p>
+  </article>
+  <article>
     <header>Broadcasts</header>
     <p><strong>{{ total_broadcasts }}</strong> total</p>
     {% if total_failed %}
@@ -48,6 +54,14 @@
   <h2>WhatsApp Groups</h2>
   <div id="group-section">
     {% include "dashboard/partials/group_list.html" %}
+  </div>
+</section>
+
+<!-- Communities section -->
+<section>
+  <h2>WhatsApp Communities</h2>
+  <div id="community-section">
+    {% include "dashboard/partials/community_list.html" %}
   </div>
 </section>
 

@@ -218,6 +218,76 @@ def send_image_to_group(
     return True
 
 
+def send_message_to_subgroup(
+    community_jid: str,
+    subgroup_jid: str,
+    message: str,
+) -> bool:
+    """Send a message to a community sub-group via 2-step Community navigation.
+
+    Follows the same anti-ban pipeline as send_message_to_group but navigates
+    through the parent Community → Sub-group flow in WhatsApp Web instead of
+    searching for the sub-group directly.
+
+    Args:
+        community_jid: Community search name (used to find community in chat list).
+        subgroup_jid: Sub-group search name within the community panel.
+        message: Text to send.
+
+    Returns:
+        ``True`` on success.
+
+    Raises:
+        RateLimitError: When hourly/daily send cap is exceeded.
+        SessionExpiredError: When WhatsApp session requires re-authentication.
+        GroupNotFoundError: When community or sub-group cannot be found.
+        SendFailedError: When compose/send UI interaction fails.
+        BotDetectedError: When CAPTCHA or ban notice is detected.
+    """
+    from apps.automation.community_navigator import navigate_to_community_subgroup
+
+    allowed, reason = check_rate_limit()
+    if not allowed:
+        raise RateLimitError(f"Rate limit exceeded: {reason}")
+
+    _apply_anti_ban_jitter()
+
+    worker_id = int(os.environ.get("WA_WORKER_ID", "0"))
+
+    manager = PlaywrightBrowserManager()
+    page = manager.get_page()
+
+    _ensure_whatsapp_loaded(page)
+
+    healthy, issue = check_session_health(page)
+    if not healthy:
+        if "qr" in issue.lower() or "re-auth" in issue.lower():
+            raise SessionExpiredError(f"Session unhealthy: {issue}")
+        if "banned" in issue.lower() or "captcha" in issue.lower():
+            raise BotDetectedError(f"Session unhealthy: {issue}")
+        raise SessionExpiredError(f"Session unhealthy: {issue}")
+
+    navigate_to_community_subgroup(page, community_jid, subgroup_jid)
+
+    token = acquire_send_slot()
+    if token is None:
+        raise SendFailedError("Timed out waiting for send slot.")
+    try:
+        _type_message_human_like(page, message)
+        _click_send(page)
+    finally:
+        release_send_slot(token)
+
+    increment_send_counter(worker_id=worker_id)
+    logger.info(
+        "Message sent to community sub-group: community=%s subgroup=%s (worker=%d)",
+        community_jid,
+        subgroup_jid,
+        worker_id,
+    )
+    return True
+
+
 # WhatsApp Web attachment selectors
 ATTACHMENT_SELECTORS = {
     # Caption input inside the image preview modal.

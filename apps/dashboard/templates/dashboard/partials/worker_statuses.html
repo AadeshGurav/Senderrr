@@ -11,9 +11,7 @@
   </div>
   <div class="worker-stats">
     <small>{{ w.msgs_hr }} msgs/hr</small>
-    {% if w.total_sent or w.total_failed %}
     <small>{{ w.total_sent }} sent / {{ w.total_failed }} failed</small>
-    {% endif %}
     {% if w.browser_status %}
     <small>Browser: {{ w.browser_status }}</small>
     {% endif %}

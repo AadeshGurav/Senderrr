@@ -97,7 +97,7 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
     """Pick up a single MessageTask, send it, and record the result."""
     try:
         msg_task = MessageTask.objects.select_related(
-            "group", "broadcast__article"
+            "group", "group__community", "broadcast__article"
         ).get(pk=message_task_pk)
     except MessageTask.DoesNotExist:
         logger.error("MessageTask pk=%d vanished.", message_task_pk)
@@ -123,7 +123,18 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
     try:
         image_path = _download_article_image(article)
 
-        if image_path:
+        community = msg_task.group.community
+
+        if community is not None:
+            # Sub-group: navigate via parent community in WhatsApp Web.
+            from apps.automation.services import send_message_to_subgroup
+
+            success = send_message_to_subgroup(
+                community_jid=community.community_jid,
+                subgroup_jid=msg_task.group.group_jid,
+                message=message_body,
+            )
+        elif image_path:
             from apps.automation.services import send_image_to_group
 
             success = send_image_to_group(
@@ -171,7 +182,7 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
             exc_info=True,
         )
         try:
-            backoff = 120 * (2 ** self.request.retries)
+            backoff = 120 * (2**self.request.retries)
             raise self.retry(exc=exc, countdown=backoff)
         except self.MaxRetriesExceededError:
             _mark_failed(msg_task, str(exc), category)

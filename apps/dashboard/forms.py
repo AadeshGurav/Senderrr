@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django import forms
 
-from apps.campaigns.models import WhatsAppGroup
+from apps.campaigns.models import WhatsAppCommunity, WhatsAppGroup
 
 
 class GroupForm(forms.ModelForm):
@@ -17,6 +17,20 @@ class GroupForm(forms.ModelForm):
             "name": forms.TextInput(attrs={"placeholder": "Group display name"}),
             "group_jid": forms.TextInput(
                 attrs={"placeholder": "Group JID or search name"}
+            ),
+        }
+
+
+class CommunityForm(forms.ModelForm):
+    """Form for adding a new WhatsApp Community."""
+
+    class Meta:
+        model = WhatsAppCommunity
+        fields = ("name", "community_jid")
+        widgets = {
+            "name": forms.TextInput(attrs={"placeholder": "Community display name"}),
+            "community_jid": forms.TextInput(
+                attrs={"placeholder": "Community search name in WhatsApp Web"}
             ),
         }
 

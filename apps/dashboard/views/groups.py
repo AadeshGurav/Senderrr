@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 
-from apps.campaigns.models import WhatsAppGroup
+from apps.campaigns.models import WhatsAppCommunity, WhatsAppGroup
 from apps.dashboard.forms import GroupForm
 
 
@@ -57,6 +57,29 @@ def mark_healthy(request: HttpRequest, pk: int) -> HttpResponse:
         "dashboard/partials/group_row.html",
         {"group": group},
     )
+
+
+@login_required
+def link_subgroup(request: HttpRequest, pk: int) -> HttpResponse:
+    """Link a group to a community, making it a sub-group."""
+    group = get_object_or_404(WhatsAppGroup, pk=pk)
+    if request.method == "POST":
+        community_pk = request.POST.get("community_id")
+        if community_pk:
+            community = get_object_or_404(WhatsAppCommunity, pk=community_pk)
+            group.community = community
+            group.save(update_fields=["community"])
+    return render(request, "dashboard/partials/group_row.html", {"group": group})
+
+
+@login_required
+def unlink_subgroup(request: HttpRequest, pk: int) -> HttpResponse:
+    """Remove a group from its community, making it a standalone group."""
+    group = get_object_or_404(WhatsAppGroup, pk=pk)
+    if request.method == "POST":
+        group.community = None
+        group.save(update_fields=["community"])
+    return render(request, "dashboard/partials/group_row.html", {"group": group})
 
 
 @login_required

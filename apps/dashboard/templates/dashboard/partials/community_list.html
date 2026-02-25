@@ -1,0 +1,30 @@
+<!-- Add community form -->
+<div id="community-form-container">
+  {% include "dashboard/partials/community_form.html" %}
+</div>
+
+<!-- Community table -->
+{% if communities %}
+<div class="table-responsive">
+<table role="grid">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Community JID</th>
+      <th>Status</th>
+      <th>Sub-groups</th>
+      <th>Sent / Failed</th>
+      <th>Last action</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="community-table-body">
+    {% for community in communities %}
+    {% include "dashboard/partials/community_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>No communities added yet. Add one above to get started.</p>
+{% endif %}

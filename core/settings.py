@@ -142,16 +142,31 @@ CELERY_TASK_TIME_LIMIT = 600  # 10 min hard limit per task
 CELERY_TASK_SOFT_TIME_LIMIT = 540  # 9 min soft limit
 CELERY_WORKER_CONCURRENCY = 1  # Solo pool — browser singleton lives in main process
 
+# Modules with tasks not following the default tasks.py naming convention.
+CELERY_IMPORTS = [
+    "apps.campaigns.community_tasks",
+    "apps.campaigns.maintenance_tasks",
+]
+
 CELERY_BEAT_SCHEDULE = {
     "check-for-new-articles": {
         "task": "apps.scraper.tasks.check_for_new_articles",
         "schedule": crontab(minute="*/5"),
     },
-    "worker-heartbeat": {
-        "task": "apps.automation.tasks.worker_heartbeat",
-        "schedule": crontab(minute="*/2"),
+    "auto-recover-unhealthy-groups": {
+        "task": "apps.campaigns.maintenance_tasks.auto_recover_unhealthy_groups",
+        "schedule": crontab(minute=0),
     },
 }
+
+# One heartbeat entry per worker, each routed to that worker's own queue.
+# This ensures worker-N's browser/session state is reported correctly.
+for _wid in range(int(os.environ.get("AUTOMATION_WORKER_COUNT", "1"))):
+    CELERY_BEAT_SCHEDULE[f"worker-heartbeat-{_wid}"] = {
+        "task": "apps.automation.tasks.worker_heartbeat",
+        "schedule": crontab(minute="*/2"),
+        "options": {"queue": f"wa-worker-{_wid}"},
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -224,12 +239,21 @@ AUTOMATION_MAX_CONCURRENT_SENDS = int(
 # ---------------------------------------------------------------------------
 # Group health
 # ---------------------------------------------------------------------------
+# How many consecutive failures before a group is flagged unhealthy.
 GROUP_MAX_CONSECUTIVE_FAILURES = int(
-    os.environ.get("GROUP_MAX_CONSECUTIVE_FAILURES", "5")
+    os.environ.get("GROUP_MAX_CONSECUTIVE_FAILURES", "10")
 )
+# If True, also deactivates the group (stops it from receiving any future
+# broadcasts) in addition to marking it unhealthy. Keep False unless you
+# explicitly want manual re-activation required after every failure streak.
 GROUP_AUTO_DISABLE_ON_UNHEALTHY = os.environ.get(
-    "GROUP_AUTO_DISABLE_ON_UNHEALTHY", "True"
+    "GROUP_AUTO_DISABLE_ON_UNHEALTHY", "False"
 ).lower() in ("true", "1", "yes")
+# Hours after last failure before an unhealthy group is automatically
+# given another chance (consecutive_failures reset, is_healthy restored).
+GROUP_UNHEALTHY_RECOVERY_HOURS = int(
+    os.environ.get("GROUP_UNHEALTHY_RECOVERY_HOURS", "2")
+)
 
 # ---------------------------------------------------------------------------
 # Retry settings

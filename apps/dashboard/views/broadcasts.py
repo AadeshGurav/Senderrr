@@ -61,11 +61,12 @@ def broadcast_messages(request: HttpRequest, pk: int) -> HttpResponse:
 
     max_att = _max_attempts()
     for msg in messages:
+        # Manual retry only requires the group to exist (is_active).
+        # Health is intentionally ignored — the user is explicitly overriding.
         msg.can_retry = (
             msg.status == MessageTask.Status.FAILED
             and msg.attempt_count < max_att
             and msg.group.is_active
-            and msg.group.is_healthy
         )
 
     return render(
@@ -170,7 +171,6 @@ def _message_row_response(
         msg.status == MessageTask.Status.FAILED
         and msg.attempt_count < max_att
         and msg.group.is_active
-        and msg.group.is_healthy
     )
     return render(
         request,

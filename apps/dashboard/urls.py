@@ -2,7 +2,14 @@
 
 from django.urls import path
 
-from apps.dashboard.views import broadcasts, dashboard, groups, settings, status
+from apps.dashboard.views import (
+    broadcasts,
+    communities,
+    dashboard,
+    groups,
+    settings,
+    status,
+)
 
 app_name = "dashboard"
 
@@ -13,6 +20,30 @@ urlpatterns = [
     path("groups/<int:pk>/toggle/", groups.toggle_group, name="toggle_group"),
     path("groups/<int:pk>/delete/", groups.delete_group, name="delete_group"),
     path("groups/<int:pk>/mark-healthy/", groups.mark_healthy, name="mark_healthy"),
+    path("groups/<int:pk>/link/", groups.link_subgroup, name="link_subgroup"),
+    path("groups/<int:pk>/unlink/", groups.unlink_subgroup, name="unlink_subgroup"),
+    # Communities
+    path("communities/add/", communities.add_community, name="add_community"),
+    path(
+        "communities/<int:pk>/toggle/",
+        communities.toggle_community,
+        name="toggle_community",
+    ),
+    path(
+        "communities/<int:pk>/delete/",
+        communities.delete_community,
+        name="delete_community",
+    ),
+    path(
+        "communities/<int:pk>/subgroups/",
+        communities.community_subgroups,
+        name="community_subgroups",
+    ),
+    path(
+        "communities/<int:pk>/broadcast/",
+        communities.trigger_community_broadcast,
+        name="community_broadcast",
+    ),
     # Broadcasts
     path("broadcasts/", broadcasts.broadcast_list, name="broadcasts"),
     path(

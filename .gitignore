@@ -33,6 +33,8 @@ media/
 # Celery
 celerybeat-schedule
 celerybeat.pid
+celerybeat-schedule-shm
+celerybeat-schedule-wal
 
 # Ruff / linting cache
 .ruff_cache/

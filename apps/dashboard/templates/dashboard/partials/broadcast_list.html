@@ -33,30 +33,35 @@
         {% endif %}
       </td>
       <td>{{ b.created_at|timesince }} ago</td>
-      <td class="action-cell">
-        {% if b.total_groups > 0 %}
-        <button class="expand-btn outline contrast" hx-get="{% url 'dashboard:broadcast_messages' b.pk %}"
-          hx-target="#messages-{{ b.pk }}" hx-swap="innerHTML"
-          onclick="this.closest('tr').nextElementSibling.toggleAttribute('hidden'); this.textContent = this.textContent.trim() === '▸ Messages' ? '▾ Messages' : '▸ Messages';">
-          ▸ Messages
-        </button>
-        {% endif %}
-        {% if b.retryable_count %}
-        <button class="retry-btn outline secondary" hx-post="{% url 'dashboard:retry_broadcast' b.pk %}"
-          hx-target="#broadcast-section" hx-swap="innerHTML"
-          hx-confirm="Retry {{ b.retryable_count }} failed message(s) for broadcast #{{ b.pk }}?"
-          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-          ↻ Retry ({{ b.retryable_count }})
-        </button>
-        {% endif %}
-        {% if b.can_resend %}
-        <button class="retry-btn outline" hx-post="{% url 'dashboard:resend_broadcast' b.pk %}"
-          hx-target="#broadcast-section" hx-swap="innerHTML"
-          hx-confirm="Resend broadcast #{{ b.pk }} to all currently healthy groups?"
-          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-          ↻ Resend
-        </button>
-        {% endif %}
+      <td>
+        <div style="display:flex;flex-wrap:wrap;gap:0.25rem;align-items:center">
+          {% if b.total_groups > 0 %}
+          <button class="outline contrast" style="padding:0.2rem 0.5rem;font-size:0.8rem;margin:0"
+            hx-get="{% url 'dashboard:broadcast_messages' b.pk %}"
+            hx-target="#messages-{{ b.pk }}" hx-swap="innerHTML"
+            onclick="this.closest('tr').nextElementSibling.toggleAttribute('hidden'); this.textContent = this.textContent.trim() === '▸ Msgs' ? '▾ Msgs' : '▸ Msgs';">
+            ▸ Msgs
+          </button>
+          {% endif %}
+          {% if b.retryable_count %}
+          <button class="outline secondary" style="padding:0.2rem 0.5rem;font-size:0.8rem;margin:0"
+            hx-post="{% url 'dashboard:retry_broadcast' b.pk %}"
+            hx-target="#broadcast-section" hx-swap="innerHTML"
+            hx-confirm="Retry {{ b.retryable_count }} failed message(s) for broadcast #{{ b.pk }}?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            ↻ {{ b.retryable_count }}
+          </button>
+          {% endif %}
+          {% if b.can_resend %}
+          <button class="outline" style="padding:0.2rem 0.5rem;font-size:0.8rem;margin:0"
+            hx-post="{% url 'dashboard:resend_broadcast' b.pk %}"
+            hx-target="#broadcast-section" hx-swap="innerHTML"
+            hx-confirm="Resend broadcast #{{ b.pk }} to all currently healthy groups?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            ↻ Resend
+          </button>
+          {% endif %}
+        </div>
       </td>
     </tr>
     <tr hidden>

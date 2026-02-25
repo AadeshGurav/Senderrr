@@ -1,0 +1,60 @@
+<tr id="community-row-{{ community.pk }}">
+  <td>{{ community.name }}</td>
+  <td><code>{{ community.community_jid }}</code></td>
+  <td>
+    {% if community.is_active %}
+    <span class="wa-badge connected">Active</span>
+    {% else %}
+    <span class="wa-badge disconnected">Inactive</span>
+    {% endif %}
+  </td>
+  <td>{{ community.subgroups.count }}</td>
+  <td>
+    <span class="stat-sent">{{ community.total_sent }}</span> /
+    <span class="stat-failed">{{ community.total_failed }}</span>
+  </td>
+  <td>
+    {% if broadcast_queued %}
+    <span class="wa-badge connected">Broadcast queued ✓</span>
+    {% elif broadcast_error %}
+    <span class="wa-badge disconnected">{{ broadcast_error }}</span>
+    {% endif %}
+  </td>
+  <td>
+    <div class="group-actions">
+      <button class="outline"
+              hx-get="{% url 'dashboard:community_subgroups' community.pk %}"
+              hx-target="#community-subgroups-{{ community.pk }}"
+              hx-swap="innerHTML"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Sub-groups
+      </button>
+      <button class="outline secondary"
+              hx-post="{% url 'dashboard:community_broadcast' community.pk %}"
+              hx-target="#community-row-{{ community.pk }}"
+              hx-swap="outerHTML"
+              hx-confirm="Broadcast to all sub-groups of '{{ community.name }}'?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Broadcast
+      </button>
+      <button class="outline secondary"
+              hx-post="{% url 'dashboard:toggle_community' community.pk %}"
+              hx-target="#community-row-{{ community.pk }}"
+              hx-swap="outerHTML"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        {% if community.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+      <button class="outline secondary"
+              hx-post="{% url 'dashboard:delete_community' community.pk %}"
+              hx-target="#community-section"
+              hx-swap="innerHTML"
+              hx-confirm="Delete community '{{ community.name }}'? Sub-groups become standalone groups."
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Delete
+      </button>
+    </div>
+  </td>
+</tr>
+<tr id="community-subgroups-{{ community.pk }}" style="display:none">
+  <!-- Populated by htmx when Sub-groups is clicked -->
+</tr>

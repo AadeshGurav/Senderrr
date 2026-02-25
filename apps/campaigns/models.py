@@ -19,6 +19,36 @@ class ErrorCategory(models.TextChoices):
     UNKNOWN = "unknown", "Unknown"
 
 
+class WhatsAppCommunity(models.Model):
+    """A WhatsApp Community — a container for an Announcement Channel and Sub-groups."""
+
+    name = models.CharField(max_length=255, help_text="Human-readable community name.")
+    community_jid = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+        help_text="Community search name used in WhatsApp Web chat list.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Inactive community excludes all its sub-groups from broadcasts.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    total_sent = models.PositiveIntegerField(default=0)
+    total_failed = models.PositiveIntegerField(default=0)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "WhatsApp Community"
+        verbose_name_plural = "WhatsApp Communities"
+
+    def __str__(self) -> str:
+        status = "✓" if self.is_active else "✗"
+        return f"[{status}] {self.name}"
+
+
 class WhatsAppGroup(models.Model):
     """A WhatsApp group to receive broadcast messages."""
 
@@ -28,6 +58,18 @@ class WhatsAppGroup(models.Model):
         unique=True,
         db_index=True,
         help_text="URL-safe group identifier (e.g. group invite link suffix).",
+    )
+    community = models.ForeignKey(
+        WhatsAppCommunity,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="subgroups",
+        help_text="Parent community if this group is a community sub-group.",
+    )
+    is_announcement_channel = models.BooleanField(
+        default=False,
+        help_text="True for the community Announcement Channel (admin-only posting).",
     )
     is_active = models.BooleanField(
         default=True,

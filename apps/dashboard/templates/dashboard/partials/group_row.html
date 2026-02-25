@@ -1,6 +1,18 @@
 <tr id="group-row-{{ group.pk }}">
-  <td>{{ group.name }}</td>
+  <td>
+    {{ group.name }}
+    {% if group.is_announcement_channel %}
+    <span class="wa-badge unknown" style="font-size:0.7rem">Announcement</span>
+    {% endif %}
+  </td>
   <td><code>{{ group.group_jid }}</code></td>
+  <td>
+    {% if group.community %}
+    <span class="wa-badge unknown">{{ group.community.name }}</span>
+    {% else %}
+    <span style="color:var(--pico-muted-color)">Standalone</span>
+    {% endif %}
+  </td>
   <td>
     {% if group.is_active %}
     <span class="wa-badge connected">Active</span>
@@ -29,6 +41,16 @@
               hx-confirm="Reset health for '{{ group.name }}'? This clears failure count and re-activates the group."
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         Mark Healthy
+      </button>
+      {% endif %}
+      {% if group.community %}
+      <button class="outline secondary"
+              hx-post="{% url 'dashboard:unlink_subgroup' group.pk %}"
+              hx-target="#group-row-{{ group.pk }}"
+              hx-swap="outerHTML"
+              hx-confirm="Unlink '{{ group.name }}' from '{{ group.community.name }}'?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Unlink
       </button>
       {% endif %}
       <button class="outline secondary"

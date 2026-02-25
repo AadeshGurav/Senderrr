@@ -1,0 +1,64 @@
+<td colspan="7">
+  <div style="padding:0.5rem 1rem;background:var(--pico-card-background-color);">
+    {% if community.subgroups.all %}
+    <table style="margin:0">
+      <thead>
+        <tr>
+          <th>Sub-group name</th>
+          <th>JID</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Health</th>
+          <th>Sent / Failed</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for subgroup in community.subgroups.all %}
+        <tr id="group-row-{{ subgroup.pk }}">
+          <td>{{ subgroup.name }}</td>
+          <td><code>{{ subgroup.group_jid }}</code></td>
+          <td>
+            {% if subgroup.is_announcement_channel %}
+            <span class="wa-badge unknown">Announcement</span>
+            {% else %}
+            <span>Sub-group</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if subgroup.is_active %}
+            <span class="wa-badge connected">Active</span>
+            {% else %}
+            <span class="wa-badge disconnected">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if subgroup.is_healthy %}
+            <span class="wa-badge connected">Healthy</span>
+            {% else %}
+            <span class="wa-badge disconnected">Unhealthy ({{ subgroup.consecutive_failures }})</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="stat-sent">{{ subgroup.total_sent }}</span> /
+            <span class="stat-failed">{{ subgroup.total_failed }}</span>
+          </td>
+          <td>
+            <button class="outline secondary"
+                    hx-post="{% url 'dashboard:unlink_subgroup' subgroup.pk %}"
+                    hx-target="#group-row-{{ subgroup.pk }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Unlink '{{ subgroup.name }}' from this community?"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+              Unlink
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="margin:0;color:var(--pico-muted-color)">No sub-groups yet. Link existing groups below.</p>
+    {% endif %}
+  </div>
+</td>
