@@ -1,0 +1,62 @@
+{% load dashboard_tags %}
+<div class="admin-card" id="admin-row-{{ admin.pk }}">
+  <div class="admin-card-identity">
+    <span class="admin-card-name">{{ admin.label }}</span>
+    <code class="admin-card-phone">{{ admin.phone_number }}</code>
+  </div>
+
+  <div class="admin-card-chips">
+    {% if admin.is_active %}
+    <span class="chip chip--ok"><span class="chip-dot"></span>Active</span>
+    {% else %}
+    <span class="chip chip--error"><span class="chip-dot"></span>Paused</span>
+    {% endif %}
+
+    {% if admin.skip_warmup %}
+    <span class="chip chip--muted">Warmed up</span>
+    {% elif admin.warm_up_started_at %}
+      {% warm_up_day admin.warm_up_started_at as wu_day %}
+      {% if wu_day <= 7 %}
+    <span class="chip chip--warn"><span class="chip-dot"></span>Day {{ wu_day }}/7</span>
+      {% else %}
+    <span class="chip chip--ok"><span class="chip-dot"></span>Ready</span>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="admin-card-stats">
+    <div class="admin-stat">
+      <span class="admin-stat-label">Sessions</span>
+      <span class="admin-stat-value">{{ admin.sessions_per_admin }}</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-label">Sent</span>
+      <span class="admin-stat-value stat-sent">{{ admin.total_sent }}</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-label">Failed</span>
+      <span class="admin-stat-value stat-failed">{{ admin.total_failed }}</span>
+    </div>
+  </div>
+
+  <div class="admin-card-actions">
+    <button class="outline secondary btn-sm"
+            hx-get="{% url 'dashboard:edit_admin' admin.pk %}"
+            hx-target="#admin-row-{{ admin.pk }}"
+            hx-swap="outerHTML"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>Edit</button>
+    <button class="outline secondary btn-sm"
+            hx-post="{% url 'dashboard:toggle_admin' admin.pk %}"
+            hx-target="#admin-row-{{ admin.pk }}"
+            hx-swap="outerHTML"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      {% if admin.is_active %}Pause{% else %}Resume{% endif %}
+    </button>
+    <button class="outline contrast btn-sm"
+            hx-post="{% url 'dashboard:delete_admin' admin.pk %}"
+            hx-target="#admin-section"
+            hx-swap="innerHTML"
+            hx-confirm="Delete '{{ admin.label }}'? Message history will be preserved."
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>Delete</button>
+  </div>
+</div>

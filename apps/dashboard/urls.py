@@ -3,6 +3,8 @@
 from django.urls import path
 
 from apps.dashboard.views import (
+    admin_health,
+    admins,
     broadcasts,
     communities,
     dashboard,
@@ -15,6 +17,15 @@ app_name = "dashboard"
 
 urlpatterns = [
     path("", dashboard.index, name="index"),
+    path("admins/", dashboard.admins_page, name="admins_page"),
+    path("groups/", dashboard.groups_page, name="groups_page"),
+    path("communities/", dashboard.communities_page, name="communities_page"),
+    path("broadcasts/page/", dashboard.broadcasts_page, name="broadcasts_page"),
+    # Admins
+    path("admins/add/", admins.add_admin, name="add_admin"),
+    path("admins/<int:pk>/toggle/", admins.toggle_admin, name="toggle_admin"),
+    path("admins/<int:pk>/edit/", admins.edit_admin, name="edit_admin"),
+    path("admins/<int:pk>/delete/", admins.delete_admin, name="delete_admin"),
     # Groups
     path("groups/add/", groups.add_group, name="add_group"),
     path("groups/<int:pk>/toggle/", groups.toggle_group, name="toggle_group"),
@@ -68,4 +79,5 @@ urlpatterns = [
     # Status
     path("status/whatsapp/", status.whatsapp_status, name="whatsapp_status"),
     path("status/workers/", status.worker_statuses, name="worker_statuses"),
+    path("status/admin-health/", admin_health.admin_health, name="admin_health"),
 ]

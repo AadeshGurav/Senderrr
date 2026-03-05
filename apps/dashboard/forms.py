@@ -4,7 +4,23 @@ from __future__ import annotations
 
 from django import forms
 
-from apps.campaigns.models import WhatsAppCommunity, WhatsAppGroup
+from apps.campaigns.models import AdminAccount, WhatsAppCommunity, WhatsAppGroup
+
+
+class AdminForm(forms.ModelForm):
+    """Form for adding or editing an admin account."""
+
+    class Meta:
+        model = AdminAccount
+        fields = ("label", "phone_number", "sessions_per_admin", "skip_warmup")
+        widgets = {
+            "label": forms.TextInput(attrs={"placeholder": "Admin 1"}),
+            "phone_number": forms.TextInput(attrs={"placeholder": "+91XXXXXXXXXX"}),
+            "sessions_per_admin": forms.NumberInput(
+                attrs={"min": 1, "max": 4, "value": 2}
+            ),
+            "skip_warmup": forms.CheckboxInput(),
+        }
 
 
 class GroupForm(forms.ModelForm):
@@ -38,10 +54,6 @@ class CommunityForm(forms.ModelForm):
 class SettingsForm(forms.Form):
     """Form for editing runtime configuration."""
 
-    SCRAPER_TARGET_URL = forms.URLField(
-        label="Target URL",
-        help_text="Website to monitor for new articles.",
-    )
     SCRAPER_REQUEST_TIMEOUT = forms.IntegerField(
         label="Request timeout (seconds)",
         min_value=5,
@@ -62,18 +74,6 @@ class SettingsForm(forms.Form):
         min_value=10,
         help_text="Maximum anti-ban delay between sends.",
     )
-    AUTOMATION_HOURLY_LIMIT = forms.IntegerField(
-        label="Hourly limit",
-        min_value=1,
-        max_value=100,
-        help_text="Max messages per hour (across all workers).",
-    )
-    AUTOMATION_DAILY_LIMIT = forms.IntegerField(
-        label="Daily limit",
-        min_value=1,
-        max_value=1000,
-        help_text="Max messages per day (across all workers).",
-    )
     AUTOMATION_QUIET_HOUR_START = forms.IntegerField(
         label="Quiet hours start",
         min_value=0,
@@ -85,22 +85,4 @@ class SettingsForm(forms.Form):
         min_value=0,
         max_value=23,
         help_text="No sends before this hour (local timezone).",
-    )
-    AUTOMATION_WORKER_COUNT = forms.IntegerField(
-        label="Parallel workers",
-        min_value=1,
-        max_value=4,
-        help_text="Number of browser windows (max 4). Restart required.",
-    )
-    AUTOMATION_WORKER_STAGGER = forms.IntegerField(
-        label="Worker stagger (seconds)",
-        min_value=15,
-        max_value=300,
-        help_text="Delay between each worker's first send.",
-    )
-    AUTOMATION_MAX_CONCURRENT_SENDS = forms.IntegerField(
-        label="Max concurrent sends",
-        min_value=1,
-        max_value=4,
-        help_text="Max workers sending at the exact same instant.",
     )

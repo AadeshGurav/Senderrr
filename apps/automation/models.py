@@ -22,6 +22,14 @@ class WorkerSession(models.Model):
         BANNED = "banned", "Banned"
         UNKNOWN = "unknown", "Unknown"
 
+    admin = models.ForeignKey(
+        "campaigns.AdminAccount",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="worker_sessions",
+        help_text="Admin account this worker is bound to.",
+    )
     worker_id = models.CharField(max_length=255, unique=True, db_index=True)
     status = models.CharField(
         max_length=20,

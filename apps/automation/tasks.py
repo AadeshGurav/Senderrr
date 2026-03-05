@@ -52,6 +52,26 @@ def send_whatsapp_message(
 
 @shared_task(
     bind=True,
+    name="apps.automation.tasks.dispatch_heartbeats",
+    max_retries=0,
+    acks_late=False,
+)
+def dispatch_heartbeats(self) -> str:  # noqa: ANN001
+    """Fan-out a heartbeat task to every active worker queue.
+
+    Runs from beat every 2 minutes.  Beat only needs this one entry
+    regardless of how many admins / workers are configured.
+    """
+    from apps.automation.worker_mapping import build_worker_map
+
+    slots = build_worker_map()
+    for slot in slots:
+        worker_heartbeat.apply_async(queue=f"wa-worker-{slot.worker_id}")
+    return f"Dispatched heartbeats to {len(slots)} worker(s)"
+
+
+@shared_task(
+    bind=True,
     name="apps.automation.tasks.worker_heartbeat",
     max_retries=0,
     acks_late=True,

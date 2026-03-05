@@ -1,0 +1,24 @@
+{% if success_message %}
+<div class="callout callout--success">{{ success_message }}</div>
+{% endif %}
+
+<!-- Setup guidance -->
+<div class="callout callout--info">
+  <strong>Setup:</strong>
+  Each admin = one WhatsApp number. After adding, run <code>make start</code> to scan the QR code.
+  Multiple sessions per admin each need a separate scan — choose <em>Link as new device</em>.
+</div>
+
+<!-- Add admin form -->
+<div id="admin-form-container">
+  {% include "dashboard/partials/admin_form.html" %}
+</div>
+
+<!-- Admin cards -->
+<div id="admin-cards">
+  {% for admin in admins %}
+  {% include "dashboard/partials/admin_row.html" %}
+  {% empty %}
+  <p class="empty-state">No admin accounts yet. Add one above to get started.</p>
+  {% endfor %}
+</div>

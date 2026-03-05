@@ -159,14 +159,12 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-# One heartbeat entry per worker, each routed to that worker's own queue.
-# This ensures worker-N's browser/session state is reported correctly.
-for _wid in range(int(os.environ.get("AUTOMATION_WORKER_COUNT", "1"))):
-    CELERY_BEAT_SCHEDULE[f"worker-heartbeat-{_wid}"] = {
-        "task": "apps.automation.tasks.worker_heartbeat",
-        "schedule": crontab(minute="*/2"),
-        "options": {"queue": f"wa-worker-{_wid}"},
-    }
+# dispatch_heartbeats reads the live worker map and fans out to each
+# active worker queue.  No phantom workers regardless of admin count.
+CELERY_BEAT_SCHEDULE["dispatch-heartbeats"] = {
+    "task": "apps.automation.tasks.dispatch_heartbeats",
+    "schedule": crontab(minute="*/2"),
+}
 
 
 # ---------------------------------------------------------------------------

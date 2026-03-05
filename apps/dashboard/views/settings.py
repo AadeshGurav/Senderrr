@@ -27,6 +27,6 @@ def settings_view(request: HttpRequest) -> HttpResponse:
 
     return render(
         request,
-        "dashboard/partials/settings_form.html",
+        "dashboard/pages/settings.html",
         {"settings_form": form},
     )

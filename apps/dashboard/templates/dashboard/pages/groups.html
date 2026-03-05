@@ -1,0 +1,28 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Groups — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <h1 class="wa-page-title">WhatsApp Groups</h1>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <span class="chip chip--ok">
+        <span class="chip-dot"></span>{{ healthy_groups }} healthy
+      </span>
+      {% if unhealthy_groups %}
+      <span class="chip chip--error">
+        <span class="chip-dot"></span>{{ unhealthy_groups }} unhealthy
+      </span>
+      {% endif %}
+      <span class="chip chip--muted">{{ total_groups }} total</span>
+    </div>
+  </div>
+</div>
+
+<div class="wa-section">
+  <div id="group-section">
+    {% include "dashboard/partials/group_list.html" %}
+  </div>
+</div>
+{% endblock %}

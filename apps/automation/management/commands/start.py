@@ -15,8 +15,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
-from apps.automation.browser_manager import resolve_user_data_dir
-from utils.config import get_config
+from apps.automation.worker_mapping import build_worker_map
 
 User = get_user_model()
 
@@ -55,11 +54,23 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING("\nWhatsApp Automation — Start"))
         self.stdout.write("=" * 50)
 
+        self.stdout.write("Running migrations...")
+        call_command("migrate", verbosity=0)
+        self._purge_if_fresh_db()
+
         self._ensure_superuser()
 
-        worker_count = min(int(get_config("AUTOMATION_WORKER_COUNT", int)), 4)
-        for wid in range(worker_count):
-            self._check_worker_session(wid)
+        slots = build_worker_map()
+        if not slots:
+            self.stdout.write(
+                self.style.WARNING(
+                    "\nNo active admin accounts yet.\n"
+                    "Add admins via the dashboard after services start.\n"
+                    "Then run 'make start' again to activate browser sessions.\n"
+                )
+            )
+        else:
+            self._check_admin_sessions(slots)
 
         call_command("generate_procfile")
         call_command("collectstatic", "--noinput", verbosity=0)
@@ -72,6 +83,22 @@ class Command(BaseCommand):
         self._kill_stale_services()
         os.execvp("honcho", ["honcho", "start"])
         return "Started"
+
+    def _purge_if_fresh_db(self) -> None:
+        """Purge stale Celery tasks when the DB has been freshly created."""
+        from apps.campaigns.models import AdminAccount, BroadcastEvent
+
+        if BroadcastEvent.objects.exists() or AdminAccount.objects.exists():
+            return
+
+        from core.celery import app as celery_app
+
+        purged = celery_app.control.purge()
+        self.stdout.write(
+            self.style.WARNING(
+                f"Fresh database detected — purged stale task queue ({purged} tasks removed)."
+            )
+        )
 
     def _ensure_superuser(self) -> None:
         """Prompt to create a superuser if none exist."""
@@ -107,23 +134,35 @@ class Command(BaseCommand):
                 continue
             return pw
 
-    def _check_worker_session(self, worker_id: int) -> None:
-        """Verify a single worker's WhatsApp session.
+    def _check_admin_sessions(self, slots: list) -> None:
+        """Check sessions grouped by admin — one QR scan per admin."""
+        from itertools import groupby
 
-        Opens a visible browser to check the session.  If the session is
-        expired, prompts the user to scan the QR code (same phone number,
-        link as a new device for workers 1+).
-        """
+        grouped = groupby(slots, key=lambda s: s.admin_id)
+        for admin_id, admin_slots in grouped:
+            admin_slots = list(admin_slots)
+            label = admin_slots[0].admin_label
+            count = len(admin_slots)
+            self.stdout.write(
+                self.style.MIGRATE_HEADING(f"\n--- {label} ({count} session(s)) ---")
+            )
+            for slot in admin_slots:
+                self._check_single_session(slot)
+
+    def _check_single_session(self, slot) -> None:  # noqa: ANN001
+        """Verify one browser session and prompt for QR if needed."""
         from playwright.sync_api import sync_playwright
 
-        user_data_dir = resolve_user_data_dir(worker_id)
+        base = settings.PLAYWRIGHT_USER_DATA_DIR
+        user_data_dir = str(
+            Path(base) / f"admin_{slot.admin_id}" / f"session_{slot.session_index}"
+        )
         headless = settings.PLAYWRIGHT_HEADLESS
         Path(user_data_dir).mkdir(parents=True, exist_ok=True)
-
         self._kill_stale_browsers(user_data_dir)
 
-        label = f"Worker {worker_id}" if worker_id > 0 else "WhatsApp"
-        self.stdout.write(f"\nChecking {label} session...")
+        label = f"{slot.admin_label} / session {slot.session_index}"
+        self.stdout.write(f"\nChecking {label} ...")
 
         pw = sync_playwright().start()
         ctx = pw.chromium.launch_persistent_context(
@@ -139,19 +178,18 @@ class Command(BaseCommand):
         state = self._detect_login_state(page, timeout_ms=30_000)
 
         if state == "logged_in":
-            self.stdout.write(self.style.SUCCESS(f"{label} session is valid."))
-            self._write_status(user_data_dir, worker_id=worker_id, logged_in=True)
+            self.stdout.write(self.style.SUCCESS(f"{label} — session valid."))
+            self._write_status(user_data_dir, slot=slot, logged_in=True)
             ctx.close()
             pw.stop()
             time.sleep(2)
             self._kill_stale_browsers(user_data_dir)
             return
 
-        # Need QR scan — reopen as visible if currently headless
         if headless:
             ctx.close()
             pw.stop()
-            self.stdout.write(f"{label} needs QR scan — opening visible browser...")
+            self.stdout.write(f"{label} needs QR — opening visible browser...")
             self._kill_stale_browsers(user_data_dir)
             pw = sync_playwright().start()
             ctx = pw.chromium.launch_persistent_context(
@@ -164,21 +202,19 @@ class Command(BaseCommand):
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             page.goto(WHATSAPP_WEB_URL, wait_until="domcontentloaded", timeout=60_000)
 
-        hint = " (same phone — link as new device)" if worker_id > 0 else ""
-        self.stdout.write(
-            self.style.WARNING(f"{label} session expired — scan QR code now.{hint}")
-        )
+        hint = " (link as new device)" if slot.session_index > 0 else ""
+        self.stdout.write(self.style.WARNING(f"{label} — scan QR code now.{hint}"))
         self.stdout.write("Waiting up to 5 minutes...\n")
 
         logged_in = self._wait_for_login(page, timeout_ms=300_000)
 
         if logged_in:
-            self.stdout.write(self.style.SUCCESS(f"{label} logged in successfully!"))
-            self._write_status(user_data_dir, worker_id=worker_id, logged_in=True)
+            self.stdout.write(self.style.SUCCESS(f"{label} — logged in!"))
+            self._write_status(user_data_dir, slot=slot, logged_in=True)
         else:
-            self._write_status(user_data_dir, worker_id=worker_id, logged_in=False)
+            self._write_status(user_data_dir, slot=slot, logged_in=False)
             self.stdout.write(
-                self.style.ERROR(f"{label} login timed out. Run 'make start' again.")
+                self.style.ERROR(f"{label} — login timed out. Run 'make start' again.")
             )
             ctx.close()
             pw.stop()
@@ -227,7 +263,7 @@ class Command(BaseCommand):
         return "unknown"
 
     def _kill_stale_browsers(self, user_data_dir: str) -> None:
-        """Kill any leftover Chrome processes and remove lock files."""
+        """Kill leftover Chrome processes and remove lock files."""
         try:
             subprocess.run(
                 ["pkill", "-f", f"user-data-dir={user_data_dir}"],
@@ -236,38 +272,17 @@ class Command(BaseCommand):
             )
         except Exception:
             pass
-
         for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
-            lock = Path(user_data_dir) / name
-            lock.unlink(missing_ok=True)
+            Path(user_data_dir).joinpath(name).unlink(missing_ok=True)
 
     def _kill_stale_services(self) -> None:
         """Kill leftover Django/Celery processes from a previous run."""
-        for cmd in (
-            ["lsof", "-ti", ":8000"],
-            ["pgrep", "-f", "celery.*worker"],
-            ["pgrep", "-f", "celery.*beat"],
-        ):
-            try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                pids = result.stdout.strip().split()
-                for pid in pids:
-                    if pid.isdigit() and int(pid) != os.getpid():
-                        subprocess.run(
-                            ["kill", "-9", pid],
-                            capture_output=True,
-                            timeout=5,
-                        )
-            except Exception:
-                continue
+        from apps.automation.process_cleanup import kill_stale_services
+
+        kill_stale_services()
 
     def _write_status(
-        self, user_data_dir: str, *, worker_id: int, logged_in: bool
+        self, user_data_dir: str, *, slot: object, logged_in: bool
     ) -> None:
         """Write session status JSON for the dashboard to read."""
         status_file = Path(user_data_dir) / "status.json"
@@ -275,7 +290,10 @@ class Command(BaseCommand):
             json.dumps(
                 {
                     "logged_in": logged_in,
-                    "worker_id": worker_id,
+                    "worker_id": slot.worker_id,
+                    "admin_id": slot.admin_id,
+                    "admin_label": slot.admin_label,
+                    "session_index": slot.session_index,
                     "checked_at": datetime.now(tz=timezone.utc).isoformat(),
                 }
             )

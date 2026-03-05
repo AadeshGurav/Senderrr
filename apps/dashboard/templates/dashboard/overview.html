@@ -1,0 +1,97 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Overview — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <h1 class="wa-page-title">Overview</h1>
+</div>
+
+<!-- Stats -->
+<div class="stat-grid">
+  <div class="stat-card">
+    <span class="stat-label">Admins</span>
+    <span class="stat-value">{{ active_admins }}</span>
+    <span class="stat-sub">of {{ total_admins }} active</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Groups</span>
+    <span class="stat-value">{{ active_groups }}</span>
+    <span class="stat-sub">
+      {{ total_groups }} total
+      {% if unhealthy_groups %}&nbsp;&middot;&nbsp;<span style="color:var(--error)">{{ unhealthy_groups }} unhealthy</span>{% endif %}
+    </span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Communities</span>
+    <span class="stat-value">{{ active_communities }}</span>
+    <span class="stat-sub">of {{ total_communities }} active</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Broadcasts</span>
+    <span class="stat-value">{{ total_broadcasts }}</span>
+    <span class="stat-sub">
+      {% if total_failed %}<span style="color:var(--error)">{{ total_failed }} failed</span>{% else %}all clear{% endif %}
+    </span>
+  </div>
+</div>
+
+<!-- Workers -->
+<div class="wa-section">
+  <div class="wa-section-head">
+    <h2 class="wa-section-title">Workers</h2>
+  </div>
+  <div id="worker-section"
+       hx-get="{% url 'dashboard:worker_statuses' %}"
+       hx-trigger="load, every 30s"
+       hx-swap="innerHTML">
+    <div class="worker-grid">
+      <div class="worker-chip worker-chip--unknown">
+        <div class="worker-chip-name">
+          <span class="worker-dot"></span>Loading...
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Health -->
+<div class="wa-section">
+  <div class="wa-section-head">
+    <h2 class="wa-section-title">Admin Health</h2>
+    <a href="{% url 'dashboard:admins_page' %}" class="wa-section-link">Manage &rarr;</a>
+  </div>
+  <div id="admin-health-section"
+       hx-get="{% url 'dashboard:admin_health' %}"
+       hx-trigger="load, every 30s"
+       hx-swap="innerHTML">
+    <span class="wa-badge unknown">Loading...</span>
+  </div>
+</div>
+
+<!-- Recent Broadcasts -->
+<div class="wa-section">
+  <div class="wa-section-head">
+    <h2 class="wa-section-title">Recent Broadcasts</h2>
+    <div style="display:flex;align-items:center;gap:8px">
+      {% if retryable_failed %}
+      <button class="outline secondary btn-sm"
+              hx-post="{% url 'dashboard:retry_all' %}"
+              hx-target="#broadcast-section"
+              hx-swap="innerHTML"
+              hx-confirm="Retry all {{ retryable_failed }} eligible failed messages?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        &circlearrowleft; Retry {{ retryable_failed }}
+      </button>
+      {% endif %}
+      <a href="{% url 'dashboard:broadcasts_page' %}" class="wa-section-link">View all &rarr;</a>
+    </div>
+  </div>
+  <div id="broadcast-section"
+       hx-get="{% url 'dashboard:broadcasts' %}"
+       hx-trigger="load, every 30s"
+       hx-swap="innerHTML">
+    <span class="wa-badge unknown">Loading...</span>
+  </div>
+</div>
+{% endblock %}

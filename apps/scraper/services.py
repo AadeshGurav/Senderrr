@@ -105,9 +105,11 @@ def detect_new_articles(url: str) -> list[ScrapedArticle]:
     if not known_urls:
         _seed_known_urls(preview_urls)
         logger.info(
-            "First run for %s — seeded %d URLs. No broadcasts triggered.",
-            url,
+            "Seeded %d existing URLs as known for %s. "
+            "Only articles published AFTER this point will broadcast. "
+            "Run 'make flush-scraper' to reset.",
             len(preview_urls),
+            url,
         )
         return []
 

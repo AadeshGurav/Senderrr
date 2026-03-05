@@ -3,20 +3,20 @@
       hx-swap="innerHTML"
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {% csrf_token %}
-  <div class="grid">
-    <label>
-      Community name
+  <div class="add-form">
+    <div class="add-form-field">
+      <label>Community name</label>
       {{ community_form.name }}
-    </label>
-    <label>
-      Community JID / Search name
+    </div>
+    <div class="add-form-field">
+      <label>Community JID / Search name</label>
       {{ community_form.community_jid }}
-    </label>
-    <div style="display:flex;align-items:flex-end">
+    </div>
+    <div class="add-form-actions">
       <button type="submit">Add Community</button>
     </div>
   </div>
   {% if community_form.errors %}
-  <small class="wa-badge disconnected">{{ community_form.errors }}</small>
+  <div class="callout callout--warn" style="margin-top:6px">{{ community_form.errors }}</div>
   {% endif %}
 </form>

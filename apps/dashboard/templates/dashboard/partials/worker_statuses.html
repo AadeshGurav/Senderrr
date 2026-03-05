@@ -1,25 +1,26 @@
-{% for w in workers %}
-<div class="worker-card">
-  <div style="display: flex; align-items: center; gap: 0.5rem;">
-    <span class="wa-badge {{ w.status }}">
-      {% if w.status == "connected" %}Connected
-      {% elif w.status == "disconnected" %}Disconnected
-      {% else %}Unknown
+{% if workers %}
+<div class="worker-grid">
+  {% for w in workers %}
+  <div class="worker-chip worker-chip--{{ w.status }}">
+    <div class="worker-chip-name">
+      <span class="worker-dot"></span>
+      {{ w.admin_label }} / S{{ w.session_index }}
+    </div>
+    <div class="worker-chip-meta">
+      {{ w.msgs_hr }} msgs/hr
+      {% if w.total_sent or w.total_failed %}
+      &middot; <span class="stat-sent">{{ w.total_sent }}</span>
+      {% if w.total_failed %}<span class="stat-failed"> / {{ w.total_failed }}</span>{% endif %}
       {% endif %}
-    </span>
-    <strong>Worker {{ w.worker_id }}</strong>
+      {% if w.current_group %}
+      <br>&#8594; {{ w.current_group|truncatechars:26 }}
+      {% endif %}
+    </div>
   </div>
-  <div class="worker-stats">
-    <small>{{ w.msgs_hr }} msgs/hr</small>
-    <small>{{ w.total_sent }} sent / {{ w.total_failed }} failed</small>
-    {% if w.browser_status %}
-    <small>Browser: {{ w.browser_status }}</small>
-    {% endif %}
-    {% if w.current_group %}
-    <small>Sending to: {{ w.current_group }}</small>
-    {% endif %}
-  </div>
+  {% endfor %}
 </div>
-{% empty %}
-<span class="wa-badge unknown">No workers configured</span>
-{% endfor %}
+{% else %}
+<div class="callout callout--warn">
+  No admin accounts configured — add admins to start sending.
+</div>
+{% endif %}

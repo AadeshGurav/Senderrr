@@ -1,0 +1,23 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Communities — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <h1 class="wa-page-title">WhatsApp Communities</h1>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <span class="chip chip--ok">
+        <span class="chip-dot"></span>{{ active_communities }} active
+      </span>
+      <span class="chip chip--muted">{{ total_communities }} total</span>
+    </div>
+  </div>
+</div>
+
+<div class="wa-section">
+  <div id="community-section">
+    {% include "dashboard/partials/community_list.html" %}
+  </div>
+</div>
+{% endblock %}

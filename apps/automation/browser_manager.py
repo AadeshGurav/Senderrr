@@ -24,10 +24,20 @@ logger = logging.getLogger(__name__)
 def resolve_user_data_dir(worker_id: int) -> str:
     """Return the session directory for a given worker.
 
-    Worker 0 uses the base ``PLAYWRIGHT_USER_DATA_DIR`` (backward
-    compatible).  Workers 1..N use ``{base}_worker_{N}``.
+    New layout (admin-aware):
+        ``{base}/admin_{admin_id}/session_{session_index}``
+
+    Falls back to legacy layout when admin mapping is unavailable
+    (e.g. during initial setup before any admins are created).
     """
     base = settings.PLAYWRIGHT_USER_DATA_DIR
+
+    admin_id = int(os.environ.get("WA_ADMIN_ID", "-1"))
+    if admin_id >= 0:
+        session_idx = int(os.environ.get("WA_SESSION_INDEX", "0"))
+        return str(Path(base) / f"admin_{admin_id}" / f"session_{session_idx}")
+
+    # Legacy fallback for backward compatibility
     if worker_id == 0:
         return base
     return f"{base}_worker_{worker_id}"

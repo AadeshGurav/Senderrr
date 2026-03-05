@@ -9,7 +9,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand
 
 from apps.automation.browser_manager import resolve_user_data_dir
-from utils.config import get_config
+from apps.automation.worker_mapping import build_worker_map
 
 WHATSAPP_WEB_URL = "https://web.whatsapp.com"
 
@@ -53,10 +53,12 @@ class Command(BaseCommand):
             self._login_worker(worker_id)
             return f"Worker {worker_id} login complete"
 
-        worker_count = min(int(get_config("AUTOMATION_WORKER_COUNT", int)), 4)
-        for wid in range(worker_count):
-            self._login_worker(wid)
-        return f"All {worker_count} worker(s) logged in"
+        slots = build_worker_map()
+        if not slots:
+            return "No active admin accounts — nothing to log in."
+        for slot in slots:
+            self._login_worker(slot.worker_id)
+        return f"All {len(slots)} worker(s) logged in"
 
     def _login_worker(self, worker_id: int) -> None:
         """Run the QR-code login flow for a single worker."""
@@ -94,9 +96,7 @@ class Command(BaseCommand):
         try:
             page.wait_for_selector(logged_in_css, timeout=300_000)
         except PlaywrightTimeout:
-            self.stdout.write(
-                self.style.ERROR(f"{label} login timed out. Try again.")
-            )
+            self.stdout.write(self.style.ERROR(f"{label} login timed out. Try again."))
             ctx.close()
             pw.stop()
             return

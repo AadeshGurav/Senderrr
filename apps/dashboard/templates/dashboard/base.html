@@ -3,38 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}WhatsApp Automation{% endblock %}</title>
+  <title>{% block title %}WA Automation{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   {% load static %}
   <link rel="stylesheet" href="{% static 'dashboard/css/style.css' %}">
 </head>
 <body>
-  <nav class="container-fluid">
-    <ul>
-      <li><strong>WhatsApp Automation</strong></li>
-    </ul>
-    <ul>
-      {% if user.is_authenticated %}
-      <li><a href="{% url 'dashboard:index' %}">Dashboard</a></li>
-      <li><a href="{% url 'dashboard:settings' %}" hx-get="{% url 'dashboard:settings' %}" hx-target="#main-content" hx-push-url="true">Settings</a></li>
-      <li><a href="{% url 'admin:index' %}">Admin</a></li>
-      <li>
-        <form method="post" action="{% url 'logout' %}" style="margin:0">
-          {% csrf_token %}
-          <button type="submit" class="outline secondary" style="margin:0;padding:0.25rem 0.75rem">Logout</button>
-        </form>
-      </li>
-      {% endif %}
-    </ul>
+
+{% if user.is_authenticated %}
+{% url 'dashboard:index' as url_overview %}
+{% url 'dashboard:admins_page' as url_admins %}
+{% url 'dashboard:groups_page' as url_groups %}
+{% url 'dashboard:communities_page' as url_communities %}
+{% url 'dashboard:broadcasts_page' as url_broadcasts %}
+{% url 'dashboard:settings' as url_settings %}
+
+<header class="wa-nav">
+  <a href="{{ url_overview }}" class="wa-brand">WA Automation</a>
+  <div class="wa-brand-sep"></div>
+
+  <nav class="wa-nav-links">
+    <a href="{{ url_overview }}"
+       class="wa-nav-link {% if request.path == url_overview %}active{% endif %}">Overview</a>
+    <a href="{{ url_admins }}"
+       class="wa-nav-link {% if request.path == url_admins %}active{% endif %}">Admins</a>
+    <a href="{{ url_groups }}"
+       class="wa-nav-link {% if request.path == url_groups %}active{% endif %}">Groups</a>
+    <a href="{{ url_communities }}"
+       class="wa-nav-link {% if request.path == url_communities %}active{% endif %}">Communities</a>
+    <a href="{{ url_broadcasts }}"
+       class="wa-nav-link {% if request.path == url_broadcasts %}active{% endif %}">Broadcasts</a>
   </nav>
 
-  <main class="container" id="main-content">
-    {% block content %}{% endblock %}
-  </main>
+  <div class="wa-nav-right">
+    <a href="{{ url_settings }}"
+       class="{% if request.path == url_settings %}active{% endif %}">Settings</a>
+    <form method="post" action="{% url 'logout' %}">
+      {% csrf_token %}
+      <button type="submit">Logout</button>
+    </form>
+  </div>
+</header>
+{% endif %}
 
-  <footer class="container">
-    <small>WhatsApp Automation Dashboard</small>
-  </footer>
+<main class="wa-page" id="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="wa-footer">
+  WA Automation Dashboard
+</footer>
+
 </body>
 </html>

@@ -1,0 +1,32 @@
+<form hx-post="{% url 'dashboard:add_admin' %}"
+      hx-target="#admin-section"
+      hx-swap="innerHTML"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {% csrf_token %}
+  <div class="add-form">
+    <div class="add-form-field">
+      <label>Label</label>
+      {{ admin_form.label }}
+    </div>
+    <div class="add-form-field">
+      <label>Phone number</label>
+      {{ admin_form.phone_number }}
+    </div>
+    <div class="add-form-field" style="flex:0 1 100px;min-width:80px">
+      <label>Sessions</label>
+      {{ admin_form.sessions_per_admin }}
+    </div>
+    <div class="add-form-field add-form-field--checkbox">
+      <label class="checkbox-label">
+        {{ admin_form.skip_warmup }} Skip warm-up
+        <span class="checkbox-hint">number already warmed</span>
+      </label>
+    </div>
+    <div class="add-form-actions">
+      <button type="submit">Add Admin</button>
+    </div>
+  </div>
+  {% if admin_form.errors %}
+  <div class="callout callout--warn" style="margin-top:6px">{{ admin_form.errors }}</div>
+  {% endif %}
+</form>

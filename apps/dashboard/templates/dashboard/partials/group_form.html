@@ -2,18 +2,22 @@
       hx-target="#group-section"
       hx-swap="innerHTML">
   {% csrf_token %}
-  <div class="grid">
-    <div>
-      {{ group_form.name.label_tag }}
+  <div class="add-form">
+    <div class="add-form-field">
+      <label>{{ group_form.name.label }}</label>
       {{ group_form.name }}
-      {% if group_form.name.errors %}<small class="error">{{ group_form.name.errors.0 }}</small>{% endif %}
+      {% if group_form.name.errors %}
+      <small class="error">{{ group_form.name.errors.0 }}</small>
+      {% endif %}
     </div>
-    <div>
-      {{ group_form.group_jid.label_tag }}
+    <div class="add-form-field">
+      <label>{{ group_form.group_jid.label }}</label>
       {{ group_form.group_jid }}
-      {% if group_form.group_jid.errors %}<small class="error">{{ group_form.group_jid.errors.0 }}</small>{% endif %}
+      {% if group_form.group_jid.errors %}
+      <small class="error">{{ group_form.group_jid.errors.0 }}</small>
+      {% endif %}
     </div>
-    <div style="display:flex;align-items:end">
+    <div class="add-form-actions">
       <button type="submit">Add Group</button>
     </div>
   </div>

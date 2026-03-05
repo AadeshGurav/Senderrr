@@ -1,93 +1,62 @@
 {% if saved %}
-<p role="alert" class="settings-saved">Settings saved successfully.</p>
+<p role="alert" class="settings-saved">Settings saved.</p>
 {% endif %}
 
 <form hx-post="{% url 'dashboard:settings' %}"
-      hx-target="#main-content"
+      hx-target="#settings-section"
       hx-swap="innerHTML">
   {% csrf_token %}
-  <article>
-    <header><h2>Settings</h2></header>
 
-    <h3>Scraper</h3>
-    <label for="id_SCRAPER_TARGET_URL">{{ settings_form.SCRAPER_TARGET_URL.label }}</label>
-    {{ settings_form.SCRAPER_TARGET_URL }}
-    {% if settings_form.SCRAPER_TARGET_URL.help_text %}<small>{{ settings_form.SCRAPER_TARGET_URL.help_text }}</small>{% endif %}
-    {% if settings_form.SCRAPER_TARGET_URL.errors %}<small class="error">{{ settings_form.SCRAPER_TARGET_URL.errors.0 }}</small>{% endif %}
-
-    <div class="grid">
-      <div>
-        <label for="id_SCRAPER_REQUEST_TIMEOUT">{{ settings_form.SCRAPER_REQUEST_TIMEOUT.label }}</label>
+  <div class="settings-group">
+    <div class="settings-group-label">Scraper</div>
+    <div class="settings-row">
+      <div class="settings-field">
+        <label>{{ settings_form.SCRAPER_REQUEST_TIMEOUT.label }}</label>
         {{ settings_form.SCRAPER_REQUEST_TIMEOUT }}
+        {% if settings_form.SCRAPER_REQUEST_TIMEOUT.errors %}<span class="field-error">{{ settings_form.SCRAPER_REQUEST_TIMEOUT.errors.0 }}</span>{% endif %}
       </div>
-      <div>
-        <label for="id_SCRAPER_MAX_RETRIES">{{ settings_form.SCRAPER_MAX_RETRIES.label }}</label>
+      <div class="settings-field">
+        <label>{{ settings_form.SCRAPER_MAX_RETRIES.label }}</label>
         {{ settings_form.SCRAPER_MAX_RETRIES }}
+        {% if settings_form.SCRAPER_MAX_RETRIES.errors %}<span class="field-error">{{ settings_form.SCRAPER_MAX_RETRIES.errors.0 }}</span>{% endif %}
       </div>
     </div>
+  </div>
 
-    <h3>Anti-Ban Delays</h3>
-    <div class="grid">
-      <div>
-        <label for="id_AUTOMATION_JITTER_MIN">{{ settings_form.AUTOMATION_JITTER_MIN.label }}</label>
+  <div class="settings-group">
+    <div class="settings-group-label">Anti-Ban Delays</div>
+    <div class="settings-row">
+      <div class="settings-field">
+        <label>{{ settings_form.AUTOMATION_JITTER_MIN.label }}</label>
         {{ settings_form.AUTOMATION_JITTER_MIN }}
-        {% if settings_form.AUTOMATION_JITTER_MIN.help_text %}<small>{{ settings_form.AUTOMATION_JITTER_MIN.help_text }}</small>{% endif %}
+        <span class="settings-hint">{{ settings_form.AUTOMATION_JITTER_MIN.help_text }}</span>
+        {% if settings_form.AUTOMATION_JITTER_MIN.errors %}<span class="field-error">{{ settings_form.AUTOMATION_JITTER_MIN.errors.0 }}</span>{% endif %}
       </div>
-      <div>
-        <label for="id_AUTOMATION_JITTER_MAX">{{ settings_form.AUTOMATION_JITTER_MAX.label }}</label>
+      <div class="settings-field">
+        <label>{{ settings_form.AUTOMATION_JITTER_MAX.label }}</label>
         {{ settings_form.AUTOMATION_JITTER_MAX }}
-        {% if settings_form.AUTOMATION_JITTER_MAX.help_text %}<small>{{ settings_form.AUTOMATION_JITTER_MAX.help_text }}</small>{% endif %}
+        <span class="settings-hint">{{ settings_form.AUTOMATION_JITTER_MAX.help_text }}</span>
+        {% if settings_form.AUTOMATION_JITTER_MAX.errors %}<span class="field-error">{{ settings_form.AUTOMATION_JITTER_MAX.errors.0 }}</span>{% endif %}
       </div>
     </div>
+  </div>
 
-    <h3>Rate Limits</h3>
-    <div class="grid">
-      <div>
-        <label for="id_AUTOMATION_HOURLY_LIMIT">{{ settings_form.AUTOMATION_HOURLY_LIMIT.label }}</label>
-        {{ settings_form.AUTOMATION_HOURLY_LIMIT }}
-        {% if settings_form.AUTOMATION_HOURLY_LIMIT.help_text %}<small>{{ settings_form.AUTOMATION_HOURLY_LIMIT.help_text }}</small>{% endif %}
-      </div>
-      <div>
-        <label for="id_AUTOMATION_DAILY_LIMIT">{{ settings_form.AUTOMATION_DAILY_LIMIT.label }}</label>
-        {{ settings_form.AUTOMATION_DAILY_LIMIT }}
-        {% if settings_form.AUTOMATION_DAILY_LIMIT.help_text %}<small>{{ settings_form.AUTOMATION_DAILY_LIMIT.help_text }}</small>{% endif %}
-      </div>
-    </div>
-    <div class="grid">
-      <div>
-        <label for="id_AUTOMATION_QUIET_HOUR_START">{{ settings_form.AUTOMATION_QUIET_HOUR_START.label }}</label>
+  <div class="settings-group">
+    <div class="settings-group-label">Quiet Hours</div>
+    <div class="settings-row">
+      <div class="settings-field">
+        <label>{{ settings_form.AUTOMATION_QUIET_HOUR_START.label }}</label>
         {{ settings_form.AUTOMATION_QUIET_HOUR_START }}
-        {% if settings_form.AUTOMATION_QUIET_HOUR_START.help_text %}<small>{{ settings_form.AUTOMATION_QUIET_HOUR_START.help_text }}</small>{% endif %}
+        <span class="settings-hint">{{ settings_form.AUTOMATION_QUIET_HOUR_START.help_text }}</span>
       </div>
-      <div>
-        <label for="id_AUTOMATION_QUIET_HOUR_END">{{ settings_form.AUTOMATION_QUIET_HOUR_END.label }}</label>
+      <div class="settings-field">
+        <label>{{ settings_form.AUTOMATION_QUIET_HOUR_END.label }}</label>
         {{ settings_form.AUTOMATION_QUIET_HOUR_END }}
-        {% if settings_form.AUTOMATION_QUIET_HOUR_END.help_text %}<small>{{ settings_form.AUTOMATION_QUIET_HOUR_END.help_text }}</small>{% endif %}
+        <span class="settings-hint">{{ settings_form.AUTOMATION_QUIET_HOUR_END.help_text }}</span>
       </div>
     </div>
+    <p class="settings-note">Rate limits (15/hr · 60/day per admin) are hardcoded per WhatsApp standards.</p>
+  </div>
 
-    <h3>Parallel Workers</h3>
-    <small>Changes to worker count require a restart (<code>make start</code>).</small>
-    <div class="grid">
-      <div>
-        <label for="id_AUTOMATION_WORKER_COUNT">{{ settings_form.AUTOMATION_WORKER_COUNT.label }}</label>
-        {{ settings_form.AUTOMATION_WORKER_COUNT }}
-        {% if settings_form.AUTOMATION_WORKER_COUNT.help_text %}<small>{{ settings_form.AUTOMATION_WORKER_COUNT.help_text }}</small>{% endif %}
-      </div>
-      <div>
-        <label for="id_AUTOMATION_WORKER_STAGGER">{{ settings_form.AUTOMATION_WORKER_STAGGER.label }}</label>
-        {{ settings_form.AUTOMATION_WORKER_STAGGER }}
-        {% if settings_form.AUTOMATION_WORKER_STAGGER.help_text %}<small>{{ settings_form.AUTOMATION_WORKER_STAGGER.help_text }}</small>{% endif %}
-      </div>
-    </div>
-    <div>
-      <label for="id_AUTOMATION_MAX_CONCURRENT_SENDS">{{ settings_form.AUTOMATION_MAX_CONCURRENT_SENDS.label }}</label>
-      {{ settings_form.AUTOMATION_MAX_CONCURRENT_SENDS }}
-      {% if settings_form.AUTOMATION_MAX_CONCURRENT_SENDS.help_text %}<small>{{ settings_form.AUTOMATION_MAX_CONCURRENT_SENDS.help_text }}</small>{% endif %}
-    </div>
-
-    <footer>
-      <button type="submit">Save Settings</button>
-    </footer>
-  </article>
+  <button type="submit" class="settings-save-btn">Save settings</button>
 </form>

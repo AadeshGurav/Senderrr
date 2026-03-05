@@ -1,0 +1,32 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Admins — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <h1 class="wa-page-title">Admin Accounts</h1>
+</div>
+
+<!-- Session Health -->
+<div class="wa-section">
+  <div class="wa-section-head">
+    <h2 class="wa-section-title">Session Health</h2>
+  </div>
+  <div id="admin-health-section"
+       hx-get="{% url 'dashboard:admin_health' %}"
+       hx-trigger="load, every 30s"
+       hx-swap="innerHTML">
+    <span class="wa-badge unknown">Loading...</span>
+  </div>
+</div>
+
+<!-- Manage Admins -->
+<div class="wa-section">
+  <div class="wa-section-head">
+    <h2 class="wa-section-title">Manage</h2>
+  </div>
+  <div id="admin-section">
+    {% include "dashboard/partials/admin_list.html" %}
+  </div>
+</div>
+{% endblock %}

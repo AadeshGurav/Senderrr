@@ -1,0 +1,65 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Broadcasts — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <h1 class="wa-page-title">Broadcast History</h1>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      {% if retryable_failed %}
+      <button class="outline secondary btn-sm"
+              hx-post="{% url 'dashboard:retry_all' %}"
+              hx-target="#broadcast-section"
+              hx-swap="innerHTML"
+              hx-confirm="Retry all {{ retryable_failed }} eligible failed messages?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        &circlearrowleft; Retry all {{ retryable_failed }}
+      </button>
+      {% endif %}
+      {% if total_failed %}
+      <span class="chip chip--error">
+        <span class="chip-dot"></span>{{ total_failed }} failed
+      </span>
+      {% endif %}
+      <span class="chip chip--muted">{{ total_broadcasts }} total</span>
+    </div>
+  </div>
+</div>
+
+<div class="wa-section">
+  <div id="broadcast-section">
+    {% include "dashboard/partials/broadcast_list.html" %}
+  </div>
+
+  {% if paginator.num_pages > 1 %}
+  <div class="pagination-bar">
+    {% if page.has_previous %}
+    <a href="?page={{ page.previous_page_number }}" class="page-btn">&#8592;</a>
+    {% else %}
+    <span class="page-btn page-btn--disabled">&#8592;</span>
+    {% endif %}
+
+    <div class="page-numbers">
+      {% for num in paginator.page_range %}
+        {% if num == page.number %}
+        <span class="page-num page-num--active">{{ num }}</span>
+        {% elif num == 1 or num == paginator.num_pages or num >= page.number|add:"-2" and num <= page.number|add:"2" %}
+        <a href="?page={{ num }}" class="page-num">{{ num }}</a>
+        {% elif num == page.number|add:"-3" or num == page.number|add:"3" %}
+        <span class="page-ellipsis">…</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    {% if page.has_next %}
+    <a href="?page={{ page.next_page_number }}" class="page-btn">&#8594;</a>
+    {% else %}
+    <span class="page-btn page-btn--disabled">&#8594;</span>
+    {% endif %}
+
+    <span class="page-info">Page {{ page.number }} of {{ paginator.num_pages }}</span>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

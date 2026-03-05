@@ -1,0 +1,75 @@
+{% for item in admin_data %}
+<div class="health-card">
+  <div class="health-card-head">
+    <div>
+      <span class="health-card-name">{{ item.admin.label }}</span>
+      <span class="health-card-phone">{{ item.admin.phone_number }}</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      {% if item.warm_up_day %}
+      <span class="chip chip--warn">
+        <span class="chip-dot"></span>Warm-up day {{ item.warm_up_day }}/7
+      </span>
+      {% endif %}
+      <span class="chip chip--ok">
+        <span class="chip-dot"></span>Active
+      </span>
+    </div>
+  </div>
+
+  <div class="health-card-body">
+    <div class="health-row">
+      <div class="health-metric">
+        <span class="health-metric-label">Hourly</span>
+        <div class="rate-bar">
+          <div class="rate-fill {% if item.hourly_count >= item.hourly_limit %}rate-full{% endif %}"
+               style="width:{% widthratio item.hourly_count item.hourly_limit 100 %}%"></div>
+        </div>
+        <span class="health-metric-value">{{ item.hourly_count }} / {{ item.hourly_limit }}</span>
+      </div>
+      <div class="health-metric">
+        <span class="health-metric-label">Daily</span>
+        <div class="rate-bar">
+          <div class="rate-fill {% if item.daily_count >= item.daily_limit %}rate-full{% endif %}"
+               style="width:{% widthratio item.daily_count item.daily_limit 100 %}%"></div>
+        </div>
+        <span class="health-metric-value">
+          {{ item.daily_count }} / {{ item.daily_limit }}{% if item.warm_up_day %} (warm-up){% endif %}
+        </span>
+      </div>
+      <div class="health-metric">
+        <span class="health-metric-label">Total sent</span>
+        <div style="margin-top:4px;font-size:13px">
+          <span class="stat-sent">{{ item.admin.total_sent }}</span>
+          <span style="color:var(--text-3)"> / </span>
+          <span class="stat-failed">{{ item.admin.total_failed }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px">
+        Sessions
+      </div>
+      <div class="health-sessions">
+        {% for s in item.sessions %}
+        <div class="session-chip">
+          <span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:{% if s.status == 'connected' %}var(--ok){% elif s.status == 'disconnected' %}var(--error){% else %}var(--warn){% endif %}"></span>
+          S{{ s.session_index }}
+          <span style="color:{% if s.status == 'connected' %}var(--ok-text){% elif s.status == 'disconnected' %}var(--err-text){% else %}var(--warn-text){% endif %}">
+            {% if s.status == 'connected' %}Connected{% elif s.status == 'disconnected' %}Offline{% else %}Unknown{% endif %}
+          </span>
+          {% if s.total_sent %}
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-3)">{{ s.total_sent }}&uarr;</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% empty %}
+<p style="color:var(--text-3);font-size:13px;margin:0">
+  No active admin accounts. Add admins to see health status.
+</p>
+{% endfor %}

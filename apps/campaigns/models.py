@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.scraper.models import ScrapedArticle
@@ -17,6 +18,53 @@ class ErrorCategory(models.TextChoices):
     SEND_FAILED = "send_failed", "Send Failed"
     BOT_DETECTED = "bot_detected", "Bot Detected"
     UNKNOWN = "unknown", "Unknown"
+
+
+class AdminAccount(models.Model):
+    """A WhatsApp phone number used for sending — owns N browser sessions."""
+
+    label = models.CharField(
+        max_length=50,
+        help_text='Display label, e.g. "Admin 1".',
+    )
+    phone_number = models.CharField(
+        max_length=20,
+        unique=True,
+        db_index=True,
+        help_text="Phone number for identification (e.g. +91XXXXXXXXXX).",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Inactive admin is excluded from broadcast assignment.",
+    )
+    sessions_per_admin = models.PositiveSmallIntegerField(
+        default=2,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+        help_text="Browser sessions (linked devices) for this admin (1–4).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    warm_up_started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this number started its warm-up phase.",
+    )
+    skip_warmup = models.BooleanField(
+        default=False,
+        help_text="Number already warmed up — skip the 7-day ramp period.",
+    )
+    total_sent = models.PositiveIntegerField(default=0)
+    total_failed = models.PositiveIntegerField(default=0)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["label"]
+        verbose_name = "Admin Account"
+        verbose_name_plural = "Admin Accounts"
+
+    def __str__(self) -> str:
+        status = "active" if self.is_active else "inactive"
+        return f"{self.label} ({self.phone_number}) [{status}]"
 
 
 class WhatsAppCommunity(models.Model):
@@ -156,6 +204,14 @@ class MessageTask(models.Model):
         WhatsAppGroup,
         on_delete=models.CASCADE,
         related_name="message_tasks",
+    )
+    admin = models.ForeignKey(
+        AdminAccount,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="message_tasks",
+        help_text="Admin account that sent (or will send) this message.",
     )
     status = models.CharField(
         max_length=20,

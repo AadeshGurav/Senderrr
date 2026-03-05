@@ -14,18 +14,12 @@ from apps.dashboard.models import RuntimeSetting
 logger = logging.getLogger(__name__)
 
 EDITABLE_SETTINGS = [
-    "SCRAPER_TARGET_URL",
     "SCRAPER_REQUEST_TIMEOUT",
     "SCRAPER_MAX_RETRIES",
     "AUTOMATION_JITTER_MIN",
     "AUTOMATION_JITTER_MAX",
-    "AUTOMATION_HOURLY_LIMIT",
-    "AUTOMATION_DAILY_LIMIT",
     "AUTOMATION_QUIET_HOUR_START",
     "AUTOMATION_QUIET_HOUR_END",
-    "AUTOMATION_WORKER_COUNT",
-    "AUTOMATION_WORKER_STAGGER",
-    "AUTOMATION_MAX_CONCURRENT_SENDS",
 ]
 
 
@@ -70,7 +64,9 @@ def check_whatsapp_status() -> dict[str, str]:
 
         if checked_at:
             checked_dt = datetime.fromisoformat(checked_at)
-            age_minutes = (datetime.now(tz=timezone.utc) - checked_dt).total_seconds() / 60
+            age_minutes = (
+                datetime.now(tz=timezone.utc) - checked_dt
+            ).total_seconds() / 60
             if age_minutes > 10:
                 return {"status": "unknown", "checked_at": checked_at}
 
@@ -81,34 +77,36 @@ def check_whatsapp_status() -> dict[str, str]:
 
 
 def check_all_worker_statuses() -> list[dict[str, object]]:
-    """Return connection status and stats for each configured worker.
+    """Return connection status for each worker, grouped by admin.
 
-    Merges data from the WorkerSession DB table (if populated by the
-    heartbeat task) with the legacy JSON-file approach as fallback.
+    Uses the admin-based worker map and per-admin rate counters.
+    Falls back to JSON status files when no DB heartbeat exists.
     """
     from apps.automation.browser_manager import resolve_user_data_dir
     from apps.automation.models import WorkerSession
-    from apps.automation.rate_limiter import get_worker_hourly_count
-    from utils.config import get_config
+    from apps.automation.rate_limiter import get_admin_hourly_count
+    from apps.automation.worker_mapping import build_worker_map
 
-    worker_count = min(int(get_config("AUTOMATION_WORKER_COUNT", int)), 4)
+    slots = build_worker_map()
     statuses: list[dict[str, object]] = []
 
+    worker_names = [f"worker-{s.worker_id}" for s in slots]
     db_sessions: dict[str, WorkerSession] = {
         ws.worker_id: ws
-        for ws in WorkerSession.objects.filter(
-            worker_id__in=[f"worker-{i}" for i in range(worker_count)]
-        )
+        for ws in WorkerSession.objects.filter(worker_id__in=worker_names)
     }
 
-    for wid in range(worker_count):
-        worker_name = f"worker-{wid}"
+    for slot in slots:
+        worker_name = f"worker-{slot.worker_id}"
         entry: dict[str, object] = {
-            "worker_id": wid,
+            "worker_id": slot.worker_id,
+            "admin_id": slot.admin_id,
+            "admin_label": slot.admin_label,
+            "session_index": slot.session_index,
             "status": "unknown",
             "browser_status": "",
             "checked_at": "",
-            "msgs_hr": get_worker_hourly_count(wid),
+            "msgs_hr": get_admin_hourly_count(slot.admin_id),
             "total_sent": 0,
             "total_failed": 0,
             "current_group": "",
@@ -116,7 +114,9 @@ def check_all_worker_statuses() -> list[dict[str, object]]:
 
         ws = db_sessions.get(worker_name)
         if ws and ws.last_heartbeat_at:
-            age = (datetime.now(tz=timezone.utc) - ws.last_heartbeat_at).total_seconds() / 60
+            age = (
+                datetime.now(tz=timezone.utc) - ws.last_heartbeat_at
+            ).total_seconds() / 60
             entry["total_sent"] = ws.total_sent
             entry["total_failed"] = ws.total_failed
             entry["current_group"] = ws.current_group
@@ -139,7 +139,7 @@ def check_all_worker_statuses() -> list[dict[str, object]]:
             continue
 
         # Fallback: read JSON status file
-        user_data_dir = resolve_user_data_dir(wid)
+        user_data_dir = resolve_user_data_dir(slot.worker_id)
         status_file = Path(user_data_dir) / "status.json"
         try:
             data = json.loads(status_file.read_text())

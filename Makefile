@@ -7,7 +7,7 @@ PYTHON := .venv/bin/python
 CELERY := .venv/bin/celery
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
-.PHONY: help setup doctor start stop health groups migrate shell clean
+.PHONY: help setup doctor start stop health groups migrate shell clean flush-scraper
 
 help:  ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -36,6 +36,9 @@ migrate:  ## Run Django migrations
 
 shell:  ## Open Django shell
 	$(PYTHON) manage.py shell
+
+flush-scraper:  ## Reset scraper — delete all ArticleHash records so next run re-seeds fresh
+	$(PYTHON) manage.py flush_scraper
 
 clean:  ## Remove caches and compiled files
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
