@@ -82,7 +82,11 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
     """Pick up a single MessageTask, send it, and record the result."""
     try:
         msg_task = MessageTask.objects.select_related(
-            "group", "group__community", "broadcast__article", "admin"
+            "group",
+            "group__community",
+            "broadcast__article",
+            "broadcast__advertisement",
+            "admin",
         ).get(pk=message_task_pk)
     except MessageTask.DoesNotExist:
         logger.error("MessageTask pk=%d vanished.", message_task_pk)
@@ -99,18 +103,15 @@ def dispatch_message(self, message_task_pk: int) -> str:  # noqa: ANN001
     record_task_start(worker_name, str(self.request.id), msg_task.group.group_jid)
 
     attempt = record_attempt_start(msg_task)
-    article = msg_task.broadcast.article
-    message_body = compose_message(article)
+    message_body, image_path, temp_path = _prepare_message_content(msg_task)
     success = False
-    image_path = None
 
     try:
-        image_path = download_article_image(article)
         success = _send_message(msg_task, message_body, image_path)
     except Exception as exc:
         return _handle_send_error(self, msg_task, attempt, worker_name, exc)
     finally:
-        cleanup_temp_image(image_path)
+        cleanup_temp_image(temp_path)  # only deletes article temp files, not ad media
 
     if success:
         record_attempt_success(attempt)
@@ -154,6 +155,35 @@ def retry_failed_messages(
     enqueued = assign_and_dispatch_tasks(task_pks)
 
     return f"Re-queued {enqueued} of {len(task_pks)} failed tasks"
+
+
+def _prepare_message_content(
+    msg_task: MessageTask,
+) -> tuple[str, str | None, str | None]:
+    """Return (message_body, image_path, temp_path_to_cleanup).
+
+    ``temp_path`` is only set for downloaded article images so they are
+    cleaned up after send.  Advertisement media live in MEDIA_ROOT and
+    must NOT be deleted — so their ``temp_path`` is always ``None``.
+    """
+    broadcast = msg_task.broadcast
+
+    if broadcast.article_id is not None:
+        article = broadcast.article
+        message_body = compose_message(article)
+        image_path = download_article_image(article)
+        return message_body, image_path, image_path  # cleanup temp
+
+    ad = broadcast.advertisement
+    if ad is None:
+        logger.error(
+            "MessageTask pk=%d has a broadcast with no article and no advertisement.",
+            msg_task.pk,
+        )
+        return "", None, None
+
+    image_path = ad.first_media.file.path if ad.has_media else None
+    return ad.body, image_path, None  # never cleanup ad media
 
 
 def _send_message(

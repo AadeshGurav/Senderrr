@@ -20,6 +20,7 @@
 {% url 'dashboard:groups_page' as url_groups %}
 {% url 'dashboard:communities_page' as url_communities %}
 {% url 'dashboard:broadcasts_page' as url_broadcasts %}
+{% url 'dashboard:advertisements' as url_advertisements %}
 {% url 'dashboard:settings' as url_settings %}
 
 <header class="wa-nav">
@@ -37,6 +38,8 @@
        class="wa-nav-link {% if request.path == url_communities %}active{% endif %}">Communities</a>
     <a href="{{ url_broadcasts }}"
        class="wa-nav-link {% if request.path == url_broadcasts %}active{% endif %}">Broadcasts</a>
+    <a href="{{ url_advertisements }}"
+       class="wa-nav-link {% if request.path == url_advertisements %}active{% endif %}">Ads</a>
   </nav>
 
   <div class="wa-nav-right">

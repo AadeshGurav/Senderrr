@@ -5,6 +5,7 @@ from django.urls import path
 from apps.dashboard.views import (
     admin_health,
     admins,
+    advertisements,
     broadcasts,
     communities,
     dashboard,
@@ -21,6 +22,22 @@ urlpatterns = [
     path("groups/", dashboard.groups_page, name="groups_page"),
     path("communities/", dashboard.communities_page, name="communities_page"),
     path("broadcasts/page/", dashboard.broadcasts_page, name="broadcasts_page"),
+    path("advertisements/", advertisements.advertisements_page, name="advertisements"),
+    path(
+        "advertisements/create/",
+        advertisements.create_advertisement,
+        name="create_advertisement",
+    ),
+    path(
+        "advertisements/<int:pk>/send/",
+        advertisements.send_advertisement,
+        name="send_advertisement",
+    ),
+    path(
+        "advertisements/<int:pk>/delete/",
+        advertisements.delete_advertisement,
+        name="delete_advertisement",
+    ),
     # Admins
     path("admins/add/", admins.add_admin, name="add_admin"),
     path("admins/<int:pk>/toggle/", admins.toggle_admin, name="toggle_admin"),

@@ -5,7 +5,20 @@ from __future__ import annotations
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
+from apps.campaigns.ad_models import Advertisement, MediaAttachment
 from apps.scraper.models import ScrapedArticle
+
+__all__ = [
+    "Advertisement",
+    "MediaAttachment",
+    "AdminAccount",
+    "ErrorCategory",
+    "WhatsAppCommunity",
+    "WhatsAppGroup",
+    "BroadcastEvent",
+    "MessageTask",
+    "MessageAttempt",
+]
 
 
 class ErrorCategory(models.TextChoices):
@@ -159,6 +172,15 @@ class BroadcastEvent(models.Model):
 
     article = models.ForeignKey(
         ScrapedArticle,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="broadcasts",
+    )
+    advertisement = models.ForeignKey(
+        "Advertisement",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="broadcasts",
     )

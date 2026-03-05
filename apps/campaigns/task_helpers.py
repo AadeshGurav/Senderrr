@@ -105,6 +105,28 @@ def update_broadcast_counters(broadcast: BroadcastEvent, *, success: bool) -> No
         broadcast.completed_at = timezone.now()
         broadcast.save(update_fields=["status", "completed_at"])
         logger.info("Broadcast #%d finished — %s.", broadcast.pk, broadcast.status)
+        _sync_advertisement_status(broadcast)
+
+
+def _sync_advertisement_status(broadcast: BroadcastEvent) -> None:
+    """Mirror a completed BroadcastEvent's final status back to its Advertisement."""
+    if broadcast.advertisement_id is None:
+        return
+
+    from apps.campaigns.models import Advertisement
+
+    ad_status_map = {
+        BroadcastEvent.Status.COMPLETED: Advertisement.Status.COMPLETED,
+        BroadcastEvent.Status.FAILED: Advertisement.Status.FAILED,
+    }
+    new_status = ad_status_map.get(broadcast.status)
+    if new_status is None:
+        return
+
+    Advertisement.objects.filter(pk=broadcast.advertisement_id).update(
+        status=new_status,
+        sent_at=broadcast.completed_at,
+    )
 
 
 def _is_parser_formatted(body: str) -> bool:

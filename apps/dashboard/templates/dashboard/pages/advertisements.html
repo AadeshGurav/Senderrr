@@ -1,0 +1,160 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Advertisements — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <h1 class="wa-page-title">Advertisements</h1>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      {% if draft_count %}
+      <span class="chip chip--muted">{{ draft_count }} draft{{ draft_count|pluralize }}</span>
+      {% endif %}
+      {% if sent_count %}
+      <span class="chip chip--ok"><span class="chip-dot"></span>{{ sent_count }} sent</span>
+      {% endif %}
+      <span class="chip chip--muted">{{ total_ads }} total</span>
+    </div>
+  </div>
+</div>
+
+<!-- Compose New Advertisement -->
+<div class="wa-section">
+  <details class="ad-compose" {% if form.errors %}open{% endif %}>
+    <summary class="ad-compose-toggle">
+      <span class="ad-compose-icon">+</span>
+      Compose New Advertisement
+    </summary>
+
+    <form method="post" action="{% url 'dashboard:create_advertisement' %}"
+          enctype="multipart/form-data" class="ad-compose-form">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="callout callout--error">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="ad-form-row">
+        <label for="{{ form.title.id_for_label }}">Title</label>
+        {{ form.title }}
+        {% if form.title.errors %}<small class="field-error">{{ form.title.errors.0 }}</small>{% endif %}
+      </div>
+
+      <div class="ad-form-row">
+        <label for="{{ form.body.id_for_label }}">Message Body</label>
+        {{ form.body }}
+        <small class="field-hint">*bold*, _italic_, ~strikethrough~ supported</small>
+        {% if form.body.errors %}<small class="field-error">{{ form.body.errors.0 }}</small>{% endif %}
+      </div>
+
+      <div class="ad-form-row">
+        <label for="{{ form.target_type.id_for_label }}">Recipients</label>
+        {{ form.target_type }}
+      </div>
+
+      <div class="ad-specific-targets" id="specific-targets" style="display:none">
+        <div class="ad-form-row">
+          <label>Target Groups</label>
+          <div class="ad-checkbox-list">{{ form.target_groups }}</div>
+        </div>
+        <div class="ad-form-row">
+          <label>Target Communities</label>
+          <div class="ad-checkbox-list">{{ form.target_communities }}</div>
+        </div>
+      </div>
+
+      <div class="ad-form-row">
+        <label for="{{ form.media_file.id_for_label }}">Attachment <span class="optional-label">(optional)</span></label>
+        {{ form.media_file }}
+        <small class="field-hint">{{ form.media_file.help_text }}</small>
+      </div>
+
+      <div class="ad-form-actions">
+        <button type="submit" class="btn-primary">Save Draft</button>
+      </div>
+    </form>
+  </details>
+</div>
+
+<!-- Advertisement List -->
+<div class="wa-section">
+  {% if ads %}
+  <div class="ad-list">
+    {% for ad in ads %}
+    <div class="ad-card">
+      <div class="ad-card-header">
+        <div class="ad-card-title">{{ ad.title }}</div>
+        <div class="ad-card-chips">
+          {% if ad.status == "draft" %}
+          <span class="chip chip--muted">Draft</span>
+          {% elif ad.status == "queued" %}
+          <span class="chip chip--warn"><span class="chip-dot"></span>Queued</span>
+          {% elif ad.status == "sending" %}
+          <span class="chip chip--info"><span class="chip-dot"></span>Sending</span>
+          {% elif ad.status == "completed" %}
+          <span class="chip chip--ok"><span class="chip-dot"></span>Sent</span>
+          {% elif ad.status == "failed" %}
+          <span class="chip chip--error"><span class="chip-dot"></span>Failed</span>
+          {% endif %}
+          {% if ad.has_media %}
+          <span class="chip chip--muted">📎 Media</span>
+          {% endif %}
+          <span class="chip chip--muted">→ {{ ad.get_target_type_display }}</span>
+        </div>
+      </div>
+
+      <div class="ad-card-body">{{ ad.body|truncatechars:140 }}</div>
+
+      <div class="ad-card-meta">
+        Created {{ ad.created_at|timesince }} ago
+        {% if ad.sent_at %} · Sent {{ ad.sent_at|timesince }} ago{% endif %}
+        {% if ad.latest_broadcast %}
+        · {{ ad.latest_broadcast.sent_count }}/{{ ad.latest_broadcast.total_groups }} delivered
+        {% if ad.latest_broadcast.failed_count %}
+        · <span style="color:var(--error)">{{ ad.latest_broadcast.failed_count }} failed</span>
+        {% endif %}
+        {% endif %}
+      </div>
+
+      <div class="ad-card-actions">
+        {% if ad.status == "draft" %}
+        <form method="post" action="{% url 'dashboard:send_advertisement' ad.pk %}"
+              style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="btn-primary btn-sm"
+                  onclick="return confirm('Send \'{{ ad.title }}\' to {{ ad.get_target_type_display }}?')">
+            Send Now
+          </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'dashboard:delete_advertisement' ad.pk %}"
+              style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="btn-ghost btn-sm btn-danger"
+                  onclick="return confirm('Delete this advertisement?')">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">📢</div>
+    <p class="empty-state-text">No advertisements yet. Compose one above.</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var sel = document.getElementById('id_target_type');
+  var box = document.getElementById('specific-targets');
+  if (!sel || !box) return;
+  function toggle() {
+    box.style.display = sel.value === 'specific' ? '' : 'none';
+  }
+  sel.addEventListener('change', toggle);
+  toggle();
+})();
+</script>
+{% endblock %}

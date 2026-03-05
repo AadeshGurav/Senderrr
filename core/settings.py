@@ -111,7 +111,16 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS: list[str] = []
+
+# ---------------------------------------------------------------------------
+# Media files (user-uploaded advertisements, attachments)
+# ---------------------------------------------------------------------------
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -146,6 +155,7 @@ CELERY_WORKER_CONCURRENCY = 1  # Solo pool — browser singleton lives in main p
 CELERY_IMPORTS = [
     "apps.campaigns.community_tasks",
     "apps.campaigns.maintenance_tasks",
+    "apps.campaigns.advertisement_tasks",
 ]
 
 CELERY_BEAT_SCHEDULE = {

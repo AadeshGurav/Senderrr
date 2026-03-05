@@ -5,10 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-import platform
 import random
-import subprocess
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -161,10 +158,13 @@ def send_image_to_group(
     image_path: str,
     caption: str = "",
 ) -> bool:
-    """Send an image with optional caption to a WhatsApp group.
+    """Send an image with caption as one combined WhatsApp message.
 
-    Uses WhatsApp Web's attachment flow: paperclip → file chooser → caption → send.
-    Shares rate-limiting, anti-ban, and session-health logic with send_message_to_group.
+    Types the caption in the compose box first (human-like), then attaches the
+    image. In the preview modal the caption is verified — typed there if it was
+    not carried over — and the combined image+caption is sent as a single
+    message. Shares rate-limiting, anti-ban, and session-health logic with
+    send_message_to_group.
 
     Args:
         group_jid: Group name to search for in WhatsApp.
@@ -174,8 +174,6 @@ def send_image_to_group(
     Returns:
         ``True`` on success, ``False`` on recoverable failure.
     """
-    from pathlib import Path
-
     if not Path(image_path).exists():
         logger.warning("Image file not found: %s — falling back to text.", image_path)
         if caption:
@@ -209,12 +207,12 @@ def send_image_to_group(
     if token is None:
         raise SendFailedError("Timed out waiting for send slot.")
     try:
-        _attach_and_send_image(page, image_path, caption)
+        _attach_and_send_file(page, image_path, caption)
     finally:
         release_send_slot(token)
 
     increment_send_counter(worker_id=worker_id)
-    logger.info("Image sent to group: %s (worker=%d)", group_jid, worker_id)
+    logger.info("File sent to group: %s (worker=%d)", group_jid, worker_id)
     return True
 
 
@@ -288,9 +286,29 @@ def send_message_to_subgroup(
     return True
 
 
-# WhatsApp Web attachment selectors
-ATTACHMENT_SELECTORS = {
-    # Caption input inside the image preview modal.
+# WhatsApp Web attachment selectors — ordered most-specific to broadest.
+ATTACH_SELECTORS = {
+    "clip_button": ", ".join(
+        [
+            '[data-testid="conversation-clip"]',
+            'span[data-icon="clip"]',
+            'button[aria-label="Attach"]',
+        ]
+    ),
+    "photos_option": ", ".join(
+        [
+            '[data-testid="conversation-clip-photos"]',
+            '[data-testid="attach-image"]',
+            'span[data-icon="photos"]',
+        ]
+    ),
+    "docs_option": ", ".join(
+        [
+            '[data-testid="conversation-clip-document"]',
+            '[data-testid="attach-document"]',
+            'span[data-icon="document"]',
+        ]
+    ),
     "caption_input": ", ".join(
         [
             '[data-testid="media-caption-input-container"] div[contenteditable="true"]',
@@ -300,107 +318,182 @@ ATTACHMENT_SELECTORS = {
     ),
 }
 
+_MEDIA_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".avi"}
 
-def _copy_image_to_clipboard(image_path: str) -> None:
-    """Copy an image file to the macOS system clipboard via osascript.
+# Selectors for hidden file inputs WhatsApp keeps in the DOM inside the chat panel.
+# Strategy A (preferred): set files directly without navigating the UI menu.
+#
+# IMPORTANT: WhatsApp also has a sticker input that accepts image/webp — we must
+# avoid it.  The Photos & Videos input always includes "video" in its accept
+# attribute, so targeting that is the safest way to skip the sticker input.
+_FILE_INPUT_SELECTORS: dict[bool, list[str]] = {
+    True: [  # media — target photos/videos input, NOT sticker input
+        'input[type="file"][accept*="video"]',    # photos & videos (always has video)
+        'input[type="file"][accept*="image/jpeg"]',  # explicit jpeg avoids sticker
+        'input[type="file"][accept*="image/png"]',
+    ],
+    False: [  # documents
+        'input[type="file"][accept*="application"]',
+        'input[type="file"][accept*="text/plain"]',
+        'input[type="file"]:not([accept*="image"])',
+    ],
+}
 
-    WEBP images are first converted to JPEG using the macOS ``sips`` tool
-    because AppleScript cannot read WEBP natively.
+
+def _attach_and_send_file(page, file_path: str, caption: str) -> None:  # noqa: ANN001
+    """Send a file + caption as ONE combined WhatsApp message.
+
+    Flow:
+    1. Type caption in compose box first (human-like, visible as user types).
+    2. Attach file via Strategy A (direct input) or Strategy B (clip menu).
+    3. In preview modal: if caption field is empty, type caption there.
+    4. Click send → image + caption delivered as a single message.
+    5. Clear compose box if caption text lingers after send.
 
     Args:
-        image_path: Absolute path to the image file.
+        page: Active Playwright page with an open chat.
+        file_path: Absolute path to the file to attach.
+        caption: Caption to accompany the file.
 
     Raises:
-        SendFailedError: If the platform is not macOS or the copy fails.
+        SendFailedError: If neither strategy can attach the file.
     """
-    if platform.system() != "Darwin":
-        raise SendFailedError("Clipboard image paste requires macOS (osascript).")
+    is_media = Path(file_path).suffix.lower() in _MEDIA_EXTENSIONS
 
-    suffix = Path(image_path).suffix.lower()
-    effective_path = image_path
-    tmp_path: Path | None = None
+    # Step 1: Type caption in compose box first (human-like UX)
+    if caption:
+        compose_box = _find_compose_box(page)
+        if compose_box:
+            compose_box.click()
+            _type_slowly(compose_box, caption)
+            time.sleep(0.5)
 
-    try:
-        if suffix == ".webp":
-            # sips is a macOS built-in — no extra dependencies needed.
-            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-            tmp.close()
-            tmp_path = Path(tmp.name)
-            result = subprocess.run(
-                ["sips", "-s", "format", "jpeg", image_path, "--out", str(tmp_path)],
-                capture_output=True,
-            )
-            if result.returncode != 0:
-                raise SendFailedError(
-                    f"WEBP→JPEG conversion failed: {result.stderr.decode().strip()}"
-                )
-            effective_path = str(tmp_path)
-            suffix = ".jpg"
+    # Step 2: Attach file (Strategy A → Strategy B fallback)
+    if not _attach_via_direct_input(page, file_path, is_media):
+        _attach_via_clip_menu(page, file_path, is_media)
 
-        as_type_map = {
-            ".jpg": "JPEG picture",
-            ".jpeg": "JPEG picture",
-            ".png": "«class PNGf»",
-            ".gif": "«class GIFf»",
-        }
-        as_type = as_type_map.get(suffix, "JPEG picture")
-        script = (
-            f'set the clipboard to (read (POSIX file "{effective_path}") as {as_type})'
-        )
-        result = subprocess.run(
-            ["osascript", "-e", script], capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            raise SendFailedError(
-                f"osascript clipboard copy failed: {result.stderr.strip()}"
-            )
-    finally:
-        if tmp_path:
-            tmp_path.unlink(missing_ok=True)
+    time.sleep(2)
 
-
-def _attach_and_send_image(page, image_path: str, caption: str) -> None:  # noqa: ANN001
-    """Send an image by pasting from the clipboard into the compose box.
-
-    Copies the image to the macOS clipboard then presses Cmd+V in the compose
-    box. WhatsApp opens the same preview modal as the attachment menu — without
-    needing to navigate the attachment popup at all.
-    """
-    # Step 1 — copy image to clipboard.
-    _copy_image_to_clipboard(image_path)
-    logger.debug("Image copied to clipboard: %s", image_path)
-
-    # Step 2 — focus compose box and paste.
-    compose_box = _find_compose_box(page)
-    if compose_box is None:
-        raise SendFailedError("Compose box not found for clipboard paste.")
-    compose_box.click()
-    time.sleep(0.3)
-    page.keyboard.press("Meta+v")
-
-    # Wait for the image preview modal to load.
-    time.sleep(3)
-
-    # Step 3 — type caption in the preview modal's caption field.
+    # Step 3: Ensure caption appears in preview modal
     if caption:
         try:
             caption_box = page.wait_for_selector(
-                ATTACHMENT_SELECTORS["caption_input"], timeout=5_000
+                ATTACH_SELECTORS["caption_input"], timeout=5_000
             )
             if caption_box:
-                caption_box.click()
-                time.sleep(0.1)
-                _type_slowly(caption_box, caption)
+                existing = caption_box.inner_text().strip()
+                if not existing:
+                    # Compose text was not carried over — type it in the modal
+                    caption_box.click()
+                    time.sleep(0.1)
+                    _type_slowly(caption_box, caption)
+                else:
+                    logger.debug("Caption already pre-populated in preview modal.")
         except PlaywrightTimeout:
-            logger.warning("Caption input not found — sending image without caption.")
+            logger.warning("Caption input not found — sending file without caption.")
 
-    # Step 4 — send from the image preview screen.
+    # Step 4: Send combined message from the preview modal
     time.sleep(1)
     send_btn = _find_send_button(page)
     if send_btn is None:
-        raise SendFailedError("Send button not found on image preview.")
+        raise SendFailedError("Send button not found on file preview.")
     send_btn.click()
     time.sleep(2)
+
+    # Step 5: Clear any lingering caption text from compose box
+    try:
+        compose = _find_compose_box(page)
+        if compose:
+            compose.click()
+            compose.press("Control+a")
+            compose.press("Delete")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _attach_via_direct_input(page, file_path: str, is_media: bool) -> bool:  # noqa: ANN001
+    """Set files directly on WhatsApp's hidden file input without clicking the menu.
+
+    Returns True if the file was successfully handed to the input element.
+    """
+    for selector in _FILE_INPUT_SELECTORS[is_media]:
+        try:
+            loc = page.locator(selector).first
+            loc.wait_for(state="attached", timeout=2_000)
+            loc.set_input_files(file_path)
+            logger.debug("Attached file via direct input (%s).", selector)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Direct input '%s' failed: %s", selector, exc)
+    return False
+
+
+def _attach_via_clip_menu(page, file_path: str, is_media: bool) -> None:  # noqa: ANN001
+    """Click the clip button, then intercept the submenu file chooser.
+
+    Tries CSS selectors first, then falls back to text-based matching which
+    is resilient to WhatsApp data-testid / data-icon changes.
+
+    Raises:
+        SendFailedError: If the clip button or submenu cannot be found.
+    """
+    try:
+        clip_btn = page.wait_for_selector(ATTACH_SELECTORS["clip_button"], timeout=8_000)
+        clip_btn.click()
+        time.sleep(1.5)  # Allow the popup menu to fully render
+    except PlaywrightTimeout as exc:
+        raise SendFailedError(f"Clip button not found: {exc}") from exc
+
+    if _click_submenu_and_pick_file(page, file_path, is_media):
+        return
+
+    # All strategies failed — dump artefacts for selector debugging
+    capture_screenshot(page, "attach_menu_selector_miss")
+    dump_main_dom(page)
+    css_sel = ATTACH_SELECTORS["photos_option"] if is_media else ATTACH_SELECTORS["docs_option"]
+    raise SendFailedError(
+        f"Attachment submenu not found (tried CSS + text fallback; last CSS: {css_sel!r}). "
+        "Screenshot + DOM saved for debugging."
+    )
+
+
+def _click_submenu_and_pick_file(  # noqa: ANN001
+    page, file_path: str, is_media: bool
+) -> bool:
+    """Try CSS selectors then text-based matching to click the submenu option."""
+    css_selector = (
+        ATTACH_SELECTORS["photos_option"] if is_media else ATTACH_SELECTORS["docs_option"]
+    )
+    # Text labels WhatsApp may show for each option type
+    text_candidates = (
+        ["Photos / Videos", "Photos", "Videos"] if is_media else ["Document", "Docs"]
+    )
+
+    # Pass 1: testid / icon CSS selectors
+    try:
+        with page.expect_file_chooser(timeout=5_000) as fc_info:
+            option = page.wait_for_selector(css_selector, timeout=3_000)
+            option.click()
+        fc_info.value.set_files(file_path)
+        logger.debug("Attached via clip menu (CSS).")
+        return True
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Pass 2: text-based (survives data-testid / data-icon rotation)
+    for text in text_candidates:
+        try:
+            with page.expect_file_chooser(timeout=5_000) as fc_info:
+                item = page.get_by_text(text, exact=False).first
+                item.wait_for(state="visible", timeout=3_000)
+                item.click()
+            fc_info.value.set_files(file_path)
+            logger.debug("Attached via clip menu (text=%r).", text)
+            return True
+        except Exception:  # noqa: BLE001
+            pass
+
+    return False
 
 
 def _apply_anti_ban_jitter() -> None:

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from django import forms
 
-from apps.campaigns.models import AdminAccount, WhatsAppCommunity, WhatsAppGroup
+from apps.campaigns.models import (
+    AdminAccount,
+    Advertisement,
+    WhatsAppCommunity,
+    WhatsAppGroup,
+)
 
 
 class AdminForm(forms.ModelForm):
@@ -48,6 +53,29 @@ class CommunityForm(forms.ModelForm):
             "community_jid": forms.TextInput(
                 attrs={"placeholder": "Community search name in WhatsApp Web"}
             ),
+        }
+
+
+class AdvertisementForm(forms.ModelForm):
+    """Form for composing a broadcast advertisement with optional media."""
+
+    media_file = forms.FileField(
+        required=False,
+        label="Attachment",
+        help_text="Optional image, video, or document (jpg, png, mp4, pdf…).",
+    )
+
+    class Meta:
+        model = Advertisement
+        fields = ("title", "body", "target_type", "target_groups", "target_communities")
+        widgets = {
+            "title": forms.TextInput(attrs={"placeholder": "Campaign title…"}),
+            "body": forms.Textarea(
+                attrs={"rows": 4, "placeholder": "Message body (WhatsApp formatting ok)…"}
+            ),
+            "target_type": forms.Select(),
+            "target_groups": forms.CheckboxSelectMultiple(),
+            "target_communities": forms.CheckboxSelectMultiple(),
         }
 
 
