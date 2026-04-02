@@ -1,15 +1,37 @@
-# Redis service for the Celery task queue.
-# The Django app, Celery worker, and Playwright browser run on the host
-# (Playwright needs a visible window for WhatsApp QR code scanning).
-#
+# ============================================================
+# WhatsApp Automation — Production Docker Compose
+# ============================================================
 # Usage:
-#   docker compose up -d
+#   docker compose up -d          # start everything
+#   docker compose logs -f web    # watch web logs
+#   docker compose exec web python manage.py health_check
+#
+# First-time QR scan:
+#   docker compose run --rm -p 6080:6080 web docker-entrypoint.sh qrscan
+#   → Open http://localhost:6080/vnc.html and scan the QR code
+# ============================================================
 
 services:
+  # ── PostgreSQL ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wabot
+      POSTGRES_USER: wabot
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-wabot_secure_pwd_change_me}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wabot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -19,5 +41,95 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── Django Web (Gunicorn + noVNC) ───────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["docker-entrypoint.sh", "web"]
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+      - "${NOVNC_PORT:-6080}:6080"
+    environment: &app-env
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-change-me-to-a-random-string}"
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-False}"
+      DJANGO_SUPERUSER_USERNAME: "${DJANGO_SUPERUSER_USERNAME:-admin}"
+      DJANGO_SUPERUSER_PASSWORD: "${DJANGO_SUPERUSER_PASSWORD:-changeme123}"
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-*}"
+      DATABASE_URL: "postgres://wabot:${POSTGRES_PASSWORD:-wabot_secure_pwd_change_me}@postgres:5432/wabot"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      PLAYWRIGHT_USER_DATA_DIR: /data/playwright_session
+      PLAYWRIGHT_HEADLESS: "True"
+      SCRAPER_TARGET_URL: "${SCRAPER_TARGET_URL:-https://example.com/articles}"
+      SCRAPER_REQUEST_TIMEOUT: "${SCRAPER_REQUEST_TIMEOUT:-30}"
+      SCRAPER_MAX_RETRIES: "${SCRAPER_MAX_RETRIES:-3}"
+      AUTOMATION_JITTER_MIN: "${AUTOMATION_JITTER_MIN:-30}"
+      AUTOMATION_JITTER_MAX: "${AUTOMATION_JITTER_MAX:-120}"
+      AUTOMATION_HOURLY_LIMIT: "${AUTOMATION_HOURLY_LIMIT:-30}"
+      AUTOMATION_DAILY_LIMIT: "${AUTOMATION_DAILY_LIMIT:-150}"
+      SENTRY_DSN: "${SENTRY_DSN:-}"
+      GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
+    volumes:
+      - playwright_session:/data/playwright_session
+      - app_logs:/app/logs
+      - static_files:/app/staticfiles
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/healthz/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Celery Worker ───────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["docker-entrypoint.sh", "worker"]
+    environment: *app-env
+    volumes:
+      - playwright_session:/data/playwright_session
+      - app_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # Worker needs more memory for browser automation
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ── Celery Beat (scheduler) ─────────────────────────────
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["docker-entrypoint.sh", "beat"]
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
 volumes:
+  postgres_data:
   redis_data:
+  playwright_session:
+  app_logs:
+  static_files:

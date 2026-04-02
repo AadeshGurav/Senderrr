@@ -16,6 +16,13 @@ playwright>=1.48,<2.0
 python-dotenv>=1.0,<2.0
 honcho>=2.0,<3.0
 
+# Production — WSGI server & database
+gunicorn>=22.0,<24.0
+psycopg2-binary>=2.9,<3.0
+
+# Production — Observability (optional, activate via SENTRY_DSN)
+sentry-sdk>=2.0,<3.0
+
 # Dev & Quality
 black>=24.0
 ruff>=0.8

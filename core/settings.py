@@ -1,8 +1,11 @@
 """
 Django settings for the WhatsApp Automation project.
 
-Includes Celery/Redis configuration and scraper-specific settings.
+Includes Celery/Redis configuration, scraper-specific settings,
+and production Docker deployment config.
 """
+
+from __future__ import annotations
 
 import os
 from pathlib import Path
@@ -72,14 +75,42 @@ WSGI_APPLICATION = "core.wsgi.application"
 
 
 # ---------------------------------------------------------------------------
-# Database — SQLite for dev, swap to Postgres in production
+# Database — SQLite for dev, PostgreSQL via DATABASE_URL in production
 # ---------------------------------------------------------------------------
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+_database_url = os.environ.get("DATABASE_URL", "")
+
+if _database_url.startswith("postgres"):
+    # Parse DATABASE_URL: postgres://user:pass@host:port/dbname
+    import re
+
+    _m = re.match(
+        r"postgres(?:ql)?://(?P<user>[^:]+):(?P<pass>[^@]+)@(?P<host>[^:]+):(?P<port>\d+)/(?P<name>.+)",
+        _database_url,
+    )
+    if _m:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": _m.group("name"),
+                "USER": _m.group("user"),
+                "PASSWORD": _m.group("pass"),
+                "HOST": _m.group("host"),
+                "PORT": _m.group("port"),
+                "CONN_MAX_AGE": 600,
+                "OPTIONS": {
+                    "connect_timeout": 10,
+                },
+            }
+        }
+    else:
+        raise ValueError(f"Cannot parse DATABASE_URL: {_database_url}")
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +139,7 @@ USE_TZ = True
 # Static files
 # ---------------------------------------------------------------------------
 STATIC_URL = "static/"
+STATIC_ROOT = os.environ.get("STATIC_ROOT", str(BASE_DIR / "staticfiles"))
 STATICFILES_DIRS: list[str] = []
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -201,3 +233,82 @@ AUTOMATION_QUIET_HOUR_START = int(
 AUTOMATION_QUIET_HOUR_END = int(
     os.environ.get("AUTOMATION_QUIET_HOUR_END", "7")
 )  # 7 AM UTC
+
+
+# ---------------------------------------------------------------------------
+# Structured Logging — JSON in production, readable in dev
+# ---------------------------------------------------------------------------
+_LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+_LOG_FORMAT = "json" if not DEBUG else "verbose"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name} {message}",
+            "style": "{",
+        },
+        "json": {
+            "()": "core.logging_fmt.JsonFormatter",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": _LOG_FORMAT,
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(BASE_DIR / "logs" / "app.log"),
+            "maxBytes": 10 * 1024 * 1024,  # 10 MB
+            "backupCount": 5,
+            "formatter": "json",
+        },
+    },
+    "root": {
+        "level": _LOG_LEVEL,
+        "handlers": ["console", "file"],
+    },
+    "loggers": {
+        "django": {"level": "WARNING", "propagate": True},
+        "django.request": {"level": "ERROR", "propagate": True},
+        "celery": {"level": _LOG_LEVEL, "propagate": True},
+        "apps": {"level": _LOG_LEVEL, "propagate": True},
+    },
+}
+
+# Ensure log directory exists
+(BASE_DIR / "logs").mkdir(exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Sentry (optional — set SENTRY_DSN to enable)
+# ---------------------------------------------------------------------------
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if _SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        integrations=[DjangoIntegration(), CeleryIntegration()],
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Security hardening (production only)
+# ---------------------------------------------------------------------------
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SESSION_COOKIE_SECURE = os.environ.get("HTTPS_ENABLED", "").lower() in (
+        "true",
+        "1",
+    )
+    CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+    X_FRAME_OPTIONS = "DENY"

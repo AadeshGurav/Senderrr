@@ -1,0 +1,49 @@
+# Version control
+.git
+.gitignore
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime data (mounted as volumes)
+db.sqlite3
+db.sqlite3-journal
+.playwright_session/
+.env
+
+# Caches
+__pycache__/
+*.py[cod]
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs (generated at runtime)
+logs/
+*.log
+
+# Dev files not needed in image
+CLAUDE.md
+SETUP.md
+scripts/setup.bat
+scripts/setup.sh
+scripts/doctor.py
+Makefile
+Procfile
+celerybeat-schedule
+celerybeat.pid
