@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 
@@ -14,7 +13,6 @@ from apps.dashboard.forms import CommunityForm
 logger = logging.getLogger(__name__)
 
 
-@login_required
 def add_community(request: HttpRequest) -> HttpResponse:
     """Add a new WhatsApp Community and return the updated list partial."""
     form = CommunityForm(request.POST or None)
@@ -28,7 +26,6 @@ def add_community(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
 def toggle_community(request: HttpRequest, pk: int) -> HttpResponse:
     """Toggle a community's active status and return the updated row."""
     community = get_object_or_404(WhatsAppCommunity, pk=pk)
@@ -42,7 +39,6 @@ def toggle_community(request: HttpRequest, pk: int) -> HttpResponse:
     )
 
 
-@login_required
 def delete_community(request: HttpRequest, pk: int) -> HttpResponse:
     """Delete a community (sub-groups become standalone) and return updated list."""
     community = get_object_or_404(WhatsAppCommunity, pk=pk)
@@ -51,7 +47,6 @@ def delete_community(request: HttpRequest, pk: int) -> HttpResponse:
     return _community_list_response(request)
 
 
-@login_required
 def community_subgroups(request: HttpRequest, pk: int) -> HttpResponse:
     """Return the sub-groups partial for htmx accordion expand."""
     community = get_object_or_404(
@@ -64,7 +59,6 @@ def community_subgroups(request: HttpRequest, pk: int) -> HttpResponse:
     )
 
 
-@login_required
 def trigger_community_broadcast(request: HttpRequest, pk: int) -> HttpResponse:
     """Trigger a manual broadcast for a specific community.
 

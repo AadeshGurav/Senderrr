@@ -187,6 +187,12 @@ SCRAPER_TARGET_URL = os.environ.get(
 SCRAPER_TARGET_URLS = os.environ.get("SCRAPER_TARGET_URLS", "")
 SCRAPER_REQUEST_TIMEOUT = int(os.environ.get("SCRAPER_REQUEST_TIMEOUT", "30"))
 SCRAPER_MAX_RETRIES = int(os.environ.get("SCRAPER_MAX_RETRIES", "3"))
+# Articles older than this (hours) when first detected are silently seeded
+# without broadcasting — prevents re-sending news the owner manually sent
+# while the system was offline. Increase before long weekends.
+SCRAPER_MAX_ARTICLE_AGE_HOURS = int(
+    os.environ.get("SCRAPER_MAX_ARTICLE_AGE_HOURS", "12")
+)
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ class ParsedArticle:
     author: str = ""
     category: str = ""
     image_url: str = ""
-    published_at: str = ""
+    published_at: datetime | None = None
     tags: list[str] = field(default_factory=list)
 
 

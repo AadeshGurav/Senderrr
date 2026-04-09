@@ -1,4 +1,4 @@
-"""Advertisement models — manual campaign sends with optional media."""
+"""Advertisement models — multi-day campaign packages with optional media."""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ from django.db import models
 
 
 class Advertisement(models.Model):
-    """A manually composed broadcast campaign with optional media attachments."""
+    """A broadcast campaign sold as a multi-day package.
+
+    Each "Send Now" click by the operator consumes one working day.
+    The ad stays ACTIVE until all package days are used.
+    """
 
     class TargetType(models.TextChoices):
         ALL_GROUPS = "all_groups", "All Groups"
@@ -15,6 +19,7 @@ class Advertisement(models.Model):
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
+        ACTIVE = "active", "Active"
         QUEUED = "queued", "Queued"
         SENDING = "sending", "Sending"
         COMPLETED = "completed", "Completed"
@@ -22,7 +27,9 @@ class Advertisement(models.Model):
 
     title = models.CharField(
         max_length=200,
-        help_text="Internal label for this campaign.",
+        blank=True,
+        default="",
+        help_text="Internal label for this campaign (optional).",
     )
     body = models.TextField(
         help_text="Message body. Supports WhatsApp formatting (*bold*, _italic_, ~strikethrough~).",
@@ -51,6 +58,15 @@ class Advertisement(models.Model):
         default=Status.DRAFT,
         db_index=True,
     )
+    package_days = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Total working days in this advertising package.",
+    )
+    preferred_time = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Advertiser's preferred send time (informational only).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)
 
@@ -61,7 +77,25 @@ class Advertisement(models.Model):
         verbose_name_plural = "Advertisements"
 
     def __str__(self) -> str:
-        return f"{self.title} [{self.status}]"
+        label = self.title or f"Ad #{self.pk}"
+        return f"{label} [{self.status}] ({self.days_used}/{self.package_days})"
+
+    @property
+    def days_used(self) -> int:
+        """Count of completed broadcasts — each equals one working day sent."""
+        return self.broadcasts.filter(status="completed").count()
+
+    @property
+    def days_remaining(self) -> int:
+        """Working days left in the package."""
+        return max(0, self.package_days - self.days_used)
+
+    @property
+    def is_sendable(self) -> bool:
+        """True if the ad can be sent (draft, or active with days remaining)."""
+        if self.status == self.Status.DRAFT:
+            return True
+        return self.status == self.Status.ACTIVE and self.days_remaining > 0
 
     @property
     def first_media(self) -> MediaAttachment | None:

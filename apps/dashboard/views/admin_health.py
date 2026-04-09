@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
@@ -20,7 +19,6 @@ from apps.automation.worker_mapping import build_worker_map
 from apps.campaigns.models import AdminAccount
 
 
-@login_required
 def admin_health(request: HttpRequest) -> HttpResponse:
     """Return the admin health panel partial for htmx polling."""
     admins = AdminAccount.objects.filter(is_active=True).order_by("pk")

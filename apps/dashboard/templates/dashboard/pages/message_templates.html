@@ -1,0 +1,40 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Message Template — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <h1 class="wa-page-title">Message Template</h1>
+  <p class="wa-page-subtitle">
+    Define how scraped news articles are formatted before being sent to WhatsApp groups.
+    Only one template is active at a time.
+  </p>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 320px; gap:32px; align-items:start; max-width:1000px">
+
+  <div id="template-section">
+    {% include "dashboard/partials/message_template_form.html" %}
+  </div>
+
+  <aside class="template-placeholder-card">
+    <div class="settings-group-label" style="margin-bottom:12px">Available placeholders</div>
+    <table class="placeholder-table">
+      <tbody>
+        <tr><td><code>{news.title}</code></td><td>Article headline</td></tr>
+        <tr><td><code>{news.description}</code></td><td>Short summary</td></tr>
+        <tr><td><code>{news.url}</code></td><td>Full article URL</td></tr>
+        <tr><td><code>{news.image_url}</code></td><td>Featured image URL</td></tr>
+        <tr><td><code>{news.source}</code></td><td>Publication name</td></tr>
+        <tr><td><code>{news.published_at}</code></td><td>Article publish date</td></tr>
+        <tr><td><code>{news.time}</code></td><td>Current time (at send)</td></tr>
+      </tbody>
+    </table>
+    <p class="settings-hint" style="margin-top:12px">
+      Unknown placeholders are left as-is.
+      WhatsApp formatting: <code>*bold*</code>, <code>_italic_</code>, <code>~strikethrough~</code>.
+    </p>
+  </aside>
+
+</div>
+{% endblock %}

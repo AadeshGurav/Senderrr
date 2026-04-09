@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
 from django.db.models import F
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
@@ -16,7 +15,6 @@ def _max_attempts() -> int:
     return getattr(settings, "MESSAGE_MAX_RETRY_ATTEMPTS", 3)
 
 
-@login_required
 def broadcast_list(request: HttpRequest) -> HttpResponse:
     """Return the recent broadcasts partial for htmx polling."""
     broadcasts = BroadcastEvent.objects.select_related("article")[:10]
@@ -49,7 +47,6 @@ def broadcast_list(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
 def broadcast_messages(request: HttpRequest, pk: int) -> HttpResponse:
     """Return the message tasks for a single broadcast (htmx expandable)."""
     broadcast = get_object_or_404(BroadcastEvent, pk=pk)
@@ -76,7 +73,6 @@ def broadcast_messages(request: HttpRequest, pk: int) -> HttpResponse:
     )
 
 
-@login_required
 @require_POST
 def retry_message(request: HttpRequest, pk: int) -> HttpResponse:
     """Re-queue a single failed message task."""
@@ -100,7 +96,6 @@ def retry_message(request: HttpRequest, pk: int) -> HttpResponse:
     return _message_row_response(request, msg, max_att)
 
 
-@login_required
 @require_POST
 def retry_broadcast(request: HttpRequest, pk: int) -> HttpResponse:
     """Trigger retry of failed messages for a specific broadcast."""
@@ -110,7 +105,6 @@ def retry_broadcast(request: HttpRequest, pk: int) -> HttpResponse:
     return broadcast_list(request)
 
 
-@login_required
 @require_POST
 def resend_broadcast(request: HttpRequest, pk: int) -> HttpResponse:
     """Re-create message tasks for a stuck broadcast using current healthy groups."""
@@ -149,7 +143,6 @@ def resend_broadcast(request: HttpRequest, pk: int) -> HttpResponse:
     return broadcast_list(request)
 
 
-@login_required
 @require_POST
 def retry_all_failed(request: HttpRequest) -> HttpResponse:
     """Trigger retry of all eligible failed messages."""

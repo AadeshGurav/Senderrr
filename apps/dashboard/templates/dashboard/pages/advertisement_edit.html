@@ -1,0 +1,66 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Edit Advertisement — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <div style="display:flex;align-items:center;gap:12px">
+    <a href="{% url 'dashboard:advertisements' %}" class="btn-ghost btn-sm">&larr; Back</a>
+    <h1 class="wa-page-title">Edit Advertisement</h1>
+  </div>
+  <div style="display:flex;gap:6px;margin-top:8px">
+    <span class="chip chip--muted">{{ ad.get_status_display }}</span>
+    {% if ad.package_days > 1 %}
+    <span class="chip chip--muted">{{ ad.days_used }}/{{ ad.package_days }} days sent</span>
+    {% endif %}
+    {% if ad.has_media %}
+    <span class="chip chip--muted">Media attached</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="wa-section">
+  <form method="post" action="{% url 'dashboard:edit_advertisement' ad.pk %}"
+        enctype="multipart/form-data" class="ad-compose-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="callout callout--error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="ad-form-row">
+      <label for="{{ form.title.id_for_label }}">Title</label>
+      {{ form.title }}
+      {% if form.title.errors %}<small class="field-error">{{ form.title.errors.0 }}</small>{% endif %}
+    </div>
+
+    <div class="ad-form-row">
+      <label for="{{ form.body.id_for_label }}">Message Body</label>
+      {{ form.body }}
+      <small class="field-hint">*bold*, _italic_, ~strikethrough~ supported</small>
+      {% if form.body.errors %}<small class="field-error">{{ form.body.errors.0 }}</small>{% endif %}
+    </div>
+
+    <div class="ad-form-row">
+      <label for="{{ form.preferred_time.id_for_label }}">Preferred Time <span class="optional-label">(optional)</span></label>
+      {{ form.preferred_time }}
+      <small class="field-hint">Advertiser's preferred send time</small>
+      {% if form.preferred_time.errors %}<small class="field-error">{{ form.preferred_time.errors.0 }}</small>{% endif %}
+    </div>
+
+    <div class="ad-form-row">
+      <label for="{{ form.media_file.id_for_label }}">{{ form.media_file.label }}</label>
+      {% if ad.has_media %}
+      <small class="field-hint" style="margin-bottom:4px">Current: {{ ad.first_media.original_filename }}</small>
+      {% endif %}
+      {{ form.media_file }}
+      <small class="field-hint">{{ form.media_file.help_text }}</small>
+    </div>
+
+    <div class="ad-form-actions">
+      <button type="submit" class="btn-primary">Save Changes</button>
+      <a href="{% url 'dashboard:advertisements' %}" class="btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

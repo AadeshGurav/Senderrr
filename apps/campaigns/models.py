@@ -6,6 +6,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.campaigns.ad_models import Advertisement, MediaAttachment
+from apps.campaigns.message_template_models import MessageTemplate
 from apps.scraper.models import ScrapedArticle
 
 __all__ = [

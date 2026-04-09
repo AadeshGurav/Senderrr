@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
+from django.utils import timezone
 
 from apps.scraper.parsers.base import (
     ArticlePreview,
@@ -67,7 +69,7 @@ class RatnagiriKhabardarParser(BaseSiteParser):
         author = _extract_author(soup)
         category = _extract_category(soup)
         image_url = _extract_featured_image(soup)
-        published_at = _extract_date(soup)
+        published_at = _parse_published_datetime(soup)
 
         return ParsedArticle(
             title=title,
@@ -80,26 +82,35 @@ class RatnagiriKhabardarParser(BaseSiteParser):
         )
 
     def format_message(self, article: ParsedArticle) -> str:
-        parts = [f"📰 *{article.title}*", ""]
+        from django.utils import timezone
 
-        meta = []
-        if article.category:
-            meta.append(f"📂 {article.category}")
-        if article.author:
-            meta.append(f"✍️ {article.author}")
-        if article.published_at:
-            meta.append(f"🗓️ {article.published_at}")
-        if meta:
-            parts.append("  •  ".join(meta))
-            parts.append("")
+        now = timezone.localtime(timezone.now())
+        timestamp = now.strftime("%H:%M %d-%m-%Y")
 
-        if article.body:
-            parts.append(article.body)
-            parts.append("")
-
-        # URL must be LAST for WhatsApp link-preview generation
-        parts.append(f"🔗 {article.url}")
-        return "\n".join(parts)
+        return "\n".join(
+            [
+                f"🔴 *{article.title}*",
+                "",
+                "*दैनिक रत्नागिरी खबरदार*",
+                "*ISO 9001:2015 CERTIFIED*",
+                "*(RNI NO. MAHMAR/2013/57411)*",
+                "*शासनमान्य रजिस्टर न्यूजपेपर*",
+                timestamp,
+                "",
+                "📰➖♾️➖♾️➖♾️➖📰",
+                "",
+                "*संपूर्ण बातमी वाचण्यासाठी खालील लिंक क्लिक करा*",
+                "",
+                article.url,
+                "",
+                "📢▪️ *रत्नागिरी खबरदारच्या माध्यमातून जाहिरात करण्यासाठी आजच संपर्क साधा 9421187576 या क्रमांकावर*",
+                "",
+                "👉 *रत्नागिरी खबरदार न्यूज़ : अँड्रॉइड अँप*",
+                "https://play.google.com/store/apps/details?id=com.appdroid.ratnagirikhabardar",
+                "",
+                "📰 *रत्नागिरी जिल्ह्यातील सर्व लेटेस्ट बातम्या आणि अपडेट्स एका क्लिक वर..*",
+            ]
+        )
 
 
 def _extract_title(soup: BeautifulSoup) -> str:
@@ -155,32 +166,34 @@ def _extract_featured_image(soup: BeautifulSoup) -> str:
     return ""
 
 
-def _extract_date(soup: BeautifulSoup) -> str:
-    """Extract human-readable publish date."""
-    time_el = soup.select_one("time.entry-date")
-    if time_el:
-        return time_el.get_text(strip=True)
+def _parse_published_datetime(soup: BeautifulSoup) -> datetime | None:
+    """Extract and parse the article's publish datetime.
 
+    Prefers the machine-readable ISO meta tag over the human-readable
+    visible element so timezone information is preserved.
+    """
     meta_date = soup.select_one("meta[property='article:published_time']")
     if meta_date and meta_date.get("content", ""):
-        return _format_iso_date(meta_date["content"])
+        try:
+            dt = datetime.fromisoformat(meta_date["content"])
+            # Ensure timezone-aware for consistent comparison
+            if dt.tzinfo is None:
+                dt = timezone.make_aware(dt)
+            return dt
+        except (ValueError, TypeError):
+            pass
 
-    td_date = soup.select_one(".td-post-date")
-    if td_date:
-        return td_date.get_text(strip=True)
+    time_el = soup.select_one("time.entry-date[datetime]")
+    if time_el and time_el.get("datetime", ""):
+        try:
+            dt = datetime.fromisoformat(time_el["datetime"])
+            if dt.tzinfo is None:
+                dt = timezone.make_aware(dt)
+            return dt
+        except (ValueError, TypeError):
+            pass
 
-    return ""
-
-
-def _format_iso_date(iso_string: str) -> str:
-    """Convert ISO datetime to readable format."""
-    try:
-        from datetime import datetime
-
-        dt = datetime.fromisoformat(iso_string)
-        return dt.strftime("%d %b %Y, %I:%M %p")
-    except (ValueError, TypeError):
-        return iso_string
+    return None
 
 
 def _truncate(text: str, max_chars: int = 300) -> str:

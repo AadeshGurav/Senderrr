@@ -14,5 +14,4 @@ from apps.scraper.parsers.registry import (  # noqa: F401
 )
 
 # Import parser modules to trigger @register decorators
-import apps.scraper.parsers.hackernews  # noqa: F401
 import apps.scraper.parsers.ratnagiri_khabardar  # noqa: F401

@@ -328,7 +328,7 @@ _MEDIA_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", "
 # attribute, so targeting that is the safest way to skip the sticker input.
 _FILE_INPUT_SELECTORS: dict[bool, list[str]] = {
     True: [  # media — target photos/videos input, NOT sticker input
-        'input[type="file"][accept*="video"]',    # photos & videos (always has video)
+        'input[type="file"][accept*="video"]',  # photos & videos (always has video)
         'input[type="file"][accept*="image/jpeg"]',  # explicit jpeg avoids sticker
         'input[type="file"][accept*="image/png"]',
     ],
@@ -364,7 +364,7 @@ def _attach_and_send_file(page, file_path: str, caption: str) -> None:  # noqa: 
     if caption:
         compose_box = _find_compose_box(page)
         if compose_box:
-            compose_box.click()
+            _clear_input(compose_box)
             _type_slowly(compose_box, caption)
             time.sleep(0.5)
 
@@ -383,9 +383,7 @@ def _attach_and_send_file(page, file_path: str, caption: str) -> None:  # noqa: 
             if caption_box:
                 existing = caption_box.inner_text().strip()
                 if not existing:
-                    # Compose text was not carried over — type it in the modal
-                    caption_box.click()
-                    time.sleep(0.1)
+                    _clear_input(caption_box)
                     _type_slowly(caption_box, caption)
                 else:
                     logger.debug("Caption already pre-populated in preview modal.")
@@ -404,14 +402,14 @@ def _attach_and_send_file(page, file_path: str, caption: str) -> None:  # noqa: 
     try:
         compose = _find_compose_box(page)
         if compose:
-            compose.click()
-            compose.press("Control+a")
-            compose.press("Delete")
+            _clear_input(compose)
     except Exception:  # noqa: BLE001
         pass
 
 
-def _attach_via_direct_input(page, file_path: str, is_media: bool) -> bool:  # noqa: ANN001
+def _attach_via_direct_input(
+    page, file_path: str, is_media: bool
+) -> bool:  # noqa: ANN001
     """Set files directly on WhatsApp's hidden file input without clicking the menu.
 
     Returns True if the file was successfully handed to the input element.
@@ -438,7 +436,9 @@ def _attach_via_clip_menu(page, file_path: str, is_media: bool) -> None:  # noqa
         SendFailedError: If the clip button or submenu cannot be found.
     """
     try:
-        clip_btn = page.wait_for_selector(ATTACH_SELECTORS["clip_button"], timeout=8_000)
+        clip_btn = page.wait_for_selector(
+            ATTACH_SELECTORS["clip_button"], timeout=8_000
+        )
         clip_btn.click()
         time.sleep(1.5)  # Allow the popup menu to fully render
     except PlaywrightTimeout as exc:
@@ -450,7 +450,11 @@ def _attach_via_clip_menu(page, file_path: str, is_media: bool) -> None:  # noqa
     # All strategies failed — dump artefacts for selector debugging
     capture_screenshot(page, "attach_menu_selector_miss")
     dump_main_dom(page)
-    css_sel = ATTACH_SELECTORS["photos_option"] if is_media else ATTACH_SELECTORS["docs_option"]
+    css_sel = (
+        ATTACH_SELECTORS["photos_option"]
+        if is_media
+        else ATTACH_SELECTORS["docs_option"]
+    )
     raise SendFailedError(
         f"Attachment submenu not found (tried CSS + text fallback; last CSS: {css_sel!r}). "
         "Screenshot + DOM saved for debugging."
@@ -462,7 +466,9 @@ def _click_submenu_and_pick_file(  # noqa: ANN001
 ) -> bool:
     """Try CSS selectors then text-based matching to click the submenu option."""
     css_selector = (
-        ATTACH_SELECTORS["photos_option"] if is_media else ATTACH_SELECTORS["docs_option"]
+        ATTACH_SELECTORS["photos_option"]
+        if is_media
+        else ATTACH_SELECTORS["docs_option"]
     )
     # Text labels WhatsApp may show for each option type
     text_candidates = (
@@ -644,13 +650,25 @@ def _find_compose_box(page):  # noqa: ANN001, ANN202
     return None
 
 
+def _clear_input(element) -> None:  # noqa: ANN001
+    """Clear a contenteditable input using keyboard selection + delete.
+
+    ``Control+a`` → ``Delete`` works reliably on WhatsApp Web's
+    contenteditable divs, unlike ``.fill("")`` which is unreliable.
+    """
+    element.click()
+    element.press("Control+a")
+    element.press("Delete")
+    time.sleep(0.2)
+
+
 def _type_message_human_like(page, message: str) -> None:  # noqa: ANN001
     """Type the message into the compose box with random delays."""
     compose_box = _find_compose_box(page)
     if compose_box is None:
         capture_screenshot(page, "compose_box_missing")
         raise SendFailedError("Message input box not found — DOM may have changed.")
-    compose_box.click()
+    _clear_input(compose_box)
     _type_slowly(compose_box, message)
 
 
@@ -685,9 +703,13 @@ def _type_slowly(element, text: str, *, page=None) -> None:  # noqa: ANN001
     """Simulate human typing: one character at a time with random delay.
 
     Newlines are sent as Shift+Enter so WhatsApp creates a line break
-    instead of sending the message prematurely.
+    instead of sending the message prematurely.  Carriage returns (\r)
+    are silently skipped — browsers submit textarea content as \r\n and
+    typing \r into WhatsApp's contenteditable triggers an Enter/send.
     """
     for char in text:
+        if char == "\r":
+            continue  # skip CR; the \n that follows handles the line break
         if char == "\n":
             element.press("Shift+Enter")
         else:

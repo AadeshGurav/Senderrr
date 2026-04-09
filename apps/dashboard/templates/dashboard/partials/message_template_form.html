@@ -1,0 +1,39 @@
+{% if saved %}
+<p role="alert" class="settings-saved">Template saved and activated.</p>
+{% endif %}
+
+<form id="template-form"
+      hx-post="{% url 'dashboard:save_message_template' %}"
+      hx-target="#template-section"
+      hx-swap="innerHTML">
+  {% csrf_token %}
+
+  <div class="settings-field" style="margin-bottom:16px">
+    <label for="{{ form.name.id_for_label }}">Template name</label>
+    {{ form.name }}
+    {% if form.name.errors %}<span class="field-error">{{ form.name.errors.0 }}</span>{% endif %}
+  </div>
+
+  <div class="settings-field">
+    <label for="{{ form.template_text.id_for_label }}">Message format</label>
+    {{ form.template_text }}
+    {% if form.template_text.errors %}<span class="field-error">{{ form.template_text.errors.0 }}</span>{% endif %}
+  </div>
+
+  <div style="display:flex; gap:8px; margin-top:16px; align-items:center">
+    <button type="submit" class="settings-save-btn">Save &amp; activate</button>
+    <button type="button" class="btn-secondary"
+            hx-post="{% url 'dashboard:preview_message_template' %}"
+            hx-include="#template-form textarea[name='template_text']"
+            hx-target="#template-preview"
+            hx-swap="innerHTML">
+      Preview
+    </button>
+  </div>
+</form>
+
+<div id="template-preview" style="margin-top:24px">
+  {% if active_template %}
+  <p class="settings-hint" style="margin:0">Click Preview to render with the latest article.</p>
+  {% endif %}
+</div>

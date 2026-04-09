@@ -21,6 +21,14 @@
         {% if settings_form.SCRAPER_MAX_RETRIES.errors %}<span class="field-error">{{ settings_form.SCRAPER_MAX_RETRIES.errors.0 }}</span>{% endif %}
       </div>
     </div>
+    <div class="settings-row">
+      <div class="settings-field" style="flex:1">
+        <label>{{ settings_form.SCRAPER_MAX_ARTICLE_AGE_HOURS.label }}</label>
+        {{ settings_form.SCRAPER_MAX_ARTICLE_AGE_HOURS }}
+        <span class="settings-hint">{{ settings_form.SCRAPER_MAX_ARTICLE_AGE_HOURS.help_text }}</span>
+        {% if settings_form.SCRAPER_MAX_ARTICLE_AGE_HOURS.errors %}<span class="field-error">{{ settings_form.SCRAPER_MAX_ARTICLE_AGE_HOURS.errors.0 }}</span>{% endif %}
+      </div>
+    </div>
   </div>
 
   <div class="settings-group">

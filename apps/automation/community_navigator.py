@@ -95,7 +95,10 @@ def _search_and_open_community(page: Page, community_jid: str) -> None:
 
     try:
         search_input = page.locator(SELECTORS["search_input"]).first
-        search_input.fill("")
+        search_input.click(timeout=_NAVIGATION_TIMEOUT_MS)
+        search_input.press("Control+a")
+        search_input.press("Delete")
+        page.wait_for_timeout(200)
         search_input.type(community_jid, delay=60)
         page.wait_for_timeout(1_500)
     except Exception as exc:

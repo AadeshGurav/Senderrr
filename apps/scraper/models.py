@@ -1,5 +1,7 @@
 """Scraper app — models for content change detection."""
 
+from __future__ import annotations
+
 from django.db import models
 
 
@@ -27,8 +29,27 @@ class ScrapedArticle(models.Model):
 
     url = models.URLField(db_index=True)
     title = models.CharField(max_length=500, blank=True, default="")
-    body = models.TextField(help_text="Raw extracted text content.")
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Raw article description / summary — used as {news.description} in templates.",
+    )
+    body = models.TextField(
+        help_text="Pre-formatted WhatsApp message (legacy fallback when no template is set).",
+    )
     image_url = models.URLField(blank=True, default="", help_text="Poster/tile image URL.")
+    source_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Name of the originating news source.",
+    )
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="When the article was published on the source site.",
+    )
     content_hash = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
 

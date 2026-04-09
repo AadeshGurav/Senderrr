@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django import forms
 
+from apps.campaigns.message_template_models import MessageTemplate
 from apps.campaigns.models import (
     AdminAccount,
     Advertisement,
@@ -67,15 +68,67 @@ class AdvertisementForm(forms.ModelForm):
 
     class Meta:
         model = Advertisement
-        fields = ("title", "body", "target_type", "target_groups", "target_communities")
+        fields = (
+            "title",
+            "body",
+            "target_type",
+            "target_groups",
+            "target_communities",
+            "package_days",
+            "preferred_time",
+        )
         widgets = {
             "title": forms.TextInput(attrs={"placeholder": "Campaign title…"}),
             "body": forms.Textarea(
-                attrs={"rows": 4, "placeholder": "Message body (WhatsApp formatting ok)…"}
+                attrs={
+                    "rows": 4,
+                    "placeholder": "Message body (WhatsApp formatting ok)…",
+                }
             ),
             "target_type": forms.Select(),
             "target_groups": forms.CheckboxSelectMultiple(),
             "target_communities": forms.CheckboxSelectMultiple(),
+            "package_days": forms.NumberInput(attrs={"min": 1, "max": 30, "value": 1}),
+            "preferred_time": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+        }
+
+
+class AdvertisementEditForm(forms.ModelForm):
+    """Form for editing an existing advertisement's content mid-campaign.
+
+    Excludes target selection and package_days — those are fixed at creation.
+    """
+
+    media_file = forms.FileField(
+        required=False,
+        label="Replace Attachment",
+        help_text="Upload to replace current media, or leave empty to keep existing.",
+    )
+
+    class Meta:
+        model = Advertisement
+        fields = ("title", "body", "preferred_time")
+        widgets = {
+            "title": forms.TextInput(attrs={"placeholder": "Campaign title…"}),
+            "body": forms.Textarea(
+                attrs={
+                    "rows": 4,
+                    "placeholder": "Message body (WhatsApp formatting ok)…",
+                }
+            ),
+            "preferred_time": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+        }
+
+
+class MessageTemplateForm(forms.ModelForm):
+    """Form for editing the active message template."""
+
+    class Meta:
+        model = MessageTemplate
+        fields = ("name", "template_text")
+        widgets = {
+            "name": forms.TextInput(attrs={"placeholder": "e.g. Default News Template"}),
+            "template_text": forms.Textarea(attrs={"rows": 14}),
         }
 
 
@@ -91,6 +144,15 @@ class SettingsForm(forms.Form):
         label="Max retries",
         min_value=1,
         max_value=10,
+    )
+    SCRAPER_MAX_ARTICLE_AGE_HOURS = forms.IntegerField(
+        label="Max article age (hours)",
+        min_value=1,
+        max_value=720,
+        help_text=(
+            "Articles older than this when first detected are skipped silently. "
+            "Default: 12 h. Increase before long weekends (e.g. 96 for 4-day break)."
+        ),
     )
     AUTOMATION_JITTER_MIN = forms.FloatField(
         label="Jitter min (seconds)",

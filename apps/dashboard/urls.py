@@ -10,6 +10,7 @@ from apps.dashboard.views import (
     communities,
     dashboard,
     groups,
+    message_templates,
     settings,
     status,
 )
@@ -32,6 +33,11 @@ urlpatterns = [
         "advertisements/<int:pk>/send/",
         advertisements.send_advertisement,
         name="send_advertisement",
+    ),
+    path(
+        "advertisements/<int:pk>/edit/",
+        advertisements.edit_advertisement,
+        name="edit_advertisement",
     ),
     path(
         "advertisements/<int:pk>/delete/",
@@ -91,6 +97,10 @@ urlpatterns = [
     ),
     path("broadcasts/retry-all/", broadcasts.retry_all_failed, name="retry_all"),
     path("messages/<int:pk>/retry/", broadcasts.retry_message, name="retry_message"),
+    # Message templates
+    path("templates/", message_templates.message_templates_page, name="message_templates"),
+    path("templates/save/", message_templates.save_message_template, name="save_message_template"),
+    path("templates/preview/", message_templates.preview_message_template, name="preview_message_template"),
     # Settings
     path("settings/", settings.settings_view, name="settings"),
     # Status

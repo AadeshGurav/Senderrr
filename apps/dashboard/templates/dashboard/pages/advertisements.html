@@ -10,8 +10,11 @@
       {% if draft_count %}
       <span class="chip chip--muted">{{ draft_count }} draft{{ draft_count|pluralize }}</span>
       {% endif %}
+      {% if active_count %}
+      <span class="chip chip--ok"><span class="chip-dot"></span>{{ active_count }} active</span>
+      {% endif %}
       {% if sent_count %}
-      <span class="chip chip--ok"><span class="chip-dot"></span>{{ sent_count }} sent</span>
+      <span class="chip chip--ok">{{ sent_count }} completed</span>
       {% endif %}
       <span class="chip chip--muted">{{ total_ads }} total</span>
     </div>
@@ -63,6 +66,21 @@
         </div>
       </div>
 
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div class="ad-form-row" style="flex:1;min-width:120px">
+          <label for="{{ form.package_days.id_for_label }}">Package Days</label>
+          {{ form.package_days }}
+          <small class="field-hint">Working days in this campaign</small>
+          {% if form.package_days.errors %}<small class="field-error">{{ form.package_days.errors.0 }}</small>{% endif %}
+        </div>
+        <div class="ad-form-row" style="flex:1;min-width:120px">
+          <label for="{{ form.preferred_time.id_for_label }}">Preferred Time <span class="optional-label">(optional)</span></label>
+          {{ form.preferred_time }}
+          <small class="field-hint">Advertiser's preferred send time</small>
+          {% if form.preferred_time.errors %}<small class="field-error">{{ form.preferred_time.errors.0 }}</small>{% endif %}
+        </div>
+      </div>
+
       <div class="ad-form-row">
         <label for="{{ form.media_file.id_for_label }}">Attachment <span class="optional-label">(optional)</span></label>
         {{ form.media_file }}
@@ -83,23 +101,28 @@
     {% for ad in ads %}
     <div class="ad-card">
       <div class="ad-card-header">
-        <div class="ad-card-title">{{ ad.title }}</div>
+        <div class="ad-card-title">{{ ad.title|default:ad.body|truncatechars:60 }}</div>
         <div class="ad-card-chips">
           {% if ad.status == "draft" %}
           <span class="chip chip--muted">Draft</span>
+          {% elif ad.status == "active" %}
+          <span class="chip chip--ok"><span class="chip-dot"></span>Active</span>
           {% elif ad.status == "queued" %}
           <span class="chip chip--warn"><span class="chip-dot"></span>Queued</span>
           {% elif ad.status == "sending" %}
           <span class="chip chip--info"><span class="chip-dot"></span>Sending</span>
           {% elif ad.status == "completed" %}
-          <span class="chip chip--ok"><span class="chip-dot"></span>Sent</span>
+          <span class="chip chip--ok">Completed</span>
           {% elif ad.status == "failed" %}
           <span class="chip chip--error"><span class="chip-dot"></span>Failed</span>
           {% endif %}
-          {% if ad.has_media %}
-          <span class="chip chip--muted">📎 Media</span>
+          {% if ad.package_days > 1 %}
+          <span class="chip chip--muted">{{ ad.days_used }}/{{ ad.package_days }} days</span>
           {% endif %}
-          <span class="chip chip--muted">→ {{ ad.get_target_type_display }}</span>
+          {% if ad.has_media %}
+          <span class="chip chip--muted">Media</span>
+          {% endif %}
+          <span class="chip chip--muted">{{ ad.get_target_type_display }}</span>
         </div>
       </div>
 
@@ -107,7 +130,10 @@
 
       <div class="ad-card-meta">
         Created {{ ad.created_at|timesince }} ago
-        {% if ad.sent_at %} · Sent {{ ad.sent_at|timesince }} ago{% endif %}
+        {% if ad.preferred_time %}
+          · Preferred: {{ ad.preferred_time|time:"g:i A" }}
+        {% endif %}
+        {% if ad.sent_at %} · Last sent {{ ad.sent_at|timesince }} ago{% endif %}
         {% if ad.latest_broadcast %}
         · {{ ad.latest_broadcast.sent_count }}/{{ ad.latest_broadcast.total_groups }} delivered
         {% if ad.latest_broadcast.failed_count %}
@@ -117,15 +143,18 @@
       </div>
 
       <div class="ad-card-actions">
-        {% if ad.status == "draft" %}
+        {% if ad.is_sendable %}
         <form method="post" action="{% url 'dashboard:send_advertisement' ad.pk %}"
               style="display:inline">
           {% csrf_token %}
           <button type="submit" class="btn-primary btn-sm"
-                  onclick="return confirm('Send \'{{ ad.title }}\' to {{ ad.get_target_type_display }}?')">
+                  onclick="return confirm('Send to {{ ad.get_target_type_display }}?{% if ad.package_days > 1 %} (Day {{ ad.days_used|add:1 }} of {{ ad.package_days }}){% endif %}')">
             Send Now
           </button>
         </form>
+        {% endif %}
+        {% if ad.status == "draft" or ad.status == "active" %}
+        <a href="{% url 'dashboard:edit_advertisement' ad.pk %}" class="btn-ghost btn-sm">Edit</a>
         {% endif %}
         <form method="post" action="{% url 'dashboard:delete_advertisement' ad.pk %}"
               style="display:inline">
@@ -139,7 +168,7 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <div class="empty-state-icon">📢</div>
+    <div class="empty-state-icon">+</div>
     <p class="empty-state-text">No advertisements yet. Compose one above.</p>
   </div>
   {% endif %}

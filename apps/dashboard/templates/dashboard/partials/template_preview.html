@@ -1,0 +1,12 @@
+{% if preview %}
+<div class="template-preview-box">
+  <div class="template-preview-label">Preview (rendered with latest article)</div>
+  <pre class="template-preview-text">{{ preview }}</pre>
+</div>
+{% elif not has_article %}
+<p class="settings-hint" style="color:var(--pico-color-amber-600)">
+  No articles scraped yet — preview is unavailable.
+</p>
+{% else %}
+<p class="settings-hint">Enter a template above, then click Preview.</p>
+{% endif %}

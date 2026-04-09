@@ -15,11 +15,19 @@ logger = logging.getLogger(__name__)
 
 
 def compose_message(article: object) -> str:
-    """Build the message text from the scraped article.
+    """Build the outgoing WhatsApp message for a scraped article.
 
-    If the body already contains a formatted message (from a site-specific
-    parser), use it directly. Otherwise fall back to a simple format.
+    Resolution order:
+    1. Active MessageTemplate — rendered with {news.*} placeholder substitution.
+    2. Pre-formatted body from the site parser (legacy fallback).
+    3. Minimal title + URL format (last resort).
     """
+    from apps.campaigns.template_renderer import get_active_template, render_message
+
+    template = get_active_template()
+    if template:
+        return render_message(article, template)
+
     if article.body and _is_parser_formatted(article.body):
         return article.body
 
@@ -109,24 +117,42 @@ def update_broadcast_counters(broadcast: BroadcastEvent, *, success: bool) -> No
 
 
 def _sync_advertisement_status(broadcast: BroadcastEvent) -> None:
-    """Mirror a completed BroadcastEvent's final status back to its Advertisement."""
+    """Mirror a completed BroadcastEvent's status back to its Advertisement.
+
+    Package-aware: if the ad has remaining days after a successful broadcast,
+    it transitions to ACTIVE (sendable again) instead of COMPLETED.
+    """
     if broadcast.advertisement_id is None:
         return
 
     from apps.campaigns.models import Advertisement
 
-    ad_status_map = {
-        BroadcastEvent.Status.COMPLETED: Advertisement.Status.COMPLETED,
-        BroadcastEvent.Status.FAILED: Advertisement.Status.FAILED,
-    }
-    new_status = ad_status_map.get(broadcast.status)
-    if new_status is None:
+    try:
+        ad = Advertisement.objects.get(pk=broadcast.advertisement_id)
+    except Advertisement.DoesNotExist:
         return
 
-    Advertisement.objects.filter(pk=broadcast.advertisement_id).update(
-        status=new_status,
-        sent_at=broadcast.completed_at,
-    )
+    if broadcast.status == BroadcastEvent.Status.FAILED:
+        # Failed broadcast — revert to sendable state without consuming a day
+        revert_to = (
+            Advertisement.Status.ACTIVE
+            if ad.days_used > 0
+            else Advertisement.Status.DRAFT
+        )
+        Advertisement.objects.filter(pk=ad.pk).update(status=revert_to)
+        return
+
+    if broadcast.status == BroadcastEvent.Status.COMPLETED:
+        Advertisement.objects.filter(pk=ad.pk).update(
+            sent_at=broadcast.completed_at,
+        )
+        ad.refresh_from_db()
+        new_status = (
+            Advertisement.Status.ACTIVE
+            if ad.days_remaining > 0
+            else Advertisement.Status.COMPLETED
+        )
+        Advertisement.objects.filter(pk=ad.pk).update(status=new_status)
 
 
 def _is_parser_formatted(body: str) -> bool:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
@@ -48,13 +47,11 @@ def _base_stats() -> dict:
     }
 
 
-@login_required
 def index(request: HttpRequest) -> HttpResponse:
     """Render the overview page with top-level stats and live widgets."""
     return render(request, "dashboard/overview.html", _base_stats())
 
 
-@login_required
 def admins_page(request: HttpRequest) -> HttpResponse:
     """Render the admins management page."""
     admins = AdminAccount.objects.all()
@@ -69,7 +66,6 @@ def admins_page(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
 def groups_page(request: HttpRequest) -> HttpResponse:
     """Render the groups management page."""
     groups = WhatsAppGroup.objects.select_related("community").all()
@@ -84,7 +80,6 @@ def groups_page(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
 def communities_page(request: HttpRequest) -> HttpResponse:
     """Render the communities management page."""
     communities = WhatsAppCommunity.objects.prefetch_related("subgroups").all()
@@ -99,7 +94,6 @@ def communities_page(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
 def broadcasts_page(request: HttpRequest) -> HttpResponse:
     """Render the broadcasts history page with pagination."""
     max_attempts = getattr(settings, "MESSAGE_MAX_RETRY_ATTEMPTS", 3)

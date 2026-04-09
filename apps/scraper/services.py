@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 import requests
 from bs4 import BeautifulSoup
+from django.utils import timezone
 
 from apps.scraper.models import ArticleHash, ScrapedArticle
 from apps.scraper.parsers import get_parser_for_url
@@ -136,8 +138,13 @@ def _seed_known_urls(urls: list[str]) -> None:
     )
 
 
-def _fetch_parse_and_store(article_url, parser):
-    """Fetch a single article, parse it, and persist."""
+def _fetch_parse_and_store(article_url: str, parser) -> ScrapedArticle | None:
+    """Fetch a single article, parse it, and persist.
+
+    Returns None (without storing a ScrapedArticle) in two cases:
+    - Parse/fetch failure: hash is NOT seeded (retry next cycle)
+    - Article is too old: hash IS seeded (skip permanently, no broadcast)
+    """
     try:
         raw_html = _fetch_raw_html(article_url)
     except Exception as exc:
@@ -150,13 +157,32 @@ def _fetch_parse_and_store(article_url, parser):
         return None
 
     content_hash = compute_content_hash(parsed.body)
+
+    # Time-gate: if published_at is known and too old, seed hash without broadcasting.
+    # This prevents re-sending articles the owner manually sent while the system
+    # was offline (overnight / long weekends). Age threshold is runtime-configurable.
+    if parsed.published_at and _is_article_too_old(parsed.published_at):
+        ArticleHash.objects.update_or_create(
+            url=parsed.url,
+            defaults={"content_hash": content_hash},
+        )
+        logger.info(
+            "Skipped (too old): '%s' published %s",
+            parsed.title[:80],
+            parsed.published_at,
+        )
+        return None
+
     body = parser.format_message(parsed)
 
     article = ScrapedArticle.objects.create(
         url=parsed.url,
         title=parsed.title,
+        description=parsed.body,
         body=body,
         image_url=parsed.image_url,
+        source_name=parser.name,
+        published_at=parsed.published_at,
         content_hash=content_hash,
     )
 
@@ -167,6 +193,13 @@ def _fetch_parse_and_store(article_url, parser):
 
     logger.info("Stored article: %s", parsed.title[:80])
     return article
+
+
+def _is_article_too_old(published_at: datetime) -> bool:
+    """Return True if the article was published outside the broadcast window."""
+    max_age_hours = get_config("SCRAPER_MAX_ARTICLE_AGE_HOURS", int)
+    cutoff = timezone.now() - timedelta(hours=max_age_hours)
+    return published_at < cutoff
 
 
 # ---------------------------------------------------------------------------

@@ -33,7 +33,11 @@ def fan_out_advertisement(self, advertisement_pk: int) -> str:  # noqa: ANN001
         logger.error("Advertisement pk=%d not found — aborting.", advertisement_pk)
         return f"Advertisement pk={advertisement_pk} not found"
 
-    actionable = {Advertisement.Status.QUEUED, Advertisement.Status.DRAFT}
+    actionable = {
+        Advertisement.Status.QUEUED,
+        Advertisement.Status.DRAFT,
+        Advertisement.Status.ACTIVE,
+    }
     if ad.status not in actionable:
         logger.info(
             "Advertisement pk=%d already in status=%s — skipping.",
@@ -42,7 +46,9 @@ def fan_out_advertisement(self, advertisement_pk: int) -> str:  # noqa: ANN001
         )
         return f"Advertisement pk={advertisement_pk} already {ad.status}"
 
-    from apps.campaigns.advertisement_services import create_advertisement_broadcast_event
+    from apps.campaigns.advertisement_services import (
+        create_advertisement_broadcast_event,
+    )
     from apps.campaigns.broadcast_router import assign_and_dispatch_tasks
 
     broadcast = create_advertisement_broadcast_event(ad)
