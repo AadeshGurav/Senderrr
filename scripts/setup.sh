@@ -171,7 +171,7 @@ fi
 if [ ! -f ".env" ]; then
     cp .env.example .env
     info "Created .env from .env.example."
-    warn "IMPORTANT: Edit .env and set SCRAPER_TARGET_URL to your website."
+    warn "IMPORTANT: Edit .env and set SCRAPER_TARGET_URLS to your website URL."
 else
     info ".env already exists — skipping."
 fi

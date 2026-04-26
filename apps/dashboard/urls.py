@@ -11,6 +11,7 @@ from apps.dashboard.views import (
     dashboard,
     groups,
     message_templates,
+    scraper,
     settings,
     status,
 )
@@ -103,6 +104,10 @@ urlpatterns = [
     path("templates/preview/", message_templates.preview_message_template, name="preview_message_template"),
     # Settings
     path("settings/", settings.settings_view, name="settings"),
+    # Scraper controls
+    path("scraper/", scraper.scraper_page, name="scraper_page"),
+    path("scraper/run/", scraper.run_scraper_now, name="run_scraper"),
+    path("scraper/unseed/", scraper.unseed_and_run, name="unseed_and_run"),
     # Status
     path("status/whatsapp/", status.whatsapp_status, name="whatsapp_status"),
     path("status/workers/", status.worker_statuses, name="worker_statuses"),

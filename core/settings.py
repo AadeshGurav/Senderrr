@@ -194,6 +194,15 @@ SCRAPER_MAX_ARTICLE_AGE_HOURS = int(
     os.environ.get("SCRAPER_MAX_ARTICLE_AGE_HOURS", "12")
 )
 
+# Scraper live-hours window — the scraper only runs inside this window.
+# Outside it (nights, weekends, public holidays) the task returns early
+# so the owner can post manually without the system duplicating messages.
+# SCRAPER_ACTIVE_WEEKDAYS: comma-separated Python weekday numbers (0=Mon … 6=Sun).
+# Defaults: always active (00:00–23:00 on all seven days).
+SCRAPER_ACTIVE_HOUR_START = int(os.environ.get("SCRAPER_ACTIVE_HOUR_START", "0"))
+SCRAPER_ACTIVE_HOUR_END = int(os.environ.get("SCRAPER_ACTIVE_HOUR_END", "23"))
+SCRAPER_ACTIVE_WEEKDAYS = os.environ.get("SCRAPER_ACTIVE_WEEKDAYS", "0,1,2,3,4,5,6")
+
 
 # ---------------------------------------------------------------------------
 # Playwright / Automation settings

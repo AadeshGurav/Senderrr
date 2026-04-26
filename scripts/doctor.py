@@ -280,8 +280,8 @@ def check_env_file(*, fix: bool) -> bool:
         return True
 
     content = ENV_FILE.read_text()
-    if "example.com/articles" in content:
-        warn(".env exists but SCRAPER_TARGET_URL is still the placeholder")
+    if "example.com/articles" in content or "yoursite.com/news" in content:
+        warn(".env exists but SCRAPER_TARGET_URLS is still the placeholder — edit it.")
         return True  # file exists, just needs editing
 
     ok(".env configured")

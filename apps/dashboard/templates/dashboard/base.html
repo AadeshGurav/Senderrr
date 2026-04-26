@@ -21,6 +21,7 @@
 {% url 'dashboard:broadcasts_page' as url_broadcasts %}
 {% url 'dashboard:advertisements' as url_advertisements %}
 {% url 'dashboard:message_templates' as url_templates %}
+{% url 'dashboard:scraper_page' as url_scraper %}
 {% url 'dashboard:settings' as url_settings %}
 
 <header class="wa-nav">
@@ -42,6 +43,8 @@
        class="wa-nav-link {% if request.path == url_advertisements %}active{% endif %}">Ads</a>
     <a href="{{ url_templates }}"
        class="wa-nav-link {% if request.path == url_templates %}active{% endif %}">Template</a>
+    <a href="{{ url_scraper }}"
+       class="wa-nav-link {% if request.path == url_scraper %}active{% endif %}">Scraper</a>
   </nav>
 
   <div class="wa-nav-right">

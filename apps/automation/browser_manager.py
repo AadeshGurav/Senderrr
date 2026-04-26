@@ -32,7 +32,11 @@ def resolve_user_data_dir(worker_id: int) -> str:
     """
     base = settings.PLAYWRIGHT_USER_DATA_DIR
 
-    admin_id = int(os.environ.get("WA_ADMIN_ID", "-1"))
+    try:
+        admin_id = int(os.environ.get("WA_ADMIN_ID", "-1"))
+    except ValueError:
+        logger.error("Invalid WA_ADMIN_ID env var: %r — falling back to legacy path.", os.environ.get("WA_ADMIN_ID"))
+        admin_id = -1
     if admin_id >= 0:
         session_idx = int(os.environ.get("WA_SESSION_INDEX", "0"))
         return str(Path(base) / f"admin_{admin_id}" / f"session_{session_idx}")

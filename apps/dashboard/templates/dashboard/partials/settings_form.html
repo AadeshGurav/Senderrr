@@ -32,6 +32,35 @@
   </div>
 
   <div class="settings-group">
+    <div class="settings-group-label">Scraper Live Hours</div>
+    <div class="settings-row">
+      <div class="settings-field">
+        <label>{{ settings_form.SCRAPER_ACTIVE_HOUR_START.label }}</label>
+        {{ settings_form.SCRAPER_ACTIVE_HOUR_START }}
+        <span class="settings-hint">{{ settings_form.SCRAPER_ACTIVE_HOUR_START.help_text }}</span>
+        {% if settings_form.SCRAPER_ACTIVE_HOUR_START.errors %}<span class="field-error">{{ settings_form.SCRAPER_ACTIVE_HOUR_START.errors.0 }}</span>{% endif %}
+      </div>
+      <div class="settings-field">
+        <label>{{ settings_form.SCRAPER_ACTIVE_HOUR_END.label }}</label>
+        {{ settings_form.SCRAPER_ACTIVE_HOUR_END }}
+        <span class="settings-hint">{{ settings_form.SCRAPER_ACTIVE_HOUR_END.help_text }}</span>
+        {% if settings_form.SCRAPER_ACTIVE_HOUR_END.errors %}<span class="field-error">{{ settings_form.SCRAPER_ACTIVE_HOUR_END.errors.0 }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="settings-row">
+      <div class="settings-field" style="flex:1">
+        <label>{{ settings_form.SCRAPER_ACTIVE_WEEKDAYS.label }}</label>
+        <div class="weekday-checkboxes">
+          {{ settings_form.SCRAPER_ACTIVE_WEEKDAYS }}
+        </div>
+        <span class="settings-hint">{{ settings_form.SCRAPER_ACTIVE_WEEKDAYS.help_text }}</span>
+        {% if settings_form.SCRAPER_ACTIVE_WEEKDAYS.errors %}<span class="field-error">{{ settings_form.SCRAPER_ACTIVE_WEEKDAYS.errors.0 }}</span>{% endif %}
+      </div>
+    </div>
+    <p class="settings-note">Outside this window the scraper is silent — the owner can post manually without duplicates.</p>
+  </div>
+
+  <div class="settings-group">
     <div class="settings-group-label">Anti-Ban Delays</div>
     <div class="settings-row">
       <div class="settings-field">

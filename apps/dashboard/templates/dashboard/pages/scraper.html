@@ -1,0 +1,113 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Scraper Controls — WA Automation{% endblock %}
+
+{% block content %}
+<div class="wa-page-header">
+  <h1 class="wa-page-title">Scraper Controls</h1>
+  <p style="color:var(--wa-muted);margin-top:4px;font-size:0.9rem">
+    Manage content scraping and article broadcasting.
+  </p>
+</div>
+
+<div class="wa-section" style="display:grid;gap:20px">
+
+  {# ── Status cards ─────────────────────────────────────────────────── #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+    <div class="wa-stat-card">
+      <div class="wa-stat-label">Known URLs</div>
+      <div class="wa-stat-value">{{ total_hashes }}</div>
+      <div class="wa-stat-sub">tracked by ArticleHash</div>
+    </div>
+    <div class="wa-stat-card">
+      <div class="wa-stat-label">Seeded (silent)</div>
+      <div class="wa-stat-value {% if seeded_count %}wa-stat-warn{% endif %}">{{ seeded_count }}</div>
+      <div class="wa-stat-sub">won't broadcast until unseeded</div>
+    </div>
+    <div class="wa-stat-card">
+      <div class="wa-stat-label">Broadcast-Ready</div>
+      <div class="wa-stat-value">{{ real_count }}</div>
+      <div class="wa-stat-sub">distinct articles seen</div>
+    </div>
+  </div>
+
+  {# ── Action result ─────────────────────────────────────────────────── #}
+  <div id="scraper-status">
+    {% include "dashboard/partials/scraper_status.html" %}
+  </div>
+
+  {# ── Action buttons ────────────────────────────────────────────────── #}
+  <div class="wa-card" style="display:flex;flex-direction:column;gap:16px">
+    <div>
+      <h3 style="margin:0 0 4px">Run Scraper Now</h3>
+      <p style="margin:0 0 10px;font-size:0.88rem;color:var(--wa-muted)">
+        Immediately trigger the scraper. New articles found will be broadcast to all active groups.
+        Has no effect if all current articles are already known.
+      </p>
+      <button class="btn-primary"
+              hx-post="{% url 'dashboard:run_scraper' %}"
+              hx-target="#scraper-status"
+              hx-swap="innerHTML"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-indicator="#run-indicator">
+        ▶ Run Scraper
+      </button>
+      <span id="run-indicator" class="htmx-indicator" style="margin-left:8px;font-size:0.85rem;color:var(--wa-muted)">
+        Running…
+      </span>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--wa-border);margin:0">
+
+    <div>
+      <h3 style="margin:0 0 4px">⚠ Unseed &amp; Broadcast Recent Articles</h3>
+      <p style="margin:0 0 10px;font-size:0.88rem;color:var(--wa-muted)">
+        On first install the scraper silently seeds all existing articles as
+        <em>already-known</em> so it doesn't spam groups with old news.
+        Use this button to mark those seeded articles as <em>new</em> and
+        broadcast them immediately. Use it once after a fresh install to
+        verify the system is working end-to-end.
+      </p>
+      <button class="btn-danger"
+              hx-post="{% url 'dashboard:unseed_and_run' %}"
+              hx-target="#scraper-status"
+              hx-swap="innerHTML"
+              hx-confirm="This will mark {{ seeded_count }} seeded articles as new and broadcast them. Continue?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-indicator="#unseed-indicator"
+              {% if seeded_count == 0 %}disabled{% endif %}>
+        ⚡ Unseed &amp; Broadcast ({{ seeded_count }} articles)
+      </button>
+      <span id="unseed-indicator" class="htmx-indicator" style="margin-left:8px;font-size:0.85rem;color:var(--wa-muted)">
+        Processing…
+      </span>
+      {% if seeded_count == 0 %}
+      <p style="margin:6px 0 0;font-size:0.82rem;color:var(--wa-muted)">
+        No seeded entries — button disabled. Run the scraper first, or articles have already been unseeded.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── How it works ──────────────────────────────────────────────────── #}
+  <details class="wa-card" style="cursor:pointer">
+    <summary style="font-weight:600;font-size:0.9rem">How the scraper works</summary>
+    <div style="margin-top:12px;font-size:0.88rem;color:var(--wa-muted);line-height:1.6">
+      <ol style="margin:0;padding-left:20px">
+        <li>Every 5 minutes the scraper fetches <code>SCRAPER_TARGET_URLS</code>.</li>
+        <li>It compares article URLs against the <code>ArticleHash</code> table.</li>
+        <li>
+          <strong>First run:</strong> all current articles are "seeded" as known so old articles
+          aren't broadcast. Only articles published <em>after</em> the seed will be sent automatically.
+        </li>
+        <li>New articles are stored and a broadcast fan-out is triggered to all active groups.</li>
+        <li>Articles older than <code>SCRAPER_MAX_ARTICLE_AGE_HOURS</code> ({{ max_age_hours|default:"12" }}h) are skipped.</li>
+      </ol>
+      <p style="margin-top:10px">
+        <strong>If nothing is broadcasting:</strong> use "Unseed &amp; Broadcast" to immediately push existing articles to groups as a smoke test.
+      </p>
+    </div>
+  </details>
+
+</div>
+{% endblock %}

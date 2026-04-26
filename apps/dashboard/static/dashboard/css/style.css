@@ -1051,6 +1051,43 @@ button.btn-sm {
 
 .field-error { color: var(--err-text); font-size: 12px; }
 
+/* Weekday checkboxes — horizontal pill row */
+.weekday-checkboxes ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+.weekday-checkboxes li {
+  display: flex;
+  align-items: center;
+}
+.weekday-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-md);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  user-select: none;
+}
+.weekday-checkboxes input[type="checkbox"] {
+  display: none;
+}
+.weekday-checkboxes input[type="checkbox"]:checked + span,
+.weekday-checkboxes li:has(input:checked) label {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .settings-save-btn {
   margin-top: 4px !important;
 }
@@ -1413,3 +1450,125 @@ button.btn-sm {
   .page-info { display: none; }
   .wa-nav-right a { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Scraper control panel helpers
+   --------------------------------------------------------------------------- */
+
+/* Generic content card */
+.wa-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-xs);
+}
+
+/* Stat cards used on the scraper page */
+.wa-stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 18px 16px;
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: box-shadow 0.15s, transform 0.15s;
+  animation: scaleIn 0.2s ease both;
+}
+.wa-stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.wa-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.wa-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: -0.04em;
+  color: var(--text-1);
+  line-height: 1.1;
+}
+.wa-stat-value.wa-stat-warn { color: var(--warn); }
+.wa-stat-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+/* Semantic action buttons */
+.btn-primary {
+  background: var(--accent) !important;
+  border: 1px solid var(--accent) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+.btn-primary:hover {
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+  box-shadow: 0 2px 8px rgb(16 185 129 / .25) !important;
+}
+
+.btn-danger {
+  background: var(--error) !important;
+  border: 1px solid var(--error) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+.btn-danger:hover {
+  background: #e11d48 !important;
+  border-color: #e11d48 !important;
+  box-shadow: 0 2px 8px rgb(244 63 94 / .25) !important;
+}
+.btn-danger:disabled {
+  background: var(--muted-bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text-3) !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+/* Alert banners (HTMX partial responses) */
+.wa-alert {
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  font-size: 13.5px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  animation: fadeIn 0.2s ease both;
+}
+.wa-alert--success {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+  border-color: #a7f3d0;
+}
+.wa-alert--error {
+  background: var(--err-bg);
+  color: var(--err-text);
+  border-color: #fecdd3;
+}
+.wa-alert--info {
+  background: var(--info-bg);
+  color: var(--info-text);
+  border-color: #bfdbfe;
+}
+.wa-alert--warn {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  border-color: #fde68a;
+}
+
+/* HTMX loading indicator */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: inline; }
+
+/* wa-muted alias for inline colour */
+.wa-muted { color: var(--text-2); }
+

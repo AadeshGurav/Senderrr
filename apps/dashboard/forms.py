@@ -132,8 +132,29 @@ class MessageTemplateForm(forms.ModelForm):
         }
 
 
+_WEEKDAY_CHOICES = [
+    ("0", "Mon"),
+    ("1", "Tue"),
+    ("2", "Wed"),
+    ("3", "Thu"),
+    ("4", "Fri"),
+    ("5", "Sat"),
+    ("6", "Sun"),
+]
+
+
 class SettingsForm(forms.Form):
     """Form for editing runtime configuration."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        # MultipleChoiceField expects a list; the DB stores a comma-separated string.
+        if "initial" in kwargs:
+            raw = kwargs["initial"].get("SCRAPER_ACTIVE_WEEKDAYS", "0,1,2,3,4,5,6")
+            if isinstance(raw, str):
+                self.initial["SCRAPER_ACTIVE_WEEKDAYS"] = [
+                    d.strip() for d in raw.split(",") if d.strip()
+                ]
 
     SCRAPER_REQUEST_TIMEOUT = forms.IntegerField(
         label="Request timeout (seconds)",
@@ -154,6 +175,30 @@ class SettingsForm(forms.Form):
             "Default: 12 h. Increase before long weekends (e.g. 96 for 4-day break)."
         ),
     )
+    SCRAPER_ACTIVE_HOUR_START = forms.IntegerField(
+        label="Live hours — from",
+        min_value=0,
+        max_value=23,
+        help_text="Scraper activates at this hour (0–23, IST).",
+    )
+    SCRAPER_ACTIVE_HOUR_END = forms.IntegerField(
+        label="Live hours — until",
+        min_value=0,
+        max_value=23,
+        help_text="Scraper deactivates after this hour (0–23, IST).",
+    )
+    SCRAPER_ACTIVE_WEEKDAYS = forms.MultipleChoiceField(
+        label="Active days",
+        choices=_WEEKDAY_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Scraper only runs on selected days. Deselect weekends/holidays.",
+    )
+
+    def clean_SCRAPER_ACTIVE_WEEKDAYS(self) -> str:
+        """Store selected days as a comma-separated string."""
+        days: list[str] = self.cleaned_data.get("SCRAPER_ACTIVE_WEEKDAYS", [])
+        return ",".join(sorted(days))
+
     AUTOMATION_JITTER_MIN = forms.FloatField(
         label="Jitter min (seconds)",
         min_value=5,
