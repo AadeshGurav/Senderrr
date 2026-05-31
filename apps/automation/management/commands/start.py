@@ -81,7 +81,9 @@ class Command(BaseCommand):
         self.stdout.write("Dashboard: http://localhost:8000\n")
 
         self._kill_stale_services()
-        os.execvp("honcho", ["honcho", "start"])
+        from django.conf import settings
+        honcho = str(settings.BASE_DIR / ".venv" / "bin" / "honcho")
+        os.execvp(honcho, [honcho, "start"])
         return "Started"
 
     def _purge_if_fresh_db(self) -> None:

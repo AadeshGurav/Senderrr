@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from django.db.models import F
 from django.utils import timezone
@@ -13,19 +14,34 @@ logger = logging.getLogger(__name__)
 
 
 def register_worker(worker_id: str) -> WorkerSession:
-    """Get or create a WorkerSession and set status to STARTING.
+    """Get or create a WorkerSession, binding it to the admin from WA_ADMIN_ID.
+
+    The admin FK must be set so ``_admin_has_healthy_session`` can verify
+    session health by admin.  Without it, all healthy-session checks return
+    False and the rotation falls back to "any active admin" on every task.
 
     Returns:
         The ``WorkerSession`` instance.
     """
+    admin_id = int(os.environ.get("WA_ADMIN_ID", "-1"))
+    admin_fk_id = admin_id if admin_id >= 0 else None
+
     session, created = WorkerSession.objects.get_or_create(
         worker_id=worker_id,
-        defaults={"status": WorkerSession.Status.STARTING},
+        defaults={
+            "status": WorkerSession.Status.STARTING,
+            "admin_id": admin_fk_id,
+        },
     )
     if not created:
+        updates: dict = {"status": WorkerSession.Status.STARTING, "last_error": ""}
+        if session.admin_id != admin_fk_id:
+            updates["admin_id"] = admin_fk_id
         session.status = WorkerSession.Status.STARTING
         session.last_error = ""
-        session.save(update_fields=["status", "last_error", "updated_at"])
+        for k, v in updates.items():
+            setattr(session, k, v)
+        session.save(update_fields=[*updates.keys(), "updated_at"])
 
     _log_event(session, WorkerSessionLog.Event.STARTED, "Worker registered")
     return session

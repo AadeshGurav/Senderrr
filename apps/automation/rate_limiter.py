@@ -17,20 +17,20 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# --- Hardcoded limits (NOT user-configurable) ---
-ADMIN_HOURLY_LIMIT = 15
-ADMIN_DAILY_LIMIT = 60
+# Defaults — overridden by AUTOMATION_HOURLY_LIMIT / AUTOMATION_DAILY_LIMIT env vars.
+ADMIN_HOURLY_LIMIT = int(getattr(settings, "AUTOMATION_HOURLY_LIMIT", 500))
+ADMIN_DAILY_LIMIT = int(getattr(settings, "AUTOMATION_DAILY_LIMIT", 5000))
 
 # Daily limits during warm-up (day number → max daily sends).
 # Day 1 is the day warm_up_started_at was set.
 ADMIN_WARM_UP_DAILY = {
-    1: 10,
-    2: 25,
-    3: 25,
-    4: 40,
-    5: 40,
-    6: 60,
-    7: 60,
+    1: 50,
+    2: 100,
+    3: 150,
+    4: 200,
+    5: 300,
+    6: 400,
+    7: 500,
 }
 
 # Redis key templates
@@ -136,7 +136,7 @@ def check_rate_limit() -> tuple[bool, str]:
         reason = (
             f"Quiet hours ({quiet_start}:00\u2013{quiet_end}:00 {settings.TIME_ZONE})"
         )
-        logger.warning("Rate limit: %s", reason)
+        logger.info("Rate limit: %s", reason)
         return False, reason
 
     admin_id = int(os.environ.get("WA_ADMIN_ID", "-1"))
@@ -147,7 +147,7 @@ def check_rate_limit() -> tuple[bool, str]:
     hourly = get_admin_hourly_count(admin_id)
     if hourly >= ADMIN_HOURLY_LIMIT:
         reason = f"Admin {admin_id} hourly limit ({hourly}/{ADMIN_HOURLY_LIMIT})"
-        logger.warning("Rate limit: %s", reason)
+        logger.info("Rate limit: %s", reason)
         return False, reason
 
     # Per-admin daily check (with warm-up scaling)
@@ -155,7 +155,7 @@ def check_rate_limit() -> tuple[bool, str]:
     daily = get_admin_daily_count(admin_id)
     if daily >= daily_limit:
         reason = f"Admin {admin_id} daily limit ({daily}/{daily_limit})"
-        logger.warning("Rate limit: %s", reason)
+        logger.info("Rate limit: %s", reason)
         return False, reason
 
     return True, ""

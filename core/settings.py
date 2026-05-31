@@ -130,9 +130,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
-LOGIN_URL = "/accounts/login/"
+LOGIN_URL = "/admin/login/"
 LOGIN_REDIRECT_URL = "/"
-LOGOUT_REDIRECT_URL = "/accounts/login/"
+LOGOUT_REDIRECT_URL = "/admin/login/"
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +167,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.campaigns.maintenance_tasks.auto_recover_unhealthy_groups",
         "schedule": crontab(minute=0),
     },
+    "recover-stuck-messages": {
+        "task": "apps.campaigns.tasks.retry_failed_messages",
+        "schedule": crontab(minute="*/5"),
+    },
 }
 
 # dispatch_heartbeats reads the live worker map and fans out to each
@@ -174,6 +178,14 @@ CELERY_BEAT_SCHEDULE = {
 CELERY_BEAT_SCHEDULE["dispatch-heartbeats"] = {
     "task": "apps.automation.tasks.dispatch_heartbeats",
     "schedule": crontab(minute="*/2"),
+}
+
+# Re-validate WhatsApp Web selectors once a week.
+# Dispatched to wa-worker-0 which always has an open browser session.
+CELERY_BEAT_SCHEDULE["validate-selectors"] = {
+    "task": "apps.automation.tasks.validate_selectors",
+    "schedule": crontab(minute=0, hour=3, day_of_week="sunday"),
+    "options": {"queue": "wa-worker-0"},
 }
 
 
@@ -230,8 +242,8 @@ AUTOMATION_TYPING_DELAY_MAX = float(
 )
 
 # Rate limits — prevents WhatsApp bans from high-volume sends
-AUTOMATION_HOURLY_LIMIT = int(os.environ.get("AUTOMATION_HOURLY_LIMIT", "30"))
-AUTOMATION_DAILY_LIMIT = int(os.environ.get("AUTOMATION_DAILY_LIMIT", "150"))
+AUTOMATION_HOURLY_LIMIT = int(os.environ.get("AUTOMATION_HOURLY_LIMIT", "500"))
+AUTOMATION_DAILY_LIMIT = int(os.environ.get("AUTOMATION_DAILY_LIMIT", "5000"))
 
 # Batch settings — pauses between groups to appear human
 AUTOMATION_BATCH_SIZE = int(os.environ.get("AUTOMATION_BATCH_SIZE", "50"))
@@ -283,3 +295,31 @@ GROUP_UNHEALTHY_RECOVERY_HOURS = int(
 # ---------------------------------------------------------------------------
 MESSAGE_MAX_RETRY_ATTEMPTS = int(os.environ.get("MESSAGE_MAX_RETRY_ATTEMPTS", "3"))
 RATE_LIMIT_RETRY_DELAY = int(os.environ.get("RATE_LIMIT_RETRY_DELAY", "3600"))
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        # Celery's Gossip + Mingle protocols emit "missed heartbeat" spam at
+        # startup while workers register with each other.  ERROR-only so real
+        # problems (e.g. broker unreachable) still surface.
+        "celery.worker.consumer.gossip": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "celery.worker.consumer.mingle": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}

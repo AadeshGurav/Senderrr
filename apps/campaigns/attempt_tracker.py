@@ -60,8 +60,15 @@ def record_attempt_failure(
     error_category: str,
     error_message: str,
     screenshot_path: str = "",
+    *,
+    count_as_failure: bool = True,
 ) -> None:
     """Mark an attempt as failed and update group health stats.
+
+    Args:
+        count_as_failure: When ``False``, increments ``total_failed`` but does
+            NOT bump ``consecutive_failures`` — used for transient rate-limit
+            refusals that don't indicate a broken group.
 
     Auto-disables the group if consecutive failures exceed the threshold.
     """
@@ -82,11 +89,17 @@ def record_attempt_failure(
     )
 
     group = attempt.message_task.group
-    WhatsAppGroup.objects.filter(pk=group.pk).update(
-        total_failed=F("total_failed") + 1,
-        last_failed_at=now,
-        consecutive_failures=F("consecutive_failures") + 1,
-    )
+    group_updates: dict = {
+        "total_failed": F("total_failed") + 1,
+        "last_failed_at": now,
+    }
+    if count_as_failure:
+        group_updates["consecutive_failures"] = F("consecutive_failures") + 1
+    WhatsAppGroup.objects.filter(pk=group.pk).update(**group_updates)
+
+    if not count_as_failure:
+        return
+
     group.refresh_from_db()
 
     threshold = getattr(settings, "GROUP_MAX_CONSECUTIVE_FAILURES", 5)

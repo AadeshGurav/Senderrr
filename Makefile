@@ -43,19 +43,23 @@ _orbstack-start:
 
 _redis-start:
 	@echo "  ▶  Starting Redis …"
-	@$(COMPOSE) up -d redis
-	@for i in $$(seq 1 10); do \
-		sleep 1; \
-		if $(PYTHON) -c "import redis; redis.Redis().ping()" > /dev/null 2>&1; then \
-			echo "  ✓  Redis is up."; \
-			break; \
-		fi; \
-		if [ "$$i" -eq 10 ]; then \
-			echo "  ✗  Redis did not respond after 10s — check Docker / OrbStack."; \
-			exit 1; \
-		fi; \
-		echo "     … waiting for Redis ($$i/10)"; \
-	done
+	@if $(PYTHON) -c "import redis; redis.Redis().ping()" > /dev/null 2>&1; then \
+		echo "  ✓  Redis already up on localhost:6379 — skipping Docker start."; \
+	else \
+		$(COMPOSE) up -d redis; \
+		for i in $$(seq 1 10); do \
+			sleep 1; \
+			if $(PYTHON) -c "import redis; redis.Redis().ping()" > /dev/null 2>&1; then \
+				echo "  ✓  Redis is up."; \
+				break; \
+			fi; \
+			if [ "$$i" -eq 10 ]; then \
+				echo "  ✗  Redis did not respond after 10s — check Docker / OrbStack."; \
+				exit 1; \
+			fi; \
+			echo "     … waiting for Redis ($$i/10)"; \
+		done; \
+	fi
 
 preflight:  ## Warn about common misconfigurations before starting
 	@echo ""

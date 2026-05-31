@@ -59,6 +59,29 @@ class WorkerSession(models.Model):
         return f"Worker {self.worker_id} [{self.status}]"
 
 
+class SelectorRecord(models.Model):
+    """Persists a discovered CSS selector for a named WhatsApp Web UI element.
+
+    Updated automatically by the selector registry whenever a structural DOM
+    probe discovers a new selector after WhatsApp rotates its identifiers.
+    """
+
+    name = models.CharField(max_length=100, unique=True, db_index=True)
+    css_selector = models.TextField()
+    last_verified_at = models.DateTimeField(null=True, blank=True)
+    failed_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Selector Record"
+        verbose_name_plural = "Selector Records"
+
+    def __str__(self) -> str:
+        return f"{self.name}: {self.css_selector[:60]}"
+
+
 class WorkerSessionLog(models.Model):
     """Immutable event log for worker session state transitions."""
 

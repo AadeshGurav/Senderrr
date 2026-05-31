@@ -39,7 +39,7 @@ def select_admin_for_group(group_id: int) -> AdminAccount | None:
     healthy_admins = [a for a in active_admins if _admin_has_healthy_session(a.pk)]
 
     if not healthy_admins:
-        logger.warning(
+        logger.info(
             "No healthy admins available for group_id=%d — using any active admin.",
             group_id,
         )

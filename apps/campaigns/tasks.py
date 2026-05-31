@@ -237,12 +237,17 @@ def _handle_send_error(
         return f"Requeued {msg_task.group.name} (worker shutdown)"
 
     category = classify_error(exc)
-    record_attempt_failure(attempt, category, str(exc))
 
     if category == ErrorCategory.RATE_LIMITED:
+        # Rate-limit is transient — don't penalise the group's failure streak.
+        record_attempt_failure(
+            attempt, category, str(exc), count_as_failure=False
+        )
         schedule_rate_limit_retry(msg_task)
         record_task_end(worker_name, success=False)
         return f"Rate-limited — retry scheduled for {msg_task.group.name}"
+
+    record_attempt_failure(attempt, category, str(exc))
 
     if category == ErrorCategory.SESSION_EXPIRED:
         mark_failed(msg_task, str(exc), category)

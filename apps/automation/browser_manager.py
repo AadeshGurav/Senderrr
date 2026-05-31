@@ -7,6 +7,7 @@ worker process gets its own singleton bound to a worker-specific session.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import threading
@@ -35,7 +36,10 @@ def resolve_user_data_dir(worker_id: int) -> str:
     try:
         admin_id = int(os.environ.get("WA_ADMIN_ID", "-1"))
     except ValueError:
-        logger.error("Invalid WA_ADMIN_ID env var: %r — falling back to legacy path.", os.environ.get("WA_ADMIN_ID"))
+        logger.error(
+            "Invalid WA_ADMIN_ID env var: %r — falling back to legacy path.",
+            os.environ.get("WA_ADMIN_ID"),
+        )
         admin_id = -1
     if admin_id >= 0:
         session_idx = int(os.environ.get("WA_SESSION_INDEX", "0"))
@@ -120,8 +124,43 @@ class PlaywrightBrowserManager:
             self._teardown_unsafe()
             return False
 
-    def _launch(self) -> Page:
-        """Start Playwright, launch Chromium, and open a blank page."""
+    def _launch(self) -> "Page":
+        """Start Playwright, launch Chromium, and open a blank page.
+
+        Playwright's sync API raises if called from within a running asyncio
+        event loop (Celery 5.x runs tasks inside one).  When detected, the
+        browser is bootstrapped in a short-lived thread that has no event loop;
+        the resulting Page object is safe to use from any thread afterwards.
+        """
+        try:
+            asyncio.get_running_loop()
+            return self._launch_from_thread()
+        except RuntimeError:
+            return self._launch_sync()
+
+    def _launch_from_thread(self) -> "Page":
+        """Bootstrap playwright from a clean thread (no asyncio event loop)."""
+        result: dict = {}
+
+        def _run() -> None:
+            asyncio.set_event_loop(None)
+            try:
+                result["page"] = self._launch_sync()
+            except Exception as exc:  # noqa: BLE001
+                result["exc"] = exc
+
+        t = threading.Thread(target=_run, daemon=True, name="playwright-launch")
+        t.start()
+        t.join(timeout=120)
+
+        if "exc" in result:
+            raise result["exc"]
+        if "page" not in result:
+            raise RuntimeError("Browser failed to launch within 120 seconds.")
+        return result["page"]
+
+    def _launch_sync(self) -> "Page":
+        """Core launch — must be called from a thread with no running event loop."""
         from playwright.sync_api import sync_playwright
 
         logger.info("Launching Playwright browser …")

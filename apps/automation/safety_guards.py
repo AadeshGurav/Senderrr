@@ -40,9 +40,10 @@ def check_session_health(page: Page) -> tuple[bool, str]:
 def _is_qr_code_visible(page: Page) -> bool:
     """Check if WhatsApp is showing a QR code for login."""
     qr_selectors = [
-        '[data-testid="qrcode"]',
+        '[data-testid="link-device-qr-code"]',  # confirmed Apr 2026
         "canvas[aria-label='Scan this QR code to link a device!']",
-        "div._akau",  # QR container class
+        '[data-testid="qrcode"]',  # older builds
+        "div._akau",
     ]
     for selector in qr_selectors:
         if page.locator(selector).count() > 0:

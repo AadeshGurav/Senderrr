@@ -41,7 +41,7 @@ def send_whatsapp_message(
         raise
     except Exception as exc:
         logger.error("Automation task failed: %s", exc, exc_info=True)
-        backoff = 180 * (2 ** self.request.retries)
+        backoff = 180 * (2**self.request.retries)
         raise self.retry(exc=exc, countdown=backoff)
 
     if success:
@@ -99,7 +99,7 @@ def worker_heartbeat(self) -> str:  # noqa: ANN001
         if page is None:
             browser_status = WorkerSession.BrowserStatus.LAUNCHING
         else:
-            from apps.automation.services import _ensure_whatsapp_loaded
+            from apps.automation.navigation_helpers import _ensure_whatsapp_loaded
             from apps.automation.safety_guards import check_session_health
 
             _ensure_whatsapp_loaded(page)
@@ -118,3 +118,39 @@ def worker_heartbeat(self) -> str:  # noqa: ANN001
 
     record_heartbeat(worker_name, browser_status)
     return f"{worker_name}: browser={browser_status}"
+
+
+@shared_task(
+    bind=True,
+    name="apps.automation.tasks.validate_selectors",
+    max_retries=0,
+    acks_late=True,
+)
+def validate_selectors(self) -> str:  # noqa: ANN001
+    """Re-validate all WhatsApp Web CSS selectors against the live DOM.
+
+    Runs once per week via celery-beat (dispatched to wa-worker-0). When a
+    selector has drifted after a WhatsApp DOM rotation, the structural probe
+    discovers the new selector and persists it to the DB so every worker
+    picks it up on its next use — zero manual intervention required.
+    """
+    from apps.automation.browser_manager import PlaywrightBrowserManager
+    from apps.automation.navigation_helpers import _ensure_whatsapp_loaded
+    from apps.automation.selector_registry import validate_all_selectors
+
+    manager = PlaywrightBrowserManager()
+    page = manager.get_page()
+    if page is None:
+        return "validate_selectors: no browser page — skipped"
+
+    try:
+        _ensure_whatsapp_loaded(page, load_timeout=30_000)
+    except Exception as exc:
+        logger.warning("Selector validation aborted — WA not ready: %s", exc)
+        return f"validate_selectors: WA not ready ({exc})"
+
+    results = validate_all_selectors(page)
+    passed = sum(1 for v in results.values() if v)
+    total = len(results)
+    logger.info("Selector validation complete: %d/%d — %s", passed, total, results)
+    return f"validate_selectors: {passed}/{total} healthy"
