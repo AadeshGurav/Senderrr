@@ -66,4 +66,10 @@ export class Advertisement {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  /** Computed property: true if ad can be sent */
+  get isSendable(): boolean {
+    return this.status === AdvertisementStatus.DRAFT ||
+      (this.status === AdvertisementStatus.ACTIVE && this.daysUsed < this.packageDays);
+  }
 }

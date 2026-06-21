@@ -82,6 +82,7 @@
     "@types/dockerode": "^4.0.1",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^25.9.2",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.2",

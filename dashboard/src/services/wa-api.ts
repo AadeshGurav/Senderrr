@@ -59,6 +59,8 @@ export const templateApi = {
   getActive: () => request<any>('/templates/active'),
   create: (data: { name: string; templateText: string }) =>
     request<any>('/templates', { method: 'POST', body: JSON.stringify(data) }),
+  createAd: (data: any) =>
+    request<any>('/advertisements', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: { name?: string; templateText?: string }) =>
     request<any>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   activate: (id: number) => request<any>(`/templates/${id}/activate`, { method: 'POST' }),
@@ -112,8 +114,10 @@ export const campaignApi = {
 export const adApi = {
   list: () => request<any[]>('/advertisements'),
   get: (id: number) => request<any>(`/advertisements/${id}`),
+  getStatistics: (id: number) => request<any>(`/advertisements/${id}/statistics`),
   create: (data: any) => request<any>('/advertisements', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: any) => request<any>(`/advertisements/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  send: (id: number) => request<any>(`/advertisements/${id}/send`, { method: 'POST' }),
   delete: (id: number) => request<void>(`/advertisements/${id}`, { method: 'DELETE' }),
 };
 

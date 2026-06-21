@@ -193,6 +193,14 @@ export function useDeleteAdMutation() {
   });
 }
 
+export function useSendAdMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => adApi.send(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
+  });
+}
+
 // ─── Templates ───────────────────────────────────────────────────
 
 export function useWaTemplatesQuery() {
