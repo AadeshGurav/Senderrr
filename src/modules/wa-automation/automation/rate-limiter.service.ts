@@ -27,15 +27,32 @@ export class RateLimiterService implements OnModuleDestroy {
   }
 
   /** Check if admin is within rate limits */
-  check(adminId: number): { allowed: boolean; reason?: string } {
+  check(adminId: number, warmUpMultiplier: number = 1.0): { allowed: boolean; reason?: string } {
+    const adjustedHourlyLimit = Math.floor(this.hourlyLimit * warmUpMultiplier);
+    const adjustedDailyLimit = Math.floor(this.dailyLimit * warmUpMultiplier);
+
     const hourly = this.getCount(this.hourly, `admin:${adminId}`, 3600_000);
     const daily = this.getCount(this.daily, `admin:${adminId}`, 86400_000);
 
-    if (hourly >= this.hourlyLimit) {
-      return { allowed: false, reason: `Hourly limit (${this.hourlyLimit}) exceeded` };
+    if (hourly >= adjustedHourlyLimit) {
+      return { allowed: false, reason: `Hourly limit (${adjustedHourlyLimit}) exceeded` };
     }
-    if (daily >= this.dailyLimit) {
-      return { allowed: false, reason: `Daily limit (${this.dailyLimit}) exceeded` };
+    if (daily >= adjustedDailyLimit) {
+      return { allowed: false, reason: `Daily limit (${adjustedDailyLimit}) exceeded` };
+    }
+    return { allowed: true };
+  }
+
+  /** Check if admin is within rate limits with custom limits */
+  checkWithLimits(adminId: number, hourlyLimit: number, dailyLimit: number): { allowed: boolean; reason?: string } {
+    const hourly = this.getCount(this.hourly, `admin:${adminId}`, 3600_000);
+    const daily = this.getCount(this.daily, `admin:${adminId}`, 86400_000);
+
+    if (hourly >= hourlyLimit) {
+      return { allowed: false, reason: `Hourly limit (${hourlyLimit}) exceeded` };
+    }
+    if (daily >= dailyLimit) {
+      return { allowed: false, reason: `Daily limit (${dailyLimit}) exceeded` };
     }
     return { allowed: true };
   }

@@ -24,6 +24,9 @@ export class AdminAccount {
   skipWarmup: boolean;
 
   @Column({ default: 0 })
+  warmUpDay: number;
+
+  @Column({ default: 0 })
   totalSent: number;
 
   @Column({ default: 0 })

@@ -10,6 +10,7 @@ import { AttemptTrackerService } from './attempt-tracker.service';
 import { MaintenanceService } from './maintenance.service';
 import { AutomationService, ErrorCategory, DeliveryResult } from '../automation/automation.service';
 import { JitterService } from '../automation/anti-ban/jitter.service';
+import { RateLimiterService } from '../automation/rate-limiter.service';
 import { TemplateService } from '../template/template.service';
 import { TemplateRendererService, NewsPlaceholders } from '../template/template-renderer.service';
 import { AdminSessionService } from '../automation/admin-session.service';
@@ -29,6 +30,7 @@ export class CampaignService {
     private readonly adminRepo: Repository<AdminAccount>,
     private readonly adminAssigner: AdminAssignerService,
     private readonly attemptTracker: AttemptTrackerService,
+    private readonly rateLimiter: RateLimiterService,
     private readonly maintenanceService: MaintenanceService,
     private readonly automationService: AutomationService,
     private readonly jitterService: JitterService,
@@ -288,6 +290,24 @@ export class CampaignService {
     }
     if (!sessionId) {
       this.logger.warn(`No active session found for admin #${adminId}, skipping task ${taskId}`);
+      return;
+    }
+
+    // Check rate limits before delivering
+    const admin = await this.adminRepo.findOne({ where: { id: adminId } });
+    if (!admin) {
+      this.logger.warn(`Admin account #${adminId} not found, skipping task ${taskId}`);
+      return;
+    }
+
+    const warmUpMultiplier = this.rateLimiter.getWarmUpMultiplier(
+      admin.warmUpStartedAt,
+      admin.skipWarmup
+    );
+
+    const rateCheck = this.rateLimiter.check(adminId, warmUpMultiplier);
+    if (!rateCheck.allowed) {
+      this.logger.warn(`Rate limit check failed for admin #${adminId}: ${rateCheck.reason}, skipping task ${taskId}`);
       return;
     }
 
