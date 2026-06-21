@@ -1,0 +1,203 @@
+import {
+  Controller, Get, Post, Param, Body, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { CampaignService } from './campaign.service';
+import { MessageTask, MessageTaskStatus } from './entities/message-task.entity';
+import { AdminAccount } from './entities/admin-account.entity';
+import { WhatsAppGroup } from './entities/whatsapp-group.entity';
+import { WhatsAppCommunity } from './entities/whatsapp-community.entity';
+import { WaAuthGuard } from '../wa-auth/wa-auth.guard';
+import { AdminAssignerService } from './admin-assigner.service';
+import { MaintenanceService } from './maintenance.service';
+
+@ApiTags('wa-automation / campaigns')
+@Controller('wa/campaigns')
+@UseGuards(WaAuthGuard)
+export class CampaignController {
+  constructor(
+    private readonly campaignService: CampaignService,
+    private readonly adminAssigner: AdminAssignerService,
+    private readonly maintenanceService: MaintenanceService,
+    @InjectRepository(AdminAccount, 'data')
+    private readonly adminRepo: Repository<AdminAccount>,
+    @InjectRepository(WhatsAppGroup, 'data')
+    private readonly groupRepo: Repository<WhatsAppGroup>,
+    @InjectRepository(WhatsAppCommunity, 'data')
+    private readonly communityRepo: Repository<WhatsAppCommunity>,
+    @InjectRepository(MessageTask, 'data')
+    private readonly taskRepo: Repository<MessageTask>,
+  ) {}
+
+  // ─── Admins ───
+
+  @Get('admins')
+  @ApiOperation({ summary: 'List admin accounts' })
+  async listAdmins() {
+    return this.adminRepo.find({ order: { id: 'ASC' } });
+  }
+
+  @Post('admins')
+  @ApiOperation({ summary: 'Create admin account' })
+  async createAdmin(@Body() body: { label: string; phoneNumber: string; sessionsPerAdmin?: number; autoCreateSession?: boolean; isSuperAdmin?: boolean }) {
+    const admin = this.adminRepo.create({
+      label: body.label,
+      phoneNumber: body.phoneNumber,
+      sessionsPerAdmin: Math.min(body.sessionsPerAdmin || 1, 4),
+      isSuperAdmin: body.isSuperAdmin ?? false,
+    });
+    return this.adminRepo.save(admin);
+  }
+
+  @Post('admins/:id/toggle')
+  async toggleAdmin(@Param('id', ParseIntPipe) id: number) {
+    const admin = await this.adminRepo.findOne({ where: { id } });
+    if (admin) {
+      admin.isActive = !admin.isActive;
+      await this.adminRepo.save(admin);
+    }
+    return admin;
+  }
+
+  @Post('admins/:id/super-admin')
+  @ApiOperation({ summary: 'Toggle super admin status' })
+  async toggleSuperAdmin(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { isSuperAdmin: boolean },
+  ) {
+    const admin = await this.adminRepo.findOne({ where: { id } });
+    if (admin) {
+      admin.isSuperAdmin = body.isSuperAdmin;
+      await this.adminRepo.save(admin);
+    }
+    return admin;
+  }
+
+  // ─── Groups ───
+
+  @Get('groups')
+  @ApiOperation({ summary: 'List WhatsApp groups' })
+  async listGroups() {
+    return this.groupRepo.find({ order: { name: 'ASC' }, relations: ['community'] });
+  }
+
+  @Post('groups')
+  @ApiOperation({ summary: 'Register a WhatsApp group' })
+  async createGroup(@Body() body: { name: string; groupJid: string; communityId?: number }) {
+    const group = this.groupRepo.create({
+      name: body.name,
+      groupJid: body.groupJid,
+      community: body.communityId ? ({ id: body.communityId } as any) : null,
+    });
+    return this.groupRepo.save(group);
+  }
+
+  @Post('groups/:id/toggle')
+  async toggleGroup(@Param('id', ParseIntPipe) id: number) {
+    const group = await this.groupRepo.findOne({ where: { id } });
+    if (group) {
+      group.isActive = !group.isActive;
+      await this.groupRepo.save(group);
+    }
+    return group;
+  }
+
+  @Post('groups/:id/mark-healthy')
+  async markGroupHealthy(@Param('id', ParseIntPipe) id: number) {
+    const group = await this.groupRepo.findOne({ where: { id } });
+    if (group) {
+      group.isHealthy = true;
+      group.consecutiveFailures = 0;
+      await this.groupRepo.save(group);
+    }
+    return group;
+  }
+
+  @Post('groups/:id/link-community')
+  async linkGroupCommunity(@Param('id', ParseIntPipe) id: number, @Body() body: { communityId: number }) {
+    const group = await this.groupRepo.findOne({ where: { id } });
+    if (group) {
+      group.community = { id: body.communityId } as any;
+      await this.groupRepo.save(group);
+    }
+    return group;
+  }
+
+  @Post('groups/:id/unlink-community')
+  async unlinkGroupCommunity(@Param('id', ParseIntPipe) id: number) {
+    const group = await this.groupRepo.findOne({ where: { id } });
+    if (group) {
+      group.community = null as any;
+      await this.groupRepo.save(group);
+    }
+    return group;
+  }
+
+  @Post('groups/set-targets')
+  @ApiOperation({ summary: 'Set which groups receive article broadcasts' })
+  async setGroupTargets(@Body() body: { groupIds: number[] }) {
+    const allGroups = await this.groupRepo.find();
+    for (const group of allGroups) {
+      group.isTargeted = body.groupIds.includes(group.id);
+    }
+    await this.groupRepo.save(allGroups);
+    return { targeted: body.groupIds.length };
+  }
+
+  // ─── Communities ───
+
+  @Get('communities')
+  @ApiOperation({ summary: 'List communities' })
+  async listCommunities() {
+    return this.communityRepo.find({ order: { name: 'ASC' } });
+  }
+
+  @Post('communities')
+  @ApiOperation({ summary: 'Create a community' })
+  async createCommunity(@Body() body: { name: string; communityJid: string }) {
+    const comm = this.communityRepo.create(body);
+    return this.communityRepo.save(comm);
+  }
+
+  @Post('communities/:id/broadcast')
+  @ApiOperation({ summary: 'Trigger broadcast to all sub-groups of a community' })
+  async communityBroadcast(@Param('id', ParseIntPipe) id: number) {
+    const groups = await this.groupRepo.find({ where: { community: { id } as any, isActive: true } });
+    return { communityId: id, affectedGroups: groups.length };
+  }
+
+  // ─── Broadcasts ───
+
+  @Get('broadcasts')
+  @ApiOperation({ summary: 'List broadcast events' })
+  async listBroadcasts() {
+    return this.campaignService.getAllBroadcasts();
+  }
+
+  @Get('broadcasts/:id')
+  @ApiOperation({ summary: 'Get broadcast details with tasks' })
+  async getBroadcast(@Param('id', ParseIntPipe) id: number) {
+    const broadcast = await this.campaignService.getBroadcast(id);
+    const tasks = await this.campaignService.getTasksForBroadcast(id);
+    return { broadcast, tasks };
+  }
+
+  @Post('broadcasts/:id/retry')
+  @ApiOperation({ summary: 'Retry failed messages immediately' })
+  async retryBroadcast(@Param('id', ParseIntPipe) id: number) {
+    const retried = await this.campaignService.retryBroadcastTasks(id);
+    return { retried };
+  }
+
+  // ─── Maintenance ───
+
+  @Post('recover-groups')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Trigger group recovery' })
+  async recoverGroups() {
+    const count = await this.maintenanceService.autoRecoverUnhealthyGroups();
+    return { recovered: count };
+  }
+}
