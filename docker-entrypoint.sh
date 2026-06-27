@@ -5,6 +5,9 @@ for dir in /app/data/sessions/*/; do
   rm -f "$dir/SingletonLock" "$dir/SingletonCookie" "$dir/SingletonSocket" "$dir/Singleton" 2>/dev/null
 done
 
+# Clean Chromium profile locks
+rm -f /app/data/sessions/.com.google.Chrome.* 2>/dev/null || true
+
 # Kill any orphaned Chrome processes
 pkill -f "chrome.*--disable-setuid-sandbox" 2>/dev/null || true
 

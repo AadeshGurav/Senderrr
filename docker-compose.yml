@@ -17,7 +17,7 @@ services:
       - ENGINE_TYPE=${ENGINE_TYPE:-whatsapp-web.js}
       - SESSION_DATA_PATH=/app/data/sessions
       - PUPPETEER_HEADLESS=${PUPPETEER_HEADLESS:-true}
-      - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+      - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu,--disable-zygote
       - STORAGE_TYPE=local
       - STORAGE_LOCAL_PATH=/app/data/media
       - SCRAPER_TARGET_URLS=${SCRAPER_TARGET_URLS:-}

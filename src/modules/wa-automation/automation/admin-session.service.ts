@@ -129,12 +129,19 @@ export class AdminSessionService {
     adminSession.openwaSessionStatus = result.status;
     await this.adminSessionRepo.save(adminSession);
 
-    try {
-      const qr = await this.sessionService.getQRCode(adminSession.openwaSessionId);
-      return { status: result.status, qrCode: qr.qrCode };
-    } catch {
-      return { status: result.status };
+    // Retry QR code fetch with exponential backoff (up to 3 retries)
+    for (let i = 0; i < 3; i++) {
+      try {
+        await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+        const qr = await this.sessionService.getQRCode(adminSession.openwaSessionId);
+        if (qr.qrCode) {
+          return { status: result.status, qrCode: qr.qrCode };
+        }
+      } catch {
+        // Wait and retry
+      }
     }
+    return { status: result.status };
   }
 
   async stopSession(adminSessionId: number): Promise<void> {
