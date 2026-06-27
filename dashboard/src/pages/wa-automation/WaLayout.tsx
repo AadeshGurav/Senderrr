@@ -80,8 +80,8 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
         {(!collapsed || isMobile) && (
           <>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-[var(--sidebar-text-active)] truncate">OpenWA</p>
-              <p className="text-[10px] text-[var(--sidebar-text)] truncate -mt-0.5">Automation</p>
+              <p className="text-sm font-semibold text-[var(--sidebar-text-active)] truncate">Senderrr</p>
+              <p className="text-[10px] text-[var(--sidebar-text)] truncate -mt-0.5">Broadcasting</p>
             </div>
             {!isMobile && (
               <button
@@ -213,7 +213,7 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           </div>
-          <span className="font-semibold text-sm">OpenWA</span>
+          <span className="font-semibold text-sm">Senderrr</span>
         </header>
 
         {/* Page content */}

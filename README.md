@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/logo/openwa_logo.webp" alt="OpenWA Logo" width="200"/>
+  <img src="docs/logo/openwa_logo.webp" alt="Senderrr Logo" width="200"/>
 </p>
 
-<h1 align="center">OpenWA</h1>
+<h1 align="center">Senderrr</h1>
 <p align="center">
   <strong>Open Source WhatsApp API Gateway</strong>
 </p>

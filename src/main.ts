@@ -175,9 +175,9 @@ async function bootstrap() {
 
   // Swagger documentation
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('OpenWA API')
-    .setDescription('Open Source WhatsApp API Gateway - Free, Self-Hosted HTTP API')
-    .setVersion('0.1.6')
+    .setTitle('Senderrr API')
+    .setDescription('Senderrr - WhatsApp Broadcasting System')
+    .setVersion('1.0.0')
     .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'X-API-Key')
     .addTag('sessions', 'WhatsApp session management')
     .addTag('messages', 'Send and manage messages')
@@ -232,10 +232,10 @@ async function bootstrap() {
 
   await app.listen(port);
 
-  console.log(`\n  🚀 OpenWA is running on: http://localhost:${port}`);
+  console.log(`\n  🚀 Senderrr is running on: http://localhost:${port}`);
   console.log(`  📚 API docs: http://localhost:${port}/api/docs`);
-  console.log(`  👤 WA Automation: http://localhost:${port}/wa/dashboard`);
-  console.log(`  🔧 OpenWA Admin: http://localhost:${port}/_openwa\n`);
+  console.log(`  👤 Dashboard: http://localhost:${port}/wa/dashboard`);
+  console.log(`  🔧 Admin: http://localhost:${port}/_openwa\n`);
 }
 
 // Global error handlers to prevent Puppeteer/WhatsApp-web.js crashes from killing the process
