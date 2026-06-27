@@ -296,14 +296,29 @@ export function useWaDashboardStatsQuery() {
         automationApi.getWorkers().catch(() => []),
         scraperApi.getArticles().catch(() => []),
       ]);
+
+      const totalSent = admins.reduce((sum: number, a: any) => sum + (a.totalSent || 0), 0);
+      const totalFailed = admins.reduce((sum: number, a: any) => sum + (a.totalFailed || 0), 0);
+      const totalAttempted = totalSent + totalFailed;
+      const deliveryRate = totalAttempted > 0 ? Math.round((totalSent / totalAttempted) * 100) : 100;
+      const activeBroadcasts = broadcasts.filter((b: any) =>
+        b.status === 'in_progress' || b.status === 'pending'
+      ).length;
+      const readySessions = workers.filter((w: any) => w.openwaSessionStatus === 'ready').length;
+      const totalSessions = workers.length;
+
       return {
         activeAdmins: admins.length,
         activeGroups: groups.filter((g: any) => g.isActive).length,
         totalBroadcasts: broadcasts.length,
+        activeBroadcasts,
         activeWorkers: workers.filter((w: any) => w.status === 'active').length,
         scrapedArticles: articles.length,
-        totalSent: admins.reduce((sum: number, a: any) => sum + (a.totalSent || 0), 0),
-        totalFailed: admins.reduce((sum: number, a: any) => sum + (a.totalFailed || 0), 0),
+        totalSent,
+        totalFailed,
+        deliveryRate,
+        readySessions,
+        totalSessions,
       };
     },
     staleTime: 30_000,

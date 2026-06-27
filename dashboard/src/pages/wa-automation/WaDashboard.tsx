@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShieldUser, Users, Radio, Cpu, FileText, Search, Send, Activity } from 'lucide-react';
+import { LayoutDashboard, ShieldUser, Users, Radio, Cpu, FileText, Search, Send, Activity, CheckCircle, Wifi } from 'lucide-react';
 import { StatCard } from '../../components/ui/StatCard';
 import { Card, CardBody } from '../../components/ui/Card';
 import { StatCardSkeleton, CardGridSkeleton } from '../../components/Skeleton';
@@ -9,12 +9,20 @@ export default function WaDashboard() {
   const navigate = useNavigate();
   const { data: stats, isLoading, error } = useWaDashboardStatsQuery();
 
+  const deliveryColor = (rate: number) => {
+    if (rate >= 95) return 'text-emerald-500';
+    if (rate >= 80) return 'text-amber-500';
+    return 'text-red-500';
+  };
+
   const statCards = [
     { label: 'Active Admins', value: stats?.activeAdmins ?? 0, icon: ShieldUser },
     { label: 'Active Groups', value: stats?.activeGroups ?? 0, icon: Users },
-    { label: 'Total Broadcasts', value: stats?.totalBroadcasts ?? 0, icon: Radio },
+    { label: 'Active Broadcasts', value: stats?.activeBroadcasts ?? 0, icon: Radio },
     { label: 'Active Workers', value: stats?.activeWorkers ?? 0, icon: Cpu },
     { label: 'Messages Sent', value: stats?.totalSent ?? 0, icon: Send },
+    { label: 'Delivery Rate', value: `${stats?.deliveryRate ?? 100}%`, icon: CheckCircle, valueClass: deliveryColor(stats?.deliveryRate ?? 100) },
+    { label: 'Sessions Ready', value: `${stats?.readySessions ?? 0}/${stats?.totalSessions ?? 0}`, icon: Wifi },
     { label: 'Articles Scraped', value: stats?.scrapedArticles ?? 0, icon: FileText },
   ];
 

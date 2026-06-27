@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Megaphone, Trash2, Play, Image, Plus, X, FileText } from 'lucide-react';
+import { Megaphone, Trash2, Play, Image, Plus } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';

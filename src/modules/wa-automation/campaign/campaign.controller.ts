@@ -164,8 +164,27 @@ export class CampaignController {
   @Post('communities/:id/broadcast')
   @ApiOperation({ summary: 'Trigger broadcast to all sub-groups of a community' })
   async communityBroadcast(@Param('id', ParseIntPipe) id: number) {
-    const groups = await this.groupRepo.find({ where: { community: { id } as any, isActive: true } });
-    return { communityId: id, affectedGroups: groups.length };
+    const community = await this.communityRepo.findOne({ where: { id } });
+    if (!community) {
+      return { success: false, message: 'Community not found' };
+    }
+
+    const groups = await this.groupRepo.find({
+      where: { community: { id } as any, isActive: true },
+    });
+
+    if (groups.length === 0) {
+      return { success: false, message: 'No active groups in this community' };
+    }
+
+    const result = await this.campaignService.createCommunityBroadcast(community, groups);
+    return {
+      communityId: id,
+      communityName: community.name,
+      affectedGroups: groups.length,
+      broadcastId: result.broadcastId,
+      tasksCreated: result.tasksCreated,
+    };
   }
 
   // ─── Broadcasts ───

@@ -4,6 +4,7 @@ import { Repository, In, LessThan } from 'typeorm';
 import { BroadcastEvent, BroadcastStatus } from './entities/broadcast-event.entity';
 import { MessageTask, MessageTaskStatus } from './entities/message-task.entity';
 import { WhatsAppGroup } from './entities/whatsapp-group.entity';
+import { WhatsAppCommunity } from './entities/whatsapp-community.entity';
 import { AdminAccount } from './entities/admin-account.entity';
 import { AdminAssignerService } from './admin-assigner.service';
 import { AttemptTrackerService } from './attempt-tracker.service';
@@ -63,6 +64,54 @@ export class CampaignService {
       relations: ['group', 'admin'],
       order: { createdAt: 'ASC' },
     });
+  }
+
+  /**
+   * Create a broadcast for a community and dispatch tasks to all its groups.
+   */
+  async createCommunityBroadcast(
+    community: WhatsAppCommunity,
+    groups: WhatsAppGroup[],
+  ): Promise<{ broadcastId: number; tasksCreated: number }> {
+    const activeTemplate = await this.templateService.getActive();
+    const fullText = activeTemplate.templateText;
+
+    // Create a single broadcast event for the community
+    const broadcast = this.broadcastRepo.create({
+      status: BroadcastStatus.PENDING,
+      totalMessages: groups.length,
+    });
+    const saved = await this.broadcastRepo.save(broadcast);
+
+    // Create tasks for each group
+    let tasksCreated = 0;
+    for (const group of groups) {
+      const admin = await this.adminAssigner.selectAdminForGroup(group.id);
+      if (!admin) {
+        this.logger.warn(`No admin available for group #${group.id}, skipping`);
+        continue;
+      }
+
+      const task = this.taskRepo.create({
+        broadcast: saved,
+        group,
+        admin,
+        workerId: `admin-${admin.id}-sess-0`,
+        status: MessageTaskStatus.PENDING,
+      });
+      await this.taskRepo.save(task);
+      tasksCreated++;
+    }
+
+    // Update broadcast status to IN_PROGRESS
+    saved.status = BroadcastStatus.IN_PROGRESS;
+    saved.startedAt = new Date();
+    await this.broadcastRepo.save(saved);
+
+    // Tasks will be picked up and dispatched by the scheduler service
+    this.logger.log(`Created community broadcast #${saved.id} with ${tasksCreated} tasks`);
+
+    return { broadcastId: saved.id, tasksCreated };
   }
 
   /**

@@ -7,6 +7,7 @@ interface StatCardProps {
   icon: LucideIcon;
   trend?: { value: number; direction: 'up' | 'down' };
   loading?: boolean;
+  valueClass?: string;
 }
 
 export function StatCard({ label, value, icon: Icon, trend, loading }: StatCardProps) {

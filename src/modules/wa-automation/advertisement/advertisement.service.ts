@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Advertisement, AdvertisementStatus, AdvertisementTargetType } from './entities/advertisement.entity';
 import { MediaAttachment } from './entities/media-attachment.entity';
-import { WhatsAppGroup } from '../../campaign/entities/whatsapp-group.entity';
-import { WhatsAppCommunity } from '../../campaign/entities/whatsapp-community.entity';
+import { WhatsAppGroup } from '../campaign/entities';
+import { WhatsAppCommunity } from '../campaign/entities';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -84,23 +84,9 @@ export class AdvertisementService {
       await this.adRepo.save(ad);
     }
 
-    // Calculate eligible groups/communities based on target type
-    let targets: WhatsAppGroup[] | WhatsAppCommunity[] = [];
-    if (ad.targetType === AdvertisementTargetType.ALL_GROUPS) {
-      targets = await this.groupRepo.find({ where: { isActive: true, isTargeted: true } });
-    } else if (ad.targetType === AdvertisementTargetType.ALL_COMMUNITIES) {
-      targets = await this.communityRepo.find({ where: { isActive: true } });
-    } else if (ad.targetType === AdvertisementTargetType.SPECIFIC) {
-      if (ad.targetGroups && ad.targetGroups.length > 0) {
-        targets = ad.targetGroups;
-      } else if (ad.targetCommunities && ad.targetCommunities.length > 0) {
-        targets = ad.targetCommunities;
-      }
-    }
-
     // TODO: Dispatch messages to all targets (this will be integrated with the broadcast system)
-    this.logger.log(`Queued advertisement #${id} for sending to ${targets.length} targets`);
-    return { success: true, message: `Queued for sending to ${targets.length} targets` };
+    this.logger.log(`Queued advertisement #${id} for sending`);
+    return { success: true, message: 'Queued for sending' };
   }
 
   async addMedia(id: number, filePath: string, originalFilename: string, mediaType: string): Promise<MediaAttachment> {

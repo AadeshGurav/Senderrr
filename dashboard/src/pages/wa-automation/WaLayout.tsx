@@ -67,11 +67,16 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
           collapsed && !isMobile ? 'justify-center' : 'gap-3'
         }`}
       >
-        <div className="w-8 h-8 rounded-xl bg-[var(--color-primary)] flex items-center justify-center shadow-lg shadow-[var(--color-primary)]/20 flex-shrink-0">
+        <button
+          onClick={() => collapsed && setCollapsed(false)}
+          className={`w-8 h-8 rounded-xl bg-[var(--color-primary)] flex items-center justify-center shadow-lg shadow-[var(--color-primary)]/20 flex-shrink-0 ${
+            collapsed && !isMobile ? 'cursor-pointer' : ''
+          }`}
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
-        </div>
+        </button>
         {(!collapsed || isMobile) && (
           <>
             <div className="flex-1 min-w-0">
@@ -158,16 +163,6 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
           </div>
           {(!collapsed || isMobile) && <span className="truncate">Logout</span>}
         </button>
-
-        {!collapsed && !isMobile && (
-          <button
-            onClick={() => setCollapsed(true)}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] transition-colors cursor-pointer"
-          >
-            <PanelLeftClose size={14} />
-            <span>Collapse sidebar</span>
-          </button>
-        )}
 
         {collapsed && !isMobile && (
           <button

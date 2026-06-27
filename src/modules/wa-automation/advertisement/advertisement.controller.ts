@@ -59,7 +59,7 @@ export class AdvertisementController {
   @ApiOperation({ summary: 'Add media attachment to advertisement' })
   async addMedia(
     @Param('id', ParseIntPipe) id: number,
-    @UploadedFile() file: Multer.File,
+    @UploadedFile() file: any,
   ) {
     if (!file) {
       throw new Error('File is required');
