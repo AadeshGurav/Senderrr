@@ -134,23 +134,15 @@ export class AutomationController {
   }
 
   @Get('admin/:adminId/session/:slot/communities')
-  @ApiOperation({ summary: 'Fetch communities from an admin session' })
-  async fetchAdminCommunities(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
-    const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
-    return this.adminSessionService.fetchCommunities(as.id);
+  @ApiOperation({ summary: 'List all communities (manual management)' })
+  async fetchAdminCommunities() {
+    return this.adminSessionService.fetchCommunities();
   }
 
   @Post('admin/:adminId/session/:slot/import-communities')
-  @ApiOperation({ summary: 'Import communities from session into DB' })
-  async importAdminCommunities(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
-    const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
-    return this.adminSessionService.importCommunities(as.id);
+  @ApiOperation({ summary: 'Import communities (not supported — use manual creation)' })
+  async importAdminCommunities() {
+    return this.adminSessionService.importCommunities();
   }
 
   // ─── Legacy session endpoints ──────────────────────────────

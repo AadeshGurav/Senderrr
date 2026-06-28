@@ -220,25 +220,16 @@ export class AdminSessionService {
     return { imported, skipped };
   }
 
-  async fetchCommunities(adminSessionId: number): Promise<{ id: string; name: string }[]> {
-    const adminSession = await this.adminSessionRepo.findOne({ where: { id: adminSessionId } });
-    if (!adminSession) throw new NotFoundException(`Admin session #${adminSessionId} not found`);
-    return this.sessionService.getCommunities(adminSession.openwaSessionId);
+  async fetchCommunities(): Promise<{ id: string; name: string }[]> {
+    // Return all communities from the database (managed manually via dashboard)
+    const all = await this.communityRepo.find({ order: { name: 'ASC' } });
+    return all.map(c => ({ id: c.communityJid, name: c.name }));
   }
 
-  async importCommunities(adminSessionId: number): Promise<{ imported: number; skipped: number }> {
-    const communities = await this.fetchCommunities(adminSessionId);
-    let imported = 0;
-    let skipped = 0;
-
-    for (const c of communities) {
-      const exists = await this.communityRepo.findOne({ where: { communityJid: c.id } as any });
-      if (exists) { skipped++; continue; }
-      await this.communityRepo.save({ name: c.name, communityJid: c.id } as any);
-      imported++;
-    }
-
-    return { imported, skipped };
+  async importCommunities(): Promise<{ imported: number; skipped: number }> {
+    // Community auto-detection is not supported by whatsapp-web.js.
+    // Users create communities manually via the dashboard.
+    return { imported: 0, skipped: 0 };
   }
 
   // ─── Super Admin ──────────────────────────────────────────────

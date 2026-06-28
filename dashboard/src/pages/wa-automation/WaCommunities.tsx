@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Send, Building2, Download } from 'lucide-react';
+import { Plus, Send, Building2 } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -11,43 +11,15 @@ import {
   useWaCommunitiesQuery,
   useCreateWaCommunityMutation,
   useCommunityBroadcastMutation,
-  useImportCommunitiesMutation,
-  useAllAdminSessionsQuery,
 } from '../../hooks/wa-queries';
 
 export default function WaCommunities() {
   const { data: communities = [], isLoading } = useWaCommunitiesQuery();
   const createMutate = useCreateWaCommunityMutation();
   const broadcastMutate = useCommunityBroadcastMutation();
-  const importCommunitiesMutate = useImportCommunitiesMutation();
   const { success, error: showError } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '', communityJid: '' });
-
-  // ─── Import from session ──────────────────────────────────
-  const { data: allSessions = [] } = useAllAdminSessionsQuery();
-  const [importSessionId, setImportSessionId] = useState<number | null>(null);
-
-  const connectedAdmins = allSessions
-    .filter((s: any) => s.openwaSessionStatus === 'ready')
-    .reduce((acc: any[], s: any) => {
-      if (!acc.find((a: any) => a.adminId === s.adminId)) {
-        acc.push({ adminId: s.adminId, sessionIndex: s.sessionIndex });
-      }
-      return acc;
-    }, []);
-
-  const handleImport = async () => {
-    if (!importSessionId) return;
-    const session = connectedAdmins.find((s: any) => s.adminId === importSessionId);
-    if (!session) return;
-    try {
-      const result = await importCommunitiesMutate.mutateAsync({ adminId: session.adminId, slot: session.sessionIndex });
-      success('Communities imported', `${result.imported} new, ${result.skipped} already existed`);
-    } catch (e: any) {
-      showError('Failed to import communities', e.message);
-    }
-  };
 
   const handleCreate = async () => {
     try {
@@ -78,26 +50,7 @@ export default function WaCommunities() {
             Manage WhatsApp communities and trigger broadcasts
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {connectedAdmins.length > 0 && (
-            <div className="flex items-center gap-2">
-              <select
-                value={importSessionId ?? ''}
-                onChange={e => setImportSessionId(e.target.value ? parseInt(e.target.value) : null)}
-                className="px-3 py-2 text-sm bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-              >
-                <option value="">Select connected admin...</option>
-                {connectedAdmins.map((s: any) => (
-                  <option key={s.adminId} value={s.adminId}>Admin #{s.adminId}</option>
-                ))}
-              </select>
-              <Button size="sm" variant="secondary" icon={Download} onClick={handleImport} loading={importCommunitiesMutate.isPending}>
-                Import
-              </Button>
-            </div>
-          )}
-          <Button icon={Plus} onClick={() => setModalOpen(true)}>Add Community</Button>
-        </div>
+        <Button icon={Plus} onClick={() => setModalOpen(true)}>Add Community</Button>
       </div>
 
       {isLoading ? (
