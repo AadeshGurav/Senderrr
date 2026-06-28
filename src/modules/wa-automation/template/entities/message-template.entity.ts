@@ -11,7 +11,7 @@ export class MessageTemplate {
   @Column({ type: 'text' })
   templateText: string;
 
-  @Column({ default: true })
+  @Column({ default: false })
   isActive: boolean;
 
   @CreateDateColumn()

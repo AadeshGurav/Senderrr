@@ -64,6 +64,7 @@ export const templateApi = {
   update: (id: number, data: { name?: string; templateText?: string }) =>
     request<any>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   activate: (id: number) => request<any>(`/templates/${id}/activate`, { method: 'POST' }),
+  deactivate: (id: number) => request<any>(`/templates/${id}/deactivate`, { method: 'POST' }),
   delete: (id: number) => request<void>(`/templates/${id}`, { method: 'DELETE' }),
   preview: (templateText: string) =>
     request<{ rendered: string }>('/templates/preview', { method: 'POST', body: JSON.stringify({ templateText }) }),

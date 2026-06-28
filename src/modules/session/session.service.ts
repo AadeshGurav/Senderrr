@@ -464,6 +464,14 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
     return this.engines.get(id);
   }
 
+  async getCommunities(id: string): Promise<{ id: string; name: string }[]> {
+    await this.findOne(id);
+    const engine = this.engines.get(id);
+    if (!engine) throw new BadRequestException('Session is not started');
+    const communities = await engine.getCommunities();
+    return communities.map(c => ({ id: c.id, name: c.name }));
+  }
+
   async getGroups(id: string): Promise<{ id: string; name: string }[]> {
     await this.findOne(id); // Verify session exists
     const engine = this.engines.get(id);

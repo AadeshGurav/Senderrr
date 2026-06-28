@@ -375,6 +375,55 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     return numberId !== null;
   }
 
+  async getCommunities(): Promise<Group[]> {
+    this.ensureReady();
+    // WhatsApp Web internal API — only available in browser context
+    try {
+      const page = this.client!['pupPage'];
+      if (page) {
+        const communities = await page.evaluate(() => {
+          // Try multiple internal storage paths for community data
+          const stores: any[] = [];
+          const c = (window as any).Store?.Community?.models;
+          if (c) stores.push(...c);
+          const w = (window as any).WPP?.whatsapp?.CommunityStore?.models;
+          if (w) stores.push(...w);
+          return stores.map((s: any) => ({
+            id: s.id?._serialized || s.id?.toString() || '',
+            name: s.name || s.displayName || '',
+          }));
+        });
+        if (communities.length > 0) {
+          return communities.filter((c: { id: string }) => c.id);
+        }
+      }
+    } catch {
+      // Internal API unavailable — fall through to group-based detection
+    }
+
+    // Fallback: detect communities from group chats
+    const chats = await this.client!.getChats();
+    const groups = chats.filter(chat => chat.isGroup);
+    const communityGroups: Group[] = [];
+
+    for (const g of groups) {
+      const groupChat = g as unknown as GroupChat;
+      // Announcement channels (isAnnounce=true) belong to communities
+      if (groupChat.isAnnounce) {
+        communityGroups.push({
+          id: g.id._serialized,
+          name: g.name,
+          participantsCount: groupChat.participants?.length,
+          isAdmin: groupChat.participants?.some(
+            p => p.isAdmin && p.id._serialized === this.client?.info?.wid?._serialized,
+          ),
+        });
+      }
+    }
+
+    return communityGroups;
+  }
+
   async getGroups(): Promise<Group[]> {
     this.ensureReady();
     const chats = await this.client!.getChats();

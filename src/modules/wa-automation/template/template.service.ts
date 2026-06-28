@@ -44,7 +44,7 @@ export class TemplateService {
   }
 
   async create(data: { name: string; templateText: string }): Promise<MessageTemplate> {
-    const tpl = this.templateRepo.create(data);
+    const tpl = this.templateRepo.create({ ...data, isActive: false });
     return this.templateRepo.save(tpl);
   }
 
@@ -56,10 +56,21 @@ export class TemplateService {
   }
 
   async activate(id: number): Promise<MessageTemplate> {
-    // Deactivate all, then activate the chosen one
-    await this.templateRepo.update({}, { isActive: false });
+    // Deactivate all templates first
+    await this.templateRepo
+      .createQueryBuilder()
+      .update(MessageTemplate)
+      .set({ isActive: false })
+      .execute();
+    // Then activate the chosen one
     const tpl = await this.findOne(id);
     tpl.isActive = true;
+    return this.templateRepo.save(tpl);
+  }
+
+  async deactivate(id: number): Promise<MessageTemplate> {
+    const tpl = await this.findOne(id);
+    tpl.isActive = false;
     return this.templateRepo.save(tpl);
   }
 

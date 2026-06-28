@@ -47,6 +47,12 @@ export class TemplateController {
     return this.templateService.activate(id);
   }
 
+  @Post(':id/deactivate')
+  @ApiOperation({ summary: 'Deactivate a template' })
+  async deactivate(@Param('id', ParseIntPipe) id: number) {
+    return this.templateService.deactivate(id);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a template' })

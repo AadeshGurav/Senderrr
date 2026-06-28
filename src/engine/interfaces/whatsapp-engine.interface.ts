@@ -250,6 +250,7 @@ export interface IWhatsAppEngine {
 
   // Groups - Basic
   getGroups(): Promise<Group[]>;
+  getCommunities(): Promise<Group[]>;
 
   // Groups - Extended (Phase 3)
   getGroupInfo(groupId: string): Promise<GroupInfo | null>;

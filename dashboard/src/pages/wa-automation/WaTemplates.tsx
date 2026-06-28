@@ -14,6 +14,7 @@ import {
   useCreateTemplateMutation,
   useUpdateTemplateMutation,
   useActivateTemplateMutation,
+  useDeactivateTemplateMutation,
   useDeleteTemplateMutation,
 } from '../../hooks/wa-queries';
 import { templateApi } from '../../services/wa-api';
@@ -24,6 +25,7 @@ export default function WaTemplates() {
   const createMutate = useCreateTemplateMutation();
   const updateMutate = useUpdateTemplateMutation();
   const activateMutate = useActivateTemplateMutation();
+  const deactivateMutate = useDeactivateTemplateMutation();
   const deleteMutate = useDeleteTemplateMutation();
   const { success, error: showError } = useToast();
 
@@ -63,6 +65,11 @@ export default function WaTemplates() {
   const handleActivate = async (id: number) => {
     await activateMutate.mutateAsync(id);
     success('Template activated');
+  };
+
+  const handleDeactivate = async (id: number) => {
+    await deactivateMutate.mutateAsync(id);
+    success('Template deactivated');
   };
 
   const handleDelete = async () => {
@@ -172,7 +179,11 @@ export default function WaTemplates() {
                         >
                           Edit
                         </Button>
-                        {!t.isActive && (
+                        {t.isActive ? (
+                          <Button size="sm" variant="ghost" onClick={() => handleDeactivate(t.id)}>
+                            Deactivate
+                          </Button>
+                        ) : (
                           <Button size="sm" variant="ghost" onClick={() => handleActivate(t.id)}>
                             Activate
                           </Button>

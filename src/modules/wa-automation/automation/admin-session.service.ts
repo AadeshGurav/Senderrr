@@ -221,18 +221,20 @@ export class AdminSessionService {
   }
 
   async fetchCommunities(adminSessionId: number): Promise<{ id: string; name: string }[]> {
-    return this.fetchGroups(adminSessionId);
+    const adminSession = await this.adminSessionRepo.findOne({ where: { id: adminSessionId } });
+    if (!adminSession) throw new NotFoundException(`Admin session #${adminSessionId} not found`);
+    return this.sessionService.getCommunities(adminSession.openwaSessionId);
   }
 
   async importCommunities(adminSessionId: number): Promise<{ imported: number; skipped: number }> {
-    const groups = await this.fetchGroups(adminSessionId);
+    const communities = await this.fetchCommunities(adminSessionId);
     let imported = 0;
     let skipped = 0;
 
-    for (const g of groups) {
-      const exists = await this.communityRepo.findOne({ where: { communityJid: g.id } as any });
+    for (const c of communities) {
+      const exists = await this.communityRepo.findOne({ where: { communityJid: c.id } as any });
       if (exists) { skipped++; continue; }
-      await this.communityRepo.save({ name: g.name, communityJid: g.id } as any);
+      await this.communityRepo.save({ name: c.name, communityJid: c.id } as any);
       imported++;
     }
 

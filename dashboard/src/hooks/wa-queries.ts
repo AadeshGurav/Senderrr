@@ -247,6 +247,17 @@ export function useDeleteTemplateMutation() {
   });
 }
 
+export function useDeactivateTemplateMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => templateApi.deactivate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: waKeys.templates });
+      qc.invalidateQueries({ queryKey: waKeys.activeTemplate });
+    },
+  });
+}
+
 // ─── Scraper ─────────────────────────────────────────────────────
 
 export function useWaArticlesQuery() {
