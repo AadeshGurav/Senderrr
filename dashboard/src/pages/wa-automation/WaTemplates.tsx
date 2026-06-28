@@ -7,6 +7,7 @@ import { Input, Textarea } from '../../components/ui/Input';
 import { Modal, ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useToast } from '../../components/Toast';
+import MarkdownGuide from '../../components/ui/MarkdownGuide';
 import {
   useWaTemplatesQuery,
   useActiveTemplateQuery,
@@ -83,6 +84,8 @@ export default function WaTemplates() {
         <h1 className="text-2xl font-bold text-[var(--color-text)]">Message Templates</h1>
         <p className="text-sm text-[var(--color-text-secondary)] mt-1">Create and manage message templates with dynamic placeholders</p>
       </div>
+
+      <MarkdownGuide />
 
       {active && (
         <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-start gap-3">
