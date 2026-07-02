@@ -64,6 +64,8 @@ export class AdvertisementService {
   }
 
   async delete(id: number): Promise<boolean> {
+    await this.mediaRepo.delete({ advertisement: { id } });
+    await this.broadcastRepo.update({ advertisementId: id }, { advertisementId: null as any });
     const result = await this.adRepo.delete(id);
     return (result.affected ?? 0) > 0;
   }
