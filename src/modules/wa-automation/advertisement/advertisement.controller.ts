@@ -4,6 +4,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import type { Multer } from 'multer';
 import { AdvertisementService } from './advertisement.service';
 import { WaAuthGuard } from '../wa-auth/wa-auth.guard';
@@ -46,7 +49,16 @@ export class AdvertisementController {
   }
 
   @Post(':id/media')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: join(process.cwd(), 'data', 'media'),
+      filename: (_req, file, cb) => {
+        const ext = extname(file.originalname);
+        cb(null, `ad-${uuidv4()}${ext}`);
+      },
+    }),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  }))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

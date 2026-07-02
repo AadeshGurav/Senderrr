@@ -36,7 +36,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-[fadeIn_0.15s_ease]" />
       <div
-        className={`relative w-full ${sizes[size]} bg-[var(--color-surface)] rounded-2xl shadow-[var(--shadow-xl)] animate-[scaleIn_0.2s_ease] overflow-hidden`}
+        className={`relative w-full ${sizes[size]} bg-[var(--color-surface)] rounded-2xl shadow-[var(--shadow-xl)] animate-[scaleIn_0.2s_ease] flex flex-col max-h-[90vh]`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-light)]">
@@ -61,7 +61,7 @@ export function ModalBody({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={`px-6 py-5 space-y-4 ${className}`}>{children}</div>;
+  return <div className={`flex-1 min-h-0 px-6 py-5 space-y-4 overflow-y-auto ${className}`}>{children}</div>;
 }
 
 export function ModalFooter({
