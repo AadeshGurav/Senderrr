@@ -7,13 +7,7 @@
 - Setup and installation must be fully automated with zero manual interruption. Confidence: 1
 
 # workflow
-- Index and analyze the entire relevant codebase to fully understand the problem before attempting to write or suggest a solution. Confidence: 1
-- Do not restart the dev server; it's already running and changes are picked up automatically after rebuilding. Confidence: 0.65
-- When building features incrementally, work on a single development instance (avoid separate dev+test environments) — changes are tested on the same live data. Confidence: 0.85
-- For complex debugging/troubleshooting issues, step back and formulate a clear, structured plan with rationale before making any changes — avoid scattered incremental attempts. Confidence: 0.90
-- Write comments that explain the intent behind the code, never the implementation details; if the implementation is hard to explain, it must be refactored. Confidence: 0.95
-- Use a "react/" prefix for Git branch names when working on the React architecture (not "feature/"), and never push React architecture branches to main. Confidence: 0.75
-
+See [workflow/taste.md](workflow/taste.md)
 # python-tooling
 - Apply formatting and linting changes only to files that have been modified, rather than formatting the entire project blindly. Confidence: 0.90
 - Enforce project-standard formatting using Black (88-character limit) and Ruff for quick fixes. Confidence: 1
@@ -48,12 +42,4 @@
 - Use specific, action-oriented microcopy for interactive elements (e.g., "Save changes" instead of "Submit"). Confidence: 0.95
 
 # architecture
-- Think in systems rather than isolated features, prioritizing overall maintainability and minimal cognitive load. Confidence: 0.95
-- Prefer a single Docker container deployment that bundles all services together under one roof. Confidence: 0.87
-- Fix issues permanently at the source (Dockerfile, setup scripts, config) rather than applying temporary runtime patches to running containers. Confidence: 0.90
-- WA_Automation UI is the primary customer-facing interface; OpenWA serves as the internal engine/API layer not directly exposed to users. Confidence: 0.80
-- Before implementing major architectural changes, present the plan for user approval first and ask clarifying questions. Confidence: 1
-- Use only React (no Django/Python) in the tech stack; use OpenWA's Bull MQ instead of Celery for task queuing. Confidence: 0.85
-- Leverage OpenWA's built-in Redis and BullMQ instead of adding redundant separate services. Confidence: 0.65
-- When dealing with undocumented features, explore iteratively (try, fail, refine) within the actual capabilities of the underlying OpenWA engine rather than hacking/patching around it. Confidence: 0.70
-- For ngrok in docker-compose, conditionally include `--url=${NGROK_URL:-}` in the command when NGROK_URL is set in .env. Confidence: 0.65
+See [architecture/taste.md](architecture/taste.md)
