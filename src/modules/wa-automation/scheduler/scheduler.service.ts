@@ -152,7 +152,6 @@ export class SchedulerService {
         if (!session.openwaSessionId) continue;
         const result = await this.groupSyncService.syncSessionGroups(
           session.openwaSessionId,
-          session.adminId,
         );
         totalGroups += result.groups.length;
       }
@@ -174,18 +173,18 @@ export class SchedulerService {
 
   @Cron(CronExpression.EVERY_HOUR)
   async resolveStaleBroadcasts(): Promise<void> {
-    const count = await this.maintenanceService.resolveStaleBroadcasts();
+    const count = await this.campaignService.reDispatchStalledBroadcasts();
     if (count > 0) this.logger.log(`Resolved ${count} stale broadcasts stuck IN_PROGRESS`);
   }
 
-  // ─── Ad dispatch: hourly ───
+  // ─── Ad dispatch: every hour ───
 
   @Cron(CronExpression.EVERY_HOUR)
   async dispatchDueAdvertisements(): Promise<void> {
     const due = await this.adService.findDue();
     for (const ad of due) {
       this.logger.log(`Dispatching due advertisement #${ad.id}`);
-      await this.adService.sendAdvertisement(ad.id).catch(err =>
+      await this.adService.dispatchNextDay(ad.id).catch(err =>
         this.logger.error(`Ad #${ad.id} dispatch failed: ${err.message}`),
       );
     }

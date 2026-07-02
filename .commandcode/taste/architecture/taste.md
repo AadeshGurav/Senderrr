@@ -1,0 +1,12 @@
+# architecture
+- Prefer a single Docker container deployment that bundles all services together under one roof. Confidence: 0.87
+- WA_Automation UI is the primary customer-facing interface; OpenWA serves as the internal engine/API layer not directly exposed to users. Confidence: 0.80
+- Before implementing major architectural changes, present the plan for user approval first and ask clarifying questions. Confidence: 1
+- Use only React (no Django/Python) in the tech stack; use OpenWA's Bull MQ instead of Celery for task queuing. Confidence: 0.85
+- Leverage OpenWA's built-in Redis and BullMQ instead of adding redundant separate services. Confidence: 0.65
+- Prefer a single Docker container deployment that bundles all services together under one roof. Confidence: 0.87
+- WA_Automation UI is the primary customer-facing interface; OpenWA serves as the internal engine/API layer not directly exposed to users. Confidence: 0.80
+- Before implementing major architectural changes, present the plan for user approval first and ask clarifying questions. Confidence: 1
+- Use only React (no Django/Python) in the tech stack; use OpenWA's Bull MQ instead of Celery for task queuing. Confidence: 0.85
+- Leverage OpenWA's built-in Redis and BullMQ instead of adding redundant separate services. Confidence: 0.65
+- When dealing with undocumented features, explore iteratively (try, fail, refine) within the actual capabilities of the underlying OpenWA engine rather than hacking/patching around it. Confidence: 0.70

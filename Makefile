@@ -10,6 +10,11 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := setup
 
+# Activate ngrok profile if NGROK_AUTH_TOKEN is set in .env
+_ngrok = $(shell grep -q '^NGROK_AUTH_TOKEN=' .env 2>/dev/null && \
+  [ -n "$$(grep '^NGROK_AUTH_TOKEN=' .env | cut -d '=' -f2)" ] && \
+  echo "--profile ngrok")
+
 .PHONY: help setup start stop restart logs doctor build
 
 help:
@@ -26,7 +31,10 @@ setup: _check-deps build _start  ## Full setup - build & start everything
 	@echo "   Dashboard:      http://localhost:2785/ (or /wa/dashboard)"
 	@echo "   API Docs:       http://localhost:2785/api/docs"
 	@echo "   Queue UI:       http://localhost:2785/api/admin/queues"
+	$(if $(_ngrok), @echo "   Ngrok Tunnel:  http://localhost:4040 (dashboard)",)
 	@echo ""
+	$(if $(_ngrok), @echo "   🌐  Ngrok tunnel active — webhooks reachable via ngrok URL",)
+	$(if $(_ngrok), @echo "",)
 	@echo "   Login: admin / admin"
 	@echo ""
 	@echo "   To stop:  make stop"
@@ -35,16 +43,16 @@ setup: _check-deps build _start  ## Full setup - build & start everything
 start: _check-deps _start  ## Start all services
 
 stop:  ## Stop everything
-	@docker compose down --remove-orphans
+	@docker compose $(_ngrok) down --remove-orphans
 
 restart: stop start  ## Rebuild & restart
 
 build: _check-deps  ## Build Docker image
 	@echo "  Building OpenWA single-container image..."
-	@docker compose build
+	@docker compose $(_ngrok) build
 
 logs:  ## Follow logs
-	@docker compose logs -f
+	@docker compose $(_ngrok) logs -f
 
 # ─── Doctor (diagnose & auto-repair) ──────────────────────────────
 
@@ -64,7 +72,7 @@ doctor:  ## Diagnose & auto-repair
 		echo "  OK  OpenWA healthy"; \
 	else \
 		echo "  FIX  OpenWA not responding — restarting ..."; \
-		docker compose restart; \
+		docker compose $(_ngrok) restart; \
 		for i in $$(seq 1 30); do \
 			if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
 				echo "  OK  OpenWA recovered"; break; \
@@ -83,7 +91,7 @@ _check-deps:
 
 _start:
 	@echo "  Starting container ..."
-	@docker compose up -d
+	@docker compose $(_ngrok) up -d
 	@echo "  Waiting for OpenWA ..."
 	@for i in $$(seq 1 60); do \
 		if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \

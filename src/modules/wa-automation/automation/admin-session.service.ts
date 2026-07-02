@@ -115,6 +115,23 @@ export class AdminSessionService {
     return this.adminSessionRepo.find({ order: { adminId: 'ASC', sessionIndex: 'ASC' } });
   }
 
+  async listDisconnectedSessions(): Promise<{ adminId: number; label: string | null; sessionName: string; status: string }[]> {
+    const sessions = await this.adminSessionRepo.find({
+      where: [{ openwaSessionStatus: 'disconnected' }, { openwaSessionStatus: 'failed' }] as any,
+      order: { adminId: 'ASC', sessionIndex: 'ASC' },
+    });
+    const result: { adminId: number; label: string | null; sessionName: string; status: string }[] = [];
+    for (const s of sessions) {
+      let label: string | null = null;
+      try {
+        const admin = await this.adminRepo.findOne({ where: { id: s.adminId } as any });
+        label = admin?.label || null;
+      } catch { /* ok */ }
+      result.push({ adminId: s.adminId, label, sessionName: `wa-admin-${s.adminId}-${s.sessionIndex}`, status: s.openwaSessionStatus });
+    }
+    return result;
+  }
+
   async getAdminSessionBySlot(adminId: number, slot: number): Promise<AdminSession> {
     const session = await this.adminSessionRepo.findOne({ where: { adminId, sessionIndex: slot } });
     if (!session) throw new NotFoundException(`No session for admin #${adminId}, slot ${slot}`);

@@ -105,6 +105,12 @@ export class AutomationController {
     return this.adminSessionService.listAllSessions();
   }
 
+  @Get('admin/sessions/disconnected')
+  @ApiOperation({ summary: 'List disconnected sessions that need re-authentication' })
+  async listDisconnectedSessions() {
+    return this.adminSessionService.listDisconnectedSessions();
+  }
+
   @Get('admin/:adminId/sessions')
   @ApiOperation({ summary: 'List sessions for a specific admin' })
   async listAdminSessions(@Param('adminId', ParseIntPipe) adminId: number) {

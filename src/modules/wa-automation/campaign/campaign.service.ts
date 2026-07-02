@@ -143,10 +143,10 @@ export class CampaignService {
       source: article.sourceName || '',
       publishedAt: article.publishedAt?.toISOString() || '',
       time: article.publishedAt
-        ? this.templateRenderer.formatTime(article.publishedAt, tz)
+        ? article.publishedAt.toLocaleString('en-IN', { timeZone: tz })
         : '',
     };
-    const messageText = this.templateRenderer.render(template.templateText, placeholders, tz);
+    const messageText = this.templateRenderer.render(template.templateText, placeholders);
 
     // Create broadcast event
     const broadcast = this.broadcastRepo.create({
@@ -436,15 +436,14 @@ export class CampaignService {
       source: article.sourceName || '',
       publishedAt: article.publishedAt?.toISOString() || '',
       time: article.publishedAt
-        ? this.templateRenderer.formatTime(article.publishedAt, tz)
+        ? article.publishedAt.toLocaleString('en-IN', { timeZone: tz })
         : '',
     };
-    return this.templateRenderer.render(template.templateText, placeholders, tz);
+    return this.templateRenderer.render(template.templateText, placeholders);
   }
 
   /** Compose broadcast message text using the active template (for community broadcasts, fallback). */
   private async composeBroadcastText(): Promise<string | null> {
-    const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
     const template = await this.templateService.getActive();
     if (!template) return null;
     const placeholders: NewsPlaceholders = {
@@ -456,6 +455,6 @@ export class CampaignService {
       publishedAt: '',
       time: '',
     };
-    return this.templateRenderer.render(template.templateText, placeholders, tz);
+    return this.templateRenderer.render(template.templateText, placeholders);
   }
 }

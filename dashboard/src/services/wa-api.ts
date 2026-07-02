@@ -216,4 +216,8 @@ export const automationApi = {
     `/automation/session/${sessionId}/qr`
   ),
   getRateLimits: (adminId: number) => request<any>(`/automation/rate-limits/${adminId}`),
+  listDisconnectedSessions: () =>
+    request<Array<{ adminId: number; label: string | null; sessionName: string; status: string }>>(
+      '/automation/admin/sessions/disconnected'
+    ),
 };

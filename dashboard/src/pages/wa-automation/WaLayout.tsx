@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -18,8 +18,10 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeft,
+  AlertTriangle,
 } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
+import { automationApi } from '../../services/wa-api';
 
 const NAV_ITEMS = [
   { path: '/wa/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -46,6 +48,23 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [disconnectedSessions, setDisconnectedSessions] = useState<{ adminId: number; label: string | null; sessionName: string; status: string }[]>([]);
+
+  // Poll for disconnected sessions every 15 seconds
+  const fetchDisconnected = useCallback(async () => {
+    try {
+      const sessions = await automationApi.listDisconnectedSessions();
+      setDisconnectedSessions(sessions);
+    } catch {
+      // ignore — token might not exist yet
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDisconnected();
+    const interval = setInterval(fetchDisconnected, 15_000);
+    return () => clearInterval(interval);
+  }, [fetchDisconnected]);
 
   const handleLogout = () => {
     setMobileOpen(false);
@@ -219,6 +238,34 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
+
+      {/* Non-dismissible disconnected session toast */}
+      {disconnectedSessions.length > 0 && (
+        <div
+          onClick={() => handleNav('/wa/admins')}
+          className="fixed bottom-6 right-6 z-[99999] flex items-center gap-3 px-5 py-4 rounded-xl bg-red-600 border-2 border-red-400 max-w-[460px] cursor-pointer animate-[slideIn_0.3s_ease-out]"
+          style={{
+            boxShadow: '0 0 20px rgba(220,38,38,0.6), 0 0 40px rgba(220,38,38,0.3), 0 10px 40px rgba(0,0,0,0.15)',
+          }}
+        >
+          <AlertTriangle size={22} className="flex-shrink-0 text-black" style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.3))' }} />
+          <div className="min-w-0">
+            <div
+              className="font-bold text-sm text-black"
+              style={{ textShadow: '0 0 8px rgba(255,255,255,0.3), 0 0 16px rgba(255,255,255,0.15)' }}
+            >
+              {disconnectedSessions.length} session{disconnectedSessions.length > 1 ? 's' : ''} disconnected
+            </div>
+            <div
+              className="font-semibold text-xs text-black mt-0.5"
+              style={{ textShadow: '0 0 6px rgba(255,255,255,0.25)' }}
+            >
+              {disconnectedSessions.map(s => s.label || `Admin #${s.adminId}`).join(', ')}
+              {' — click to reconnect'}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,21 @@
 import { useState } from 'react';
-import { Megaphone, Trash2, Play, Image, Plus } from 'lucide-react';
+import { Megaphone, Trash2, Play, Image, Plus, X } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Input, Textarea } from '../../components/ui/Input';
 import { Modal, ModalBody, ModalFooter } from '../../components/ui/Modal';
+import { ComboBox } from '../../components/ui/ComboBox';
 import { CardGridSkeleton } from '../../components/Skeleton';
 import { useToast } from '../../components/Toast';
-import { useWaAdvertisementsQuery, useDeleteAdMutation, useSendAdMutation } from '../../hooks/wa-queries';
-import { templateApi } from '../../services/wa-api';
+import {
+  useWaAdvertisementsQuery,
+  useDeleteAdMutation,
+  useSendAdMutation,
+  useWaGroupsQuery,
+  useWaCommunitiesQuery,
+} from '../../hooks/wa-queries';
+import { adApi } from '../../services/wa-api';
 
 const statusVariant = (status: string) => {
   switch (status) {
@@ -25,8 +32,26 @@ const targetTypes = [
   { value: 'specific', label: 'Specific Targets' },
 ];
 
+interface Group {
+  id: number;
+  name: string;
+  groupJid: string;
+  isTargeted?: boolean;
+  isActive?: boolean;
+  isHealthy?: boolean;
+}
+
+interface Community {
+  id: number;
+  name: string;
+  communityJid: string;
+  isActive?: boolean;
+}
+
 export default function WaAdvertisements() {
   const { data: ads = [], isLoading } = useWaAdvertisementsQuery();
+  const { data: groups = [] } = useWaGroupsQuery();
+  const { data: communities = [] } = useWaCommunitiesQuery();
   const deleteMutate = useDeleteAdMutation();
   const sendMutate = useSendAdMutation();
   const { success, error: showError } = useToast();
@@ -35,15 +60,48 @@ export default function WaAdvertisements() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [sendTarget, setSendTarget] = useState<{ id: number; title: string } | null>(null);
 
+  // Form state
   const [formData, setFormData] = useState({
     title: '',
     body: '',
     targetType: 'all_groups' as string,
-    targetGroups: [] as number[],
-    targetCommunities: [] as number[],
+    selectedGroups: [] as Group[],
+    selectedCommunities: [] as Community[],
     packageDays: 1,
     preferredTime: '',
   });
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  // Only targeted & active & healthy groups are selectable
+  const selectableGroups = groups.filter(
+    (g: Group) => g.isTargeted && g.isActive !== false && g.isHealthy !== false,
+  );
+  const selectableCommunities = communities.filter((c: Community) => c.isActive !== false);
+
+  const groupComboOptions = selectableGroups.map((g: Group) => ({
+    value: String(g.id),
+    label: g.name,
+    sublabel: g.groupJid,
+  }));
+
+  const communityComboOptions = selectableCommunities.map((c: Community) => ({
+    value: String(c.id),
+    label: c.name,
+    sublabel: c.communityJid,
+  }));
+
+  const selectedGroupOptions = formData.selectedGroups.map((g: Group) => ({
+    value: String(g.id),
+    label: g.name,
+    sublabel: g.groupJid,
+  }));
+
+  const selectedCommunityOptions = formData.selectedCommunities.map((c: Community) => ({
+    value: String(c.id),
+    label: c.name,
+    sublabel: c.communityJid,
+  }));
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -69,20 +127,27 @@ export default function WaAdvertisements() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreating(true);
     try {
-      const targetData = {
+      const payload: any = {
+        title: formData.title,
+        body: formData.body,
         targetType: formData.targetType,
-        targetGroups: formData.targetType === 'specific' ? formData.targetGroups : undefined,
-        targetCommunities: formData.targetType === 'specific' ? formData.targetCommunities : undefined,
         packageDays: formData.packageDays,
         preferredTime: formData.preferredTime || null,
       };
 
-      await templateApi.createAd({
-        title: formData.title,
-        body: formData.body,
-        ...targetData,
-      });
+      if (formData.targetType === 'specific') {
+        payload.targetGroups = formData.selectedGroups.map((g: Group) => ({ id: g.id }));
+        payload.targetCommunities = formData.selectedCommunities.map((c: Community) => ({ id: c.id }));
+      }
+
+      const ad = await adApi.create(payload);
+
+      // Upload media after creation if a file was selected
+      if (mediaFile && ad?.id) {
+        await adApi.uploadMedia(ad.id, mediaFile);
+      }
 
       success('Advertisement created');
       setShowForm(false);
@@ -90,13 +155,16 @@ export default function WaAdvertisements() {
         title: '',
         body: '',
         targetType: 'all_groups',
-        targetGroups: [],
-        targetCommunities: [],
+        selectedGroups: [],
+        selectedCommunities: [],
         packageDays: 1,
         preferredTime: '',
       });
+      setMediaFile(null);
     } catch (e: any) {
       showError('Failed to create advertisement', e.message);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -189,6 +257,7 @@ export default function WaAdvertisements() {
         </div>
       )}
 
+      {/* ─── Create Advertisement Modal ─────────────────────── */}
       <Modal open={!!showForm} onClose={() => setShowForm(false)} title="Create Advertisement">
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
@@ -226,23 +295,81 @@ export default function WaAdvertisements() {
           </div>
 
           {formData.targetType === 'specific' && (
-            <div className="p-3 bg-[var(--color-bg)] rounded-lg border border-[var(--color-border)]">
-              <p className="text-xs text-[var(--color-text-muted)] mb-2">Select specific groups and communities</p>
-              <div className="space-y-2">
-                <div>
-                  <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">Groups</label>
-                  <div className="h-24 overflow-y-auto border border-[var(--color-border)] rounded-lg p-2">
-                    <p className="text-xs text-[var(--color-text-muted)]">No groups available</p>
+            <div className="p-3 bg-[var(--color-bg)] rounded-lg border border-[var(--color-border)] space-y-4">
+              {/* Groups ComboBox */}
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-text)] mb-1">
+                  Target Groups
+                </label>
+                <ComboBox
+                  placeholder="Search targeted groups..."
+                  options={groupComboOptions}
+                  selected={selectedGroupOptions}
+                  onChange={(opts) => {
+                    const groupsMap = new Map(selectableGroups.map((g: Group) => [String(g.id), g]));
+                    setFormData({ ...formData, selectedGroups: opts.map(o => groupsMap.get(o.value)!).filter(Boolean) });
+                  }}
+                  emptyMessage="No targeted groups match your search"
+                />
+                {formData.selectedGroups.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {formData.selectedGroups.map((g: Group) => (
+                      <span
+                        key={g.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full
+                          bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      >
+                        {g.name}
+                        <button
+                          type="button"
+                          className="hover:text-red-500"
+                          onClick={() => setFormData({
+                            ...formData,
+                            selectedGroups: formData.selectedGroups.filter(x => x.id !== g.id),
+                          })}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
                   </div>
-                </div>
-                <div>
-                  <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">Communities</label>
-                  <div className="h-24 overflow-y-auto border border-[var(--color-border)] rounded-lg p-2">
-                    <p className="text-xs text-[var(--color-text-muted)]">No communities available</p>
-                  </div>
-                </div>
+                )}
+              </div>
+
+              {/* Communities ComboBox */}
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-text)] mb-1">
+                  Target Communities (all groups in selected communities)
+                </label>
+                <ComboBox
+                  placeholder="Search communities..."
+                  options={communityComboOptions}
+                  selected={selectedCommunityOptions}
+                  onChange={(opts) => {
+                    const communitiesMap = new Map(selectableCommunities.map((c: Community) => [String(c.id), c]));
+                    setFormData({ ...formData, selectedCommunities: opts.map(o => communitiesMap.get(o.value)!).filter(Boolean) });
+                  }}
+                  emptyMessage="No communities match your search"
+                />
+                {formData.selectedCommunities.length > 0 && (
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                    {formData.selectedCommunities.map((c: Community) => c.name).join(', ')}
+                  </p>
+                )}
               </div>
             </div>
+          )}
+
+          {formData.targetType === 'all_groups' && (
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Sends to all {selectableGroups.length} targeted, healthy groups.
+            </p>
+          )}
+
+          {formData.targetType === 'all_communities' && (
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Sends to groups within all {selectableCommunities.length} active communities.
+            </p>
           )}
 
           <div>
@@ -253,7 +380,6 @@ export default function WaAdvertisements() {
               max="30"
               value={formData.packageDays}
               onChange={(e) => setFormData({ ...formData, packageDays: parseInt(e.target.value) || 1 })}
-              placeholder="1"
             />
           </div>
 
@@ -266,11 +392,29 @@ export default function WaAdvertisements() {
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-text)] mb-1">Media Attachment (optional)</label>
+            <input
+              type="file"
+              accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+              onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+              className="w-full text-sm text-[var(--color-text-secondary)] file:mr-3 file:py-1.5 file:px-3
+                file:rounded-lg file:border-0 file:text-sm file:font-medium
+                file:bg-[var(--color-primary)]/10 file:text-[var(--color-primary)]
+                hover:file:bg-[var(--color-primary)]/20 cursor-pointer"
+            />
+            {mediaFile && (
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1">{mediaFile.name}</p>
+            )}
+          </div>
+
           <ModalFooter>
             <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
-            <Button type="submit">Create Advertisement</Button>
+            <Button type="submit" loading={creating}>
+              Create Advertisement
+            </Button>
           </ModalFooter>
         </form>
       </Modal>

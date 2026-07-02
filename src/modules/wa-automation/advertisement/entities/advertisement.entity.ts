@@ -1,9 +1,10 @@
 import {
   Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn,
-  ManyToMany, JoinTable,
+  ManyToMany, JoinTable, OneToMany,
 } from 'typeorm';
 import { WhatsAppGroup } from '../../campaign/entities/whatsapp-group.entity';
 import { WhatsAppCommunity } from '../../campaign/entities/whatsapp-community.entity';
+import { MediaAttachment } from './media-attachment.entity';
 
 export enum AdvertisementTargetType {
   ALL_GROUPS = 'all_groups',
@@ -39,6 +40,9 @@ export class Advertisement {
   @ManyToMany(() => WhatsAppCommunity)
   @JoinTable({ name: 'advertisement_communities' })
   targetCommunities: WhatsAppCommunity[];
+
+  @OneToMany(() => MediaAttachment, (media) => media.advertisement, { cascade: true })
+  mediaAttachments: MediaAttachment[];
 
   @Column({ type: 'varchar', length: 20, default: AdvertisementStatus.DRAFT })
   status: AdvertisementStatus;

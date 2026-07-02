@@ -180,10 +180,8 @@ export class BroadcastDispatcherService {
         this.adminSessionService.getAdminSessions(adminId),
         this.sleep(30_000).then(() => { throw new Error('getAdminSessions timed out after 30s'); }),
       ]) as any[];
-      sessionId = sessions.find(s => s.openwaSessionStatus === 'ready')?.openwaSessionId
-        || sessions[0]?.openwaSessionId
-        || null;
-      this.logger.log(`Admin #${adminId}: resolved session=${sessionId || 'none'} from ${sessions.length} sessions`);
+      sessionId = sessions.find(s => s.openwaSessionStatus === 'ready')?.openwaSessionId || null;
+      this.logger.log(`Admin #${adminId}: resolved session=${sessionId || 'none'} from ${sessions.length} sessions (${sessions.map(s => s.openwaSessionStatus).join(', ')})`);
     } catch (err) {
       this.logger.warn(`Admin #${adminId}: session resolution failed: ${(err as Error).message}`);
       sessionId = null;
