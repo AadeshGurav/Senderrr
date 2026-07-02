@@ -1,10 +1,11 @@
 import {
-  Controller, Get, Post, Param, Body, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller, Get, Post, Param, Body, ParseIntPipe, Query, DefaultValuePipe, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CampaignService } from './campaign.service';
+import { BroadcastStatus } from './entities/broadcast-event.entity';
 import { MessageTask, MessageTaskStatus } from './entities/message-task.entity';
 import { AdminAccount } from './entities/admin-account.entity';
 import { WhatsAppGroup } from './entities/whatsapp-group.entity';
@@ -56,6 +57,23 @@ export class CampaignController {
     const admin = await this.adminRepo.findOne({ where: { id } });
     if (admin) {
       admin.isActive = !admin.isActive;
+      await this.adminRepo.save(admin);
+    }
+    return admin;
+  }
+
+  @Post('admins/:id/warmup')
+  @ApiOperation({ summary: 'Toggle warmup mode for an admin' })
+  async toggleWarmup(@Param('id', ParseIntPipe) id: number) {
+    const admin = await this.adminRepo.findOne({ where: { id } });
+    if (admin) {
+      admin.skipWarmup = !admin.skipWarmup;
+      if (admin.skipWarmup) {
+        admin.warmUpStartedAt = null;
+        admin.warmUpDay = 0;
+      } else if (!admin.warmUpStartedAt) {
+        admin.warmUpStartedAt = new Date();
+      }
       await this.adminRepo.save(admin);
     }
     return admin;
@@ -191,8 +209,12 @@ export class CampaignController {
 
   @Get('broadcasts')
   @ApiOperation({ summary: 'List broadcast events' })
-  async listBroadcasts() {
-    return this.campaignService.getAllBroadcasts();
+  async listBroadcasts(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(25), ParseIntPipe) limit: number,
+    @Query('status') status?: BroadcastStatus,
+  ) {
+    return this.campaignService.getAllBroadcasts(page, Math.min(limit, 100), status);
   }
 
   @Get('broadcasts/:id')
@@ -211,6 +233,13 @@ export class CampaignController {
   }
 
   // ─── Maintenance ───
+
+  @Post('broadcasts/retry-all')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retry all failed broadcasts (respects anti-ban pacing)' })
+  async retryAllFailed() {
+    return this.campaignService.retryAllFailed();
+  }
 
   @Post('recover-groups')
   @HttpCode(HttpStatus.OK)

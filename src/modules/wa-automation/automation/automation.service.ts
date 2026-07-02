@@ -63,12 +63,14 @@ export class AutomationService {
   ): Promise<DeliveryResult> {
     const startTime = Date.now();
 
-    // 1. Check quiet hours
-    if (this.quietHours.isQuietHours()) {
+    // 1. Check quiet hours (reads from DB settings with timezone awareness)
+    const inQuietHours = await this.quietHours.isQuietHours();
+    if (inQuietHours) {
+      const mins = await this.quietHours.minutesUntilEnd();
       return {
         success: false,
         errorCategory: ErrorCategory.RATE_LIMITED,
-        errorMessage: `Quiet hours (${this.quietHours.minutesUntilEnd()}min until end)`,
+        errorMessage: `Quiet hours (${mins}min until end)`,
       };
     }
 

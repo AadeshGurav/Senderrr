@@ -7,14 +7,10 @@ import { WhatsAppGroup } from './entities/whatsapp-group.entity';
 import { WhatsAppCommunity } from './entities/whatsapp-community.entity';
 import { AdminAccount } from './entities/admin-account.entity';
 import { AdminAssignerService } from './admin-assigner.service';
-import { AttemptTrackerService } from './attempt-tracker.service';
-import { MaintenanceService } from './maintenance.service';
-import { AutomationService, ErrorCategory, DeliveryResult } from '../automation/automation.service';
-import { JitterService } from '../automation/anti-ban/jitter.service';
-import { RateLimiterService } from '../automation/rate-limiter.service';
-import { TemplateService } from '../template/template.service';
+import { BroadcastDispatcherService } from './broadcast-dispatcher.service';
 import { TemplateRendererService, NewsPlaceholders } from '../template/template-renderer.service';
-import { AdminSessionService } from '../automation/admin-session.service';
+import { TemplateService } from '../template/template.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class CampaignService {
@@ -30,14 +26,10 @@ export class CampaignService {
     @InjectRepository(AdminAccount, 'data')
     private readonly adminRepo: Repository<AdminAccount>,
     private readonly adminAssigner: AdminAssignerService,
-    private readonly attemptTracker: AttemptTrackerService,
-    private readonly rateLimiter: RateLimiterService,
-    private readonly maintenanceService: MaintenanceService,
-    private readonly automationService: AutomationService,
-    private readonly jitterService: JitterService,
+    private readonly dispatcher: BroadcastDispatcherService,
     private readonly templateService: TemplateService,
     private readonly templateRenderer: TemplateRendererService,
-    private readonly adminSessionService: AdminSessionService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async getEligibleGroups(): Promise<WhatsAppGroup[]> {
@@ -46,12 +38,18 @@ export class CampaignService {
     });
   }
 
-  async getAllBroadcasts(): Promise<BroadcastEvent[]> {
-    return this.broadcastRepo.find({
-      order: { createdAt: 'DESC' },
-      take: 100,
+  async getAllBroadcasts(page = 1, limit = 25, status?: BroadcastStatus): Promise<{ data: BroadcastEvent[]; total: number; page: number; limit: number }> {
+    const where: any = {};
+    if (status) where.status = status;
+
+    const [data, total] = await this.broadcastRepo.findAndCount({
+      where,
+      order: { id: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
       relations: ['article'],
     });
+    return { data, total, page, limit };
   }
 
   async getBroadcast(id: number): Promise<BroadcastEvent | null> {
@@ -66,24 +64,21 @@ export class CampaignService {
     });
   }
 
-  /**
-   * Create a broadcast for a community and dispatch tasks to all its groups.
-   */
+  // ─── Community Broadcast ──────────────────────────────────────
+
   async createCommunityBroadcast(
     community: WhatsAppCommunity,
     groups: WhatsAppGroup[],
   ): Promise<{ broadcastId: number; tasksCreated: number }> {
-    const activeTemplate = await this.templateService.getActive();
-    const fullText = activeTemplate.templateText;
+    const template = await this.templateService.getActive();
+    const messageText = template.templateText;
 
-    // Create a single broadcast event for the community
     const broadcast = this.broadcastRepo.create({
       status: BroadcastStatus.PENDING,
       totalMessages: groups.length,
     });
     const saved = await this.broadcastRepo.save(broadcast);
 
-    // Create tasks for each group
     let tasksCreated = 0;
     for (const group of groups) {
       const admin = await this.adminAssigner.selectAdminForGroup(group.id);
@@ -91,11 +86,10 @@ export class CampaignService {
         this.logger.warn(`No admin available for group #${group.id}, skipping`);
         continue;
       }
-
       const task = this.taskRepo.create({
-        broadcast: saved,
-        group,
-        admin,
+        broadcast: { id: saved.id },
+        group: { id: group.id },
+        admin: { id: admin.id },
         workerId: `admin-${admin.id}-sess-0`,
         status: MessageTaskStatus.PENDING,
       });
@@ -103,22 +97,30 @@ export class CampaignService {
       tasksCreated++;
     }
 
-    // Update broadcast status to IN_PROGRESS
-    saved.status = BroadcastStatus.IN_PROGRESS;
-    saved.startedAt = new Date();
-    await this.broadcastRepo.save(saved);
+    this.dispatcher.dispatchBroadcast(saved.id, messageText).catch(err => {
+      this.logger.error(`Community broadcast #${saved.id} dispatch crashed: ${err.message}`, err.stack);
+      // Mark broadcast as failed so it doesn't stay PENDING forever
+      this.broadcastRepo.update(saved.id, {
+        status: BroadcastStatus.FAILED,
+        completedAt: new Date(),
+      }).catch(e => this.logger.error(`Failed to mark community broadcast #${saved.id} as failed: ${e.message}`));
+    });
 
-    // Tasks will be picked up and dispatched by the scheduler service
     this.logger.log(`Created community broadcast #${saved.id} with ${tasksCreated} tasks`);
-
     return { broadcastId: saved.id, tasksCreated };
   }
 
-  /**
-   * Fan out a broadcast from a scraped article to all eligible groups.
-   */
-  async fanOutFromArticleData(article: { id: number; title: string | null; description: string | null; url: string; imageUrl: string | null; sourceName: string | null; publishedAt: Date | null }): Promise<BroadcastEvent> {
+  // ─── Article Broadcast ────────────────────────────────────────
 
+  async fanOutFromArticleData(article: {
+    id: number;
+    title: string | null;
+    description: string | null;
+    url: string;
+    imageUrl: string | null;
+    sourceName: string | null;
+    publishedAt: Date | null;
+  }): Promise<BroadcastEvent> {
     const groups = await this.getEligibleGroups();
     if (groups.length === 0) {
       this.logger.warn('No eligible groups for broadcast');
@@ -130,15 +132,8 @@ export class CampaignService {
       return this.broadcastRepo.save(broadcast);
     }
 
-    // Create broadcast event
-    const broadcast = this.broadcastRepo.create({
-      article: { id: article.id } as any,
-      status: BroadcastStatus.PENDING,
-      totalMessages: groups.length,
-    });
-    await this.broadcastRepo.save(broadcast);
-
-    // Compose message content using active template
+    // Compose message content
+    const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
     const template = await this.templateService.getActive();
     const placeholders: NewsPlaceholders = {
       title: article.title || '',
@@ -148,42 +143,48 @@ export class CampaignService {
       source: article.sourceName || '',
       publishedAt: article.publishedAt?.toISOString() || '',
       time: article.publishedAt
-        ? article.publishedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        ? this.templateRenderer.formatTime(article.publishedAt, tz)
         : '',
     };
-    const messageText = this.templateRenderer.render(template.templateText, placeholders);
+    const messageText = this.templateRenderer.render(template.templateText, placeholders, tz);
 
-    // Create message tasks and dispatch
-    broadcast.status = BroadcastStatus.IN_PROGRESS;
-    broadcast.startedAt = new Date();
-    await this.broadcastRepo.save(broadcast);
+    // Create broadcast event
+    const broadcast = this.broadcastRepo.create({
+      article: { id: article.id } as any,
+      status: BroadcastStatus.PENDING,
+      totalMessages: groups.length,
+    });
+    const saved = await this.broadcastRepo.save(broadcast);
 
-    for (let i = 0; i < groups.length; i++) {
-      const group = groups[i];
+    // Create tasks with best admin assignment
+    for (const group of groups) {
       const admin = await this.adminAssigner.selectAdminForGroup(group.id);
       if (!admin) continue;
 
       const task = this.taskRepo.create({
-        broadcast: { id: broadcast.id } as any,
-        group: { id: group.id } as any,
-        admin: { id: admin.id } as any,
+        broadcast: { id: saved.id },
+        group: { id: group.id },
+        admin: { id: admin.id },
         status: MessageTaskStatus.PENDING,
         workerId: `admin-${admin.id}-sess-0`,
       });
-      const savedTask = await this.taskRepo.save(task);
-
-      // Schedule with jitter
-      this.dispatchWithJitter(savedTask.id, messageText, admin.id, i, groups.length, article.imageUrl || undefined);
+      await this.taskRepo.save(task);
     }
 
-    return broadcast;
+    // Fire-and-forget dispatch (non-blocking)
+    this.dispatcher.dispatchBroadcast(saved.id, messageText, article.imageUrl || undefined).catch(err => {
+      this.logger.error(`Broadcast #${saved.id} dispatch crashed: ${err.message}`, err.stack);
+      this.broadcastRepo.update(saved.id, {
+        status: BroadcastStatus.FAILED,
+        completedAt: new Date(),
+      }).catch(e => this.logger.error(`Failed to mark broadcast #${saved.id} as failed: ${e.message}`));
+    });
+
+    return saved;
   }
 
-  /**
-   * Retry all failed tasks for a specific broadcast immediately.
-   * If broadcast has no tasks but is failed (e.g. no eligible groups at creation time),
-   * it re-creates tasks from current eligible groups and dispatches them.
-   */
+  // ─── Retry ────────────────────────────────────────────────────
+
   async retryBroadcastTasks(broadcastId: number): Promise<number> {
     const broadcast = await this.broadcastRepo.findOne({
       where: { id: broadcastId },
@@ -196,243 +197,147 @@ export class CampaignService {
       relations: ['group', 'admin'],
     });
 
-    // Retry failed tasks AND stale pending tasks (those with error messages from old dispatches)
     const retryableTasks = tasks.filter(t =>
-      t.status === MessageTaskStatus.FAILED ||
-      (t.status === MessageTaskStatus.PENDING && t.errorMessage)
+      t.status !== MessageTaskStatus.SENT && t.status !== MessageTaskStatus.CANCELLED,
     );
 
-    // If no retryable tasks but broadcast is failed, re-trigger from article
     if (retryableTasks.length === 0 && broadcast.status === BroadcastStatus.FAILED && broadcast.article) {
-      const article = broadcast.article;
-      const groups = await this.getEligibleGroups();
-      if (groups.length === 0) {
-        this.logger.warn(`Retry broadcast #${broadcastId}: still no eligible groups`);
-        return 0;
-      }
-
-      broadcast.status = BroadcastStatus.IN_PROGRESS;
-      broadcast.totalMessages = groups.length;
-      broadcast.startedAt = new Date();
-      await this.broadcastRepo.save(broadcast);
-
-      // Compose message
-      const template = await this.templateService.getActive();
-      const placeholders: NewsPlaceholders = {
-        title: article.title || '',
-        description: article.description || '',
-        url: article.url,
-        imageUrl: article.imageUrl || '',
-        source: article.sourceName || '',
-        publishedAt: article.publishedAt?.toISOString() || '',
-        time: article.publishedAt
-          ? article.publishedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-          : '',
-      };
-      const messageText = this.templateRenderer.render(template.templateText, placeholders);
-      const imageUrl = article.imageUrl || undefined;
-
-      let created = 0;
-      for (let i = 0; i < groups.length; i++) {
-        const group = groups[i];
-        const admin = await this.adminAssigner.selectAdminForGroup(group.id);
-        if (!admin) continue;
-
-        const task = this.taskRepo.create({
-          broadcast: { id: broadcast.id } as any,
-          group: { id: group.id } as any,
-          admin: { id: admin.id } as any,
-          status: MessageTaskStatus.PENDING,
-          workerId: `admin-${admin.id}-sess-0`,
-        });
-        const savedTask = await this.taskRepo.save(task);
-        this.dispatchWithJitter(savedTask.id, messageText, admin.id, i, groups.length, imageUrl);
-        created++;
-      }
-
-      return created;
+      return this.retryFromArticle(broadcast);
     }
 
-    // Normal retry: reset and re-dispatch retryable tasks
     if (retryableTasks.length === 0 || !broadcast.article) return 0;
 
-    const template = await this.templateService.getActive();
-    const placeholders: NewsPlaceholders = {
-      title: broadcast.article.title || '',
-      description: broadcast.article.description || '',
-      url: broadcast.article.url,
-      imageUrl: broadcast.article.imageUrl || '',
-      source: broadcast.article.sourceName || '',
-      publishedAt: broadcast.article.publishedAt?.toISOString() || '',
-      time: broadcast.article.publishedAt
-        ? broadcast.article.publishedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-        : '',
-    };
-    const messageText = this.templateRenderer.render(template.templateText, placeholders);
-    const imageUrl = broadcast.article.imageUrl || undefined;
-
+    const messageText = await this.composeArticleText(broadcast.article);
     if (!messageText) return 0;
 
     let retried = 0;
-    for (let i = 0; i < retryableTasks.length; i++) {
-      const task = retryableTasks[i];
-      const adminId = task.admin?.id;
-      if (!adminId) continue;
-
+    for (const task of retryableTasks) {
       task.status = MessageTaskStatus.PENDING;
       task.errorMessage = null;
       task.errorCategory = null;
       task.attemptCount = 0;
       await this.taskRepo.save(task);
-
-      this.dispatchWithJitter(task.id, messageText, adminId, i, retryableTasks.length, imageUrl);
       retried++;
     }
+
+    this.dispatcher.dispatchBroadcast(broadcastId, messageText, broadcast.article.imageUrl || undefined)
+      .catch(err => {
+        this.logger.error(`Retry broadcast #${broadcastId} crashed: ${err.message}`, err.stack);
+        this.broadcastRepo.update(broadcastId, {
+          status: BroadcastStatus.FAILED,
+          completedAt: new Date(),
+        }).catch(e => this.logger.error(`Failed to mark retry broadcast #${broadcastId} as failed: ${e.message}`));
+      });
 
     return retried;
   }
 
-  private async dispatchWithJitter(
-    taskId: number,
-    text: string,
-    adminId: number,
-    batchIndex: number,
-    totalTasks: number,
-    imageUrl?: string,
-  ): Promise<void> {
-    const delay = this.jitterService.calculateDelay(batchIndex, Math.max(10, Math.floor(totalTasks / 5)));
-
-    setTimeout(async () => {
-      try {
-        await this.dispatchSingleTask(taskId, text, adminId, imageUrl);
-      } catch (err) {
-        this.logger.error(`Dispatch error for task ${taskId}: ${(err as Error).message}`);
-      }
-    }, delay);
-  }
-
-  private async dispatchSingleTask(
-    taskId: number,
-    text: string,
-    adminId: number,
-    imageUrl?: string,
-  ): Promise<void> {
-    const task = await this.taskRepo.findOne({
-      where: { id: taskId },
-      relations: ['group', 'admin'],
-    });
-    if (!task || !task.group) return;
-
-    const attempt = await this.attemptTracker.recordStart(taskId);
-
-    // Resolve the actual OpenWA session ID from the admin's linked session
-    // Look up the admin's current session — the task's cached reference
-    // may be stale if the session was recreated (e.g. after a failure).
-    let sessionId: string | null = null;
-    try {
-      const sessions = await this.adminSessionService.getAdminSessions(adminId);
-      const ready = sessions.find(s => s.openwaSessionStatus === 'ready');
-      const first = ready || sessions[0];
-      sessionId = first?.openwaSessionId || null;
-    } catch {
-      sessionId = null;
-    }
-    if (!sessionId) {
-      this.logger.warn(`No active session found for admin #${adminId}, skipping task ${taskId}`);
-      return;
-    }
-
-    // Check rate limits before delivering
-    const admin = await this.adminRepo.findOne({ where: { id: adminId } });
-    if (!admin) {
-      this.logger.warn(`Admin account #${adminId} not found, skipping task ${taskId}`);
-      return;
-    }
-
-    const warmUpMultiplier = this.rateLimiter.getWarmUpMultiplier(
-      admin.warmUpStartedAt,
-      admin.skipWarmup
-    );
-
-    const rateCheck = this.rateLimiter.check(adminId, warmUpMultiplier);
-    if (!rateCheck.allowed) {
-      this.logger.warn(`Rate limit check failed for admin #${adminId}: ${rateCheck.reason}, skipping task ${taskId}`);
-      return;
-    }
-
-    const result: DeliveryResult = await this.automationService.deliverMessage(
-      sessionId,
-      task.group.groupJid,
-      text,
-      adminId,
-      task.workerId || `admin-${adminId}-sess-0`,
-      imageUrl,
-    );
-
-    if (result.success) {
-      await this.attemptTracker.recordSuccess(attempt.id, result.messageId, result.responseTime);
-      await this.maintenanceService.markGroupSuccess(task.group.id);
-    } else {
-      const shouldRetry = task.attemptCount < task.maxAttempts;
-      await this.attemptTracker.recordFailure(
-        attempt.id,
-        result.errorCategory || ErrorCategory.UNKNOWN,
-        result.errorMessage || 'Unknown error',
-        taskId,
-        shouldRetry,
-        result.responseTime,
-      );
-      await this.maintenanceService.markGroupFailed(task.group.id);
-    }
-
-    // Update broadcast counters
-    await this.updateBroadcastCounters(task.broadcast?.id);
-  }
-
   async retryFailedTasks(): Promise<number> {
+    // Pick up both FAILED tasks (with remaining attempts) and PENDING tasks due for retry
     const failed = await this.taskRepo.find({
-      where: {
-        status: MessageTaskStatus.FAILED,
-        attemptCount: In([1, 2]), // Only retry if under max
-      },
+      where: [
+        { status: MessageTaskStatus.FAILED, attemptCount: In([1, 2]) },
+        { status: MessageTaskStatus.PENDING, nextRetryAt: LessThan(new Date()) },
+      ],
       relations: ['broadcast', 'group', 'admin'],
     });
 
     let retried = 0;
     for (const task of failed) {
-      if (task.attemptCount >= task.maxAttempts) continue;
-
+      // If task has a future retry time, don't touch it yet
+      if (task.nextRetryAt && task.nextRetryAt > new Date()) continue;
+      if (task.status === MessageTaskStatus.FAILED && task.attemptCount >= task.maxAttempts) continue;
       task.status = MessageTaskStatus.PENDING;
       task.errorMessage = null;
       task.errorCategory = null;
+      task.nextRetryAt = null as any;
       await this.taskRepo.save(task);
       retried++;
     }
-
     return retried;
   }
 
-  private async updateBroadcastCounters(broadcastId?: number): Promise<void> {
-    if (!broadcastId) return;
+  /**
+   * Find broadcasts with PENDING tasks that need re-dispatching.
+   * This handles the case where the dispatcher finished but left some tasks PENDING
+   * (e.g. due to session/rate-limit issues), and the retry cron reset them.
+   */
+  async reDispatchStalledBroadcasts(): Promise<number> {
+    // Find broadcasts that are IN_PROGRESS or PENDING and have PENDING tasks
+    const stalled = await this.broadcastRepo.find({
+      where: {
+        status: In([BroadcastStatus.IN_PROGRESS, BroadcastStatus.PENDING]),
+      },
+    });
 
-    const [sent, failed] = await Promise.all([
-      this.taskRepo.count({ where: { broadcast: { id: broadcastId }, status: MessageTaskStatus.SENT } }),
-      this.taskRepo.count({ where: { broadcast: { id: broadcastId }, status: MessageTaskStatus.FAILED } }),
-    ]);
+    let redispatched = 0;
+    for (const broadcast of stalled) {
+      const pendingCount = await this.taskRepo.count({
+        where: { broadcast: { id: broadcast.id }, status: MessageTaskStatus.PENDING },
+      });
+      if (pendingCount === 0) continue;
 
-    const broadcast = await this.broadcastRepo.findOne({ where: { id: broadcastId } });
-    if (broadcast) {
-      broadcast.sentCount = sent;
-      broadcast.failedCount = failed;
-
-      const total = broadcast.totalMessages;
-      if (sent + failed >= total) {
-        broadcast.status = failed > 0 ? BroadcastStatus.PARTIAL : BroadcastStatus.COMPLETED;
-        broadcast.completedAt = new Date();
+      // Check if there are actually tasks due NOW (not waiting on a future backoff)
+      const dueNow = await this.taskRepo.count({
+        where: {
+          broadcast: { id: broadcast.id },
+          status: MessageTaskStatus.PENDING,
+          nextRetryAt: LessThan(new Date()),
+        },
+      });
+      // Also count tasks with no retry time set (never tried)
+      const noRetryTime = await this.taskRepo.count({
+        where: {
+          broadcast: { id: broadcast.id },
+          status: MessageTaskStatus.PENDING,
+          nextRetryAt: null as any,
+        },
+      });
+      if (dueNow + noRetryTime === 0) {
+        this.logger.log(`Broadcast #${broadcast.id}: ${pendingCount} pending, but all waiting on retry backoff — skipping`);
+        continue;
       }
 
-      await this.broadcastRepo.save(broadcast);
+      // Re-dispatch this broadcast
+      const tasks = await this.taskRepo.find({
+        where: { broadcast: { id: broadcast.id }, status: MessageTaskStatus.PENDING },
+        relations: ['group', 'admin'],
+        take: 1,
+      });
+      if (tasks.length === 0) continue;
+
+      // Get the article for message composition
+      const broadcastWithArticle = await this.broadcastRepo.findOne({
+        where: { id: broadcast.id },
+        relations: ['article'],
+      });
+      if (!broadcastWithArticle) continue;
+
+      let messageText: string | null = null;
+      let imageUrl: string | undefined;
+
+      if (broadcastWithArticle.article) {
+        messageText = await this.composeArticleText(broadcastWithArticle.article);
+        imageUrl = (broadcastWithArticle.article as any).imageUrl || undefined;
+      } else {
+        // Community broadcast or advertisement — use active template
+        messageText = await this.composeBroadcastText();
+      }
+
+      if (!messageText) continue;
+
+      this.logger.log(`Re-dispatching broadcast #${broadcast.id} — ${pendingCount} pending tasks`);
+      this.dispatcher.dispatchBroadcast(
+        broadcast.id,
+        messageText,
+        imageUrl,
+      ).catch(err => {
+        this.logger.error(`Re-dispatch broadcast #${broadcast.id} crashed: ${err.message}`);
+      });
+      redispatched++;
     }
+
+    return redispatched;
   }
 
   async getFailedTasksForRetry(): Promise<MessageTask[]> {
@@ -444,5 +349,113 @@ export class CampaignService {
       },
       relations: ['broadcast', 'group', 'admin'],
     });
+  }
+
+  async retryAllFailed(): Promise<{ retried: number; broadcasts: number }> {
+    const failed = await this.broadcastRepo.find({
+      where: {
+        status: In([BroadcastStatus.FAILED, BroadcastStatus.PARTIAL]),
+      },
+      relations: ['article'],
+      take: 50,
+    });
+
+    let totalTasks = 0;
+    let totalBroadcasts = 0;
+
+    // Stagger retries with 30s gaps so the rate limiter can regulate across broadcasts
+    for (let i = 0; i < failed.length; i++) {
+      if (i > 0) await this.sleep(30_000);
+      const count = await this.retryBroadcastTasks(failed[i].id);
+      if (count > 0) {
+        totalTasks += count;
+        totalBroadcasts++;
+      }
+    }
+
+    return { retried: totalTasks, broadcasts: totalBroadcasts };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ─── Private ──────────────────────────────────────────────────
+
+  private async retryFromArticle(broadcast: BroadcastEvent): Promise<number> {
+    const article = broadcast.article as any;
+    if (!article) return 0;
+
+    const groups = await this.getEligibleGroups();
+    if (groups.length === 0) return 0;
+
+    broadcast.status = BroadcastStatus.IN_PROGRESS;
+    broadcast.totalMessages = groups.length;
+    broadcast.startedAt = new Date();
+    await this.broadcastRepo.save(broadcast);
+
+    const messageText = await this.composeArticleText(article);
+    if (!messageText) return 0;
+
+    let created = 0;
+    for (const group of groups) {
+      const admin = await this.adminAssigner.selectAdminForGroup(group.id);
+      if (!admin) continue;
+      const task = this.taskRepo.create({
+        broadcast: { id: broadcast.id },
+        group: { id: group.id },
+        admin: { id: admin.id },
+        status: MessageTaskStatus.PENDING,
+        workerId: `admin-${admin.id}-sess-0`,
+      });
+      await this.taskRepo.save(task);
+      created++;
+    }
+
+    this.dispatcher.dispatchBroadcast(broadcast.id, messageText, article.imageUrl || undefined)
+      .catch(err => {
+        this.logger.error(`Retry broadcast #${broadcast.id} (from article) crashed: ${err.message}`, err.stack);
+        this.broadcastRepo.update(broadcast.id, {
+          status: BroadcastStatus.FAILED,
+          completedAt: new Date(),
+        }).catch(e => this.logger.error(`Failed to mark retry broadcast #${broadcast.id} as failed: ${e.message}`));
+      });
+
+    return created;
+  }
+
+  private async composeArticleText(article: any): Promise<string | null> {
+    const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
+    const template = await this.templateService.getActive();
+    if (!template) return null;
+    const placeholders: NewsPlaceholders = {
+      title: article.title || '',
+      description: article.description || '',
+      url: article.url,
+      imageUrl: article.imageUrl || '',
+      source: article.sourceName || '',
+      publishedAt: article.publishedAt?.toISOString() || '',
+      time: article.publishedAt
+        ? this.templateRenderer.formatTime(article.publishedAt, tz)
+        : '',
+    };
+    return this.templateRenderer.render(template.templateText, placeholders, tz);
+  }
+
+  /** Compose broadcast message text using the active template (for community broadcasts, fallback). */
+  private async composeBroadcastText(): Promise<string | null> {
+    const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
+    const template = await this.templateService.getActive();
+    if (!template) return null;
+    const placeholders: NewsPlaceholders = {
+      title: '',
+      description: '',
+      url: '',
+      imageUrl: '',
+      source: '',
+      publishedAt: '',
+      time: '',
+    };
+    return this.templateRenderer.render(template.templateText, placeholders, tz);
   }
 }

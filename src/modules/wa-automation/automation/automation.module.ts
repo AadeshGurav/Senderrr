@@ -14,8 +14,11 @@ import { WorkerSession } from './entities/worker-session.entity';
 import { WorkerSessionLog } from './entities/worker-session-log.entity';
 import { AdminSession } from './entities/admin-session.entity';
 import { AdminAccount } from '../campaign/entities/admin-account.entity';
+import { WhatsAppGroup } from '../campaign/entities/whatsapp-group.entity';
+import { WhatsAppGroupMember } from '../campaign/entities/whatsapp-group-member.entity';
 import { EngineModule } from '../../../engine/engine.module';
 import { SessionModule } from '../../session/session.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -24,9 +27,12 @@ import { SessionModule } from '../../session/session.module';
       WorkerSessionLog,
       AdminSession,
       AdminAccount,
+      WhatsAppGroup,
+      WhatsAppGroupMember,
     ], 'data'),
     EngineModule,
     forwardRef(() => SessionModule),
+    SettingsModule,
   ],
   controllers: [AutomationController],
   providers: [
