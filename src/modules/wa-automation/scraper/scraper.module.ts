@@ -7,9 +7,10 @@ import { GenericParser } from './parsers/built-in/generic.parser';
 import { ChangeDetectorService } from './change-detector.service';
 import { ScrapedArticle } from './entities/scraped-article.entity';
 import { ArticleHash } from './entities/article-hash.entity';
+import { ScraperActivityLog } from './entities/scraper-activity-log.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ScrapedArticle, ArticleHash], 'data')],
+  imports: [TypeOrmModule.forFeature([ScrapedArticle, ArticleHash, ScraperActivityLog], 'data')],
   controllers: [ScraperController],
   providers: [
     ScraperService,

@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, DefaultValuePipe, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { ScraperService } from './scraper.service';
 import { ParserRegistryService } from './parsers/parser-registry.service';
+import { ScraperActivityLog } from './entities/scraper-activity-log.entity';
 import { WaAuthGuard } from '../wa-auth/wa-auth.guard';
 
 @ApiTags('wa-automation / scraper')
@@ -11,12 +14,28 @@ export class ScraperController {
   constructor(
     private readonly scraperService: ScraperService,
     private readonly parserRegistry: ParserRegistryService,
+    @InjectRepository(ScraperActivityLog, 'data')
+    private readonly activityRepo: Repository<ScraperActivityLog>,
   ) {}
 
   @Get('articles')
   @ApiOperation({ summary: 'Recent scraped articles' })
   async getArticles() {
     return this.scraperService.getRecentArticles();
+  }
+
+  @Get('activity')
+  @ApiOperation({ summary: 'Scraper activity log' })
+  async getActivity(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    const [data, total] = await this.activityRepo.findAndCount({
+      order: { checkedAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: Math.min(limit, 50),
+    });
+    return { data, total, page, limit };
   }
 
   @Post('run')
