@@ -121,6 +121,7 @@ export class AdvertisementService {
 
     const broadcast = this.broadcastRepo.create({
       advertisementId: ad.id,
+      messageText: ad.body,
       status: BroadcastStatus.PENDING,
       totalMessages: groups.length,
     });

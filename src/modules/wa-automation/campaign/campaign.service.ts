@@ -319,8 +319,11 @@ export class CampaignService {
       if (broadcastWithArticle.article) {
         messageText = await this.composeArticleText(broadcastWithArticle.article);
         imageUrl = (broadcastWithArticle.article as any).imageUrl || undefined;
+      } else if (broadcastWithArticle.messageText) {
+        // Advertisement or community broadcast with stored message text
+        messageText = broadcastWithArticle.messageText;
       } else {
-        // Community broadcast or advertisement — use active template
+        // Fallback to active template
         messageText = await this.composeBroadcastText();
       }
 

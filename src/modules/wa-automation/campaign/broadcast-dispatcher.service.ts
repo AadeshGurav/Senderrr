@@ -268,17 +268,24 @@ export class BroadcastDispatcherService {
       lastCategory = result.errorCategory || ErrorCategory.UNKNOWN;
       lastResponseTime = result.responseTime || 0;
 
-      // Rate-limited / session expired — don't retry immediately, defer to retry cron
+      // Rate-limited — wait with short backoff and retry within this loop,
+      // like other transient errors. Do NOT defer to retry cron (that creates
+      // a loop where the task gets rate-limited again immediately).
       if (lastCategory === ErrorCategory.RATE_LIMITED || lastCategory === ErrorCategory.SESSION_EXPIRED) {
         const backoffMs = lastCategory === ErrorCategory.RATE_LIMITED
-          ? Math.min(300_000 * attempt, 1_800_000) // 5min, 10min, 30min max
+          ? 15_000 * attempt  // 15s, 30s, 45s — short enough to catch bucket refresh
           : 60_000;
         this.logger.warn(
-          `Task #${task.id}: ${lastCategory} on attempt ${attempt} — deferring for ${backoffMs / 1000}s`,
+          `Task #${task.id}: ${lastCategory} on attempt ${attempt} — retrying in ${backoffMs / 1000}s`,
         );
+        if (attempt < maxDeliveryAttempts) {
+          await this.sleep(backoffMs);
+          continue;
+        }
+        // Last attempt exhausted — leave as PENDING for retry cron
         await this.taskRepo.update(task.id, {
           status: MessageTaskStatus.PENDING,
-          nextRetryAt: new Date(Date.now() + backoffMs),
+          nextRetryAt: new Date(Date.now() + 60_000),
         });
         return;
       }

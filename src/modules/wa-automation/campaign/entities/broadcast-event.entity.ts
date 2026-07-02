@@ -22,6 +22,9 @@ export class BroadcastEvent {
   @Column({ type: 'int', nullable: true })
   advertisementId: number | null;
 
+  @Column({ type: 'text', nullable: true })
+  messageText: string | null;
+
   @Column({ type: 'varchar', length: 20, default: BroadcastStatus.PENDING })
   status: BroadcastStatus;
 

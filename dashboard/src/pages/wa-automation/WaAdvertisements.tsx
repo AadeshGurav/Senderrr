@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Megaphone, Trash2, Play, Image, Plus, X, Send, Globe, Users, Target, Upload, FileText, Calendar } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, FileText, Calendar, Square, Pause, PlayIcon } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -11,7 +12,6 @@ import { useToast } from '../../components/Toast';
 import {
   useWaAdvertisementsQuery,
   useDeleteAdMutation,
-  useSendAdMutation,
   useWaGroupsQuery,
   useWaCommunitiesQuery,
 } from '../../hooks/wa-queries';
@@ -22,6 +22,8 @@ const statusVariant = (status: string) => {
     case 'active': return 'success' as const;
     case 'draft': return 'neutral' as const;
     case 'completed': return 'info' as const;
+    case 'paused': return 'warning' as const;
+    case 'cancelled': return 'error' as const;
     default: return 'warning' as const;
   }
 };
@@ -53,12 +55,12 @@ export default function WaAdvertisements() {
   const { data: groups = [] } = useWaGroupsQuery();
   const { data: communities = [] } = useWaCommunitiesQuery();
   const deleteMutate = useDeleteAdMutation();
-  const sendMutate = useSendAdMutation();
   const { success, error: showError } = useToast();
+  const queryClient = useQueryClient();
+  const waKeys = { advertisements: ['wa', 'advertisements'] as const };
 
   const [showForm, setShowForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
-  const [sendTarget, setSendTarget] = useState<{ id: number; title: string } | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -73,6 +75,7 @@ export default function WaAdvertisements() {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
 
   const selectableGroups = groups.filter(
     (g: Group) => g.isTargeted && g.isActive !== false && g.isHealthy !== false,
@@ -103,14 +106,38 @@ export default function WaAdvertisements() {
     }
   };
 
-  const handleSend = async () => {
-    if (!sendTarget) return;
+  const handleToggleStatus = async (ad: any) => {
+    setTogglingStatus(ad.id);
     try {
-      const res = await sendMutate.mutateAsync(sendTarget.id);
-      success('Advertisement queued', res.message);
-      setSendTarget(null);
+      if (ad.status === 'active') {
+        await adApi.update(ad.id, { status: 'paused' });
+        success('Campaign paused', `"${ad.title}" was paused`);
+      } else if (ad.status === 'paused') {
+        await adApi.update(ad.id, { status: 'active' });
+        success('Campaign resumed', `"${ad.title}" will continue sending`);
+      } else if (ad.status === 'cancelled') {
+        // Can't resume cancelled ads
+        showError('Cannot resume a cancelled campaign');
+      }
+      // Invalidate cache so the list updates immediately
+      queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
     } catch (e: any) {
-      showError('Failed to send advertisement', e.message);
+      showError('Failed to update campaign', e.message);
+    } finally {
+      setTogglingStatus(null);
+    }
+  };
+
+  const handleCancel = async (ad: any) => {
+    setTogglingStatus(ad.id);
+    try {
+      await adApi.update(ad.id, { status: 'cancelled' });
+      success('Campaign stopped', `"${ad.title}" was cancelled`);
+      queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
+    } catch (e: any) {
+      showError('Failed to stop campaign', e.message);
+    } finally {
+      setTogglingStatus(null);
     }
   };
 
@@ -142,17 +169,26 @@ export default function WaAdvertisements() {
       }
 
       const ad = await adApi.create(payload);
+
+      // Upload media if selected
       if (mediaFile && ad?.id) {
         await adApi.uploadMedia(ad.id, mediaFile);
       }
 
-      success('Advertisement created');
+      // Auto-start: activate and dispatch immediately
+      if (ad?.id) {
+        await adApi.send(ad.id);
+      }
+
+      queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
+
+      success('Campaign created and started automatically');
       setShowForm(false);
       setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1, preferredTime: '' });
       setMediaFile(null);
       setMediaPreview(null);
     } catch (e: any) {
-      showError('Failed to create advertisement', e.message);
+      showError('Failed to create campaign', e.message);
     } finally {
       setCreating(false);
     }
@@ -168,7 +204,7 @@ export default function WaAdvertisements() {
           <h1 className="text-2xl font-bold text-[var(--color-text)]">Advertisements</h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">Manage promotional ad campaigns</p>
         </div>
-        <Button icon={Plus} onClick={() => setShowForm(true)}>New Advertisement</Button>
+        <Button icon={Plus} onClick={() => setShowForm(true)}>New Campaign</Button>
       </div>
 
       {/* ─── Empty / Grid ───────────────────────────────────── */}
@@ -177,11 +213,11 @@ export default function WaAdvertisements() {
           <CardBody>
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Megaphone size={48} className="text-[var(--color-text-muted)] mb-4" />
-              <p className="text-base font-semibold text-[var(--color-text)]">No advertisements yet</p>
+              <p className="text-base font-semibold text-[var(--color-text)]">No campaigns yet</p>
               <p className="text-sm text-[var(--color-text-secondary)] mt-2 max-w-md">
-                Create your first advertisement to start sending promotional messages to WhatsApp groups and communities.
+                Create your first campaign to start sending promotional messages to WhatsApp groups and communities.
               </p>
-              <Button icon={Plus} onClick={() => setShowForm(true)} className="mt-4">Create First Advertisement</Button>
+              <Button icon={Plus} onClick={() => setShowForm(true)} className="mt-4">Create First Campaign</Button>
             </div>
           </CardBody>
         </Card>
@@ -215,8 +251,38 @@ export default function WaAdvertisements() {
                 </div>
               </CardBody>
               <CardFooter className="gap-2">
-                <Button size="sm" variant="primary" icon={Play} onClick={() => setSendTarget({ id: a.id, title: a.title })} disabled={a.status !== 'active' && a.status !== 'draft'}>Send</Button>
-                <Button size="sm" variant="danger" icon={Trash2} onClick={() => setDeleteTarget({ id: a.id, title: a.title })}>Delete</Button>
+                {(a.status === 'active' || a.status === 'paused') && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={a.status === 'active' ? Pause : PlayIcon}
+                    onClick={() => handleToggleStatus(a)}
+                    loading={togglingStatus === a.id}
+                  >
+                    {a.status === 'active' ? 'Pause' : 'Resume'}
+                  </Button>
+                )}
+                {a.status === 'active' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={Square}
+                    onClick={() => handleCancel(a)}
+                    loading={togglingStatus === a.id}
+                  >
+                    Stop
+                  </Button>
+                )}
+                {(a.status === 'draft' || a.status === 'completed' || a.status === 'cancelled') && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    icon={Trash2}
+                    onClick={() => setDeleteTarget({ id: a.id, title: a.title })}
+                  >
+                    Delete
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           ))}
@@ -224,7 +290,7 @@ export default function WaAdvertisements() {
       )}
 
       {/* ─── Create Modal ───────────────────────────────────── */}
-      <Modal open={!!showForm} onClose={() => setShowForm(false)} title="Create Advertisement" size="lg">
+      <Modal open={!!showForm} onClose={() => setShowForm(false)} title="Create Campaign" size="lg">
         <form onSubmit={handleCreate}>
           <ModalBody>
 
@@ -452,13 +518,13 @@ export default function WaAdvertisements() {
 
           <ModalFooter>
             <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button type="submit" loading={creating} icon={Send}>Create Campaign</Button>
+            <Button type="submit" loading={creating} icon={Send}>Launch Campaign</Button>
           </ModalFooter>
         </form>
       </Modal>
 
       {/* ─── Delete Confirm ─────────────────────────────────── */}
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Advertisement">
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Campaign">
         <ModalBody>
           <p className="text-sm text-[var(--color-text-secondary)]">
             Are you sure you want to delete <strong>"{deleteTarget?.title}"</strong>? This action cannot be undone.
@@ -467,22 +533,6 @@ export default function WaAdvertisements() {
         <ModalFooter>
           <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button variant="danger" onClick={handleDelete} loading={deleteMutate.isPending}>Delete</Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ─── Send Confirm ───────────────────────────────────── */}
-      <Modal open={!!sendTarget} onClose={() => setSendTarget(null)} title="Send Advertisement">
-        <ModalBody>
-          <p className="text-sm text-[var(--color-text)]">
-            Send <strong>"{sendTarget?.title}"</strong> to all targets?
-          </p>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-            This will queue the advertisement for broadcast through the rate-limited delivery pipeline.
-          </p>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setSendTarget(null)}>Cancel</Button>
-          <Button icon={Play} onClick={handleSend} loading={sendMutate.isPending}>Send Advertisement</Button>
         </ModalFooter>
       </Modal>
     </div>
