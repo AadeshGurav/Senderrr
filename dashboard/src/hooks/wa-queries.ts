@@ -23,6 +23,7 @@ export const waKeys = {
   articles: ['wa', 'articles'] as const,
   workers: ['wa', 'workers'] as const,
   settings: ['wa', 'settings'] as const,
+  scraperActivity: ['wa', 'scraper-activity'] as const,
   me: ['wa', 'me'] as const,
 } as const;
 
@@ -55,6 +56,14 @@ export function useToggleWaAdminMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => campaignApi.toggleAdmin(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.admins }),
+  });
+}
+
+export function useToggleWarmupMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => campaignApi.toggleWarmup(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.admins }),
   });
 }
@@ -159,8 +168,12 @@ export function useCommunityBroadcastMutation() {
 
 // ─── Broadcasts ──────────────────────────────────────────────────
 
-export function useWaBroadcastsQuery() {
-  return useQuery({ queryKey: waKeys.broadcasts, queryFn: () => campaignApi.getBroadcasts() });
+export function useWaBroadcastsQuery(page = 1, status?: string) {
+  return useQuery({
+    queryKey: [...waKeys.broadcasts, page, status ?? 'all'],
+    queryFn: () => campaignApi.getBroadcasts(page, 25, status),
+    refetchInterval: 10_000,
+  });
 }
 
 export function useWaBroadcastQuery(id: number) {
@@ -175,6 +188,14 @@ export function useRetryBroadcastMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => campaignApi.retryBroadcast(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.broadcasts }),
+  });
+}
+
+export function useRetryAllBroadcastsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => campaignApi.retryAllBroadcasts(),
     onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.broadcasts }),
   });
 }
@@ -272,6 +293,13 @@ export function useRunScraperMutation() {
   });
 }
 
+export function useScraperActivityQuery(page = 1) {
+  return useQuery({
+    queryKey: [...waKeys.scraperActivity, page],
+    queryFn: () => scraperApi.getActivity(page),
+  });
+}
+
 export function useRunAllScraperMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -303,16 +331,17 @@ export function useWaDashboardStatsQuery() {
       const [admins, groups, broadcasts, workers, articles] = await Promise.all([
         campaignApi.getAdmins().catch(() => []),
         campaignApi.getGroups().catch(() => []),
-        campaignApi.getBroadcasts().catch(() => []),
+        campaignApi.getBroadcasts().catch(() => ({ data: [] as any[], total: 0, page: 1, limit: 25 })),
         automationApi.getWorkers().catch(() => []),
         scraperApi.getArticles().catch(() => []),
       ]);
 
+      const bcList = broadcasts.data || [];
       const totalSent = admins.reduce((sum: number, a: any) => sum + (a.totalSent || 0), 0);
       const totalFailed = admins.reduce((sum: number, a: any) => sum + (a.totalFailed || 0), 0);
       const totalAttempted = totalSent + totalFailed;
       const deliveryRate = totalAttempted > 0 ? Math.round((totalSent / totalAttempted) * 100) : 100;
-      const activeBroadcasts = broadcasts.filter((b: any) =>
+      const activeBroadcasts = bcList.filter((b: any) =>
         b.status === 'in_progress' || b.status === 'pending'
       ).length;
       const readySessions = workers.filter((w: any) => w.openwaSessionStatus === 'ready').length;
@@ -321,7 +350,7 @@ export function useWaDashboardStatsQuery() {
       return {
         activeAdmins: admins.length,
         activeGroups: groups.filter((g: any) => g.isActive).length,
-        totalBroadcasts: broadcasts.length,
+        totalBroadcasts: broadcasts.total,
         activeBroadcasts,
         activeWorkers: workers.filter((w: any) => w.status === 'active').length,
         scrapedArticles: articles.length,

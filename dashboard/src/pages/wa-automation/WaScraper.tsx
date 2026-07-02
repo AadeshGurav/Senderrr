@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Search, RefreshCw, AlertTriangle, ExternalLink, FileText, Zap } from 'lucide-react';
+import { Search, RefreshCw, AlertTriangle, ExternalLink, FileText, Clock, Zap, ChevronLeft, ChevronRight as ChevRight } from 'lucide-react';
 import { Card, CardBody } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useToast } from '../../components/Toast';
-import { useWaArticlesQuery, useRunScraperMutation, useRunAllScraperMutation, useUnseedScraperMutation } from '../../hooks/wa-queries';
+import { useWaArticlesQuery, useRunScraperMutation, useRunAllScraperMutation, useUnseedScraperMutation, useScraperActivityQuery } from '../../hooks/wa-queries';
 
 export default function WaScraper() {
   const { data: articles = [], isLoading, isRefetching, refetch } = useWaArticlesQuery();
@@ -15,6 +16,11 @@ export default function WaScraper() {
   const { success, error: showError } = useToast();
   const [runUrl, setRunUrl] = useState('');
   const [message, setMessage] = useState('');
+  const [activityPage, setActivityPage] = useState(1);
+  const { data: activityResult } = useScraperActivityQuery(activityPage);
+  const activity = activityResult?.data || [];
+  const activityTotal = activityResult?.total || 0;
+  const activityPages = Math.ceil(activityTotal / 20);
 
   const handleRun = async () => {
     if (!runUrl.trim()) return;
@@ -101,6 +107,91 @@ export default function WaScraper() {
           )}
         </CardBody>
       </Card>
+
+      {/* Scraper Activity Log */}
+      <div>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-4 flex items-center gap-2">
+          <Clock size={14} />
+          Scraper Activity Log ({activityTotal} checks)
+        </h2>
+        {activity.length === 0 ? (
+          <Card>
+            <CardBody>
+              <p className="text-sm text-[var(--color-text-muted)] text-center py-4">No activity recorded yet. Activity appears after scraper runs.</p>
+            </CardBody>
+          </Card>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-[var(--color-bg-secondary)]">
+                  <th className="px-3 py-2 text-left font-semibold text-[var(--color-text-secondary)]">Time</th>
+                  <th className="px-3 py-2 text-left font-semibold text-[var(--color-text-secondary)]">URL</th>
+                  <th className="px-3 py-2 text-center font-semibold text-[var(--color-text-secondary)]">Found</th>
+                  <th className="px-3 py-2 text-center font-semibold text-[var(--color-text-secondary)]">New</th>
+                  <th className="px-3 py-2 text-center font-semibold text-[var(--color-text-secondary)]">Skipped</th>
+                  <th className="px-3 py-2 text-center font-semibold text-[var(--color-text-secondary)]">Failed</th>
+                  <th className="px-3 py-2 text-center font-semibold text-[var(--color-text-secondary)]">Changed</th>
+                  <th className="px-3 py-2 text-center font-semibold text-[var(--color-text-secondary)]">Duration</th>
+                  <th className="px-3 py-2 text-left font-semibold text-[var(--color-text-secondary)]">Errors</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activity.map((a: any) => (
+                  <tr key={a.id} className="border-t border-[var(--color-border-light)]">
+                    <td className="px-3 py-2 text-[var(--color-text-secondary)] whitespace-nowrap">
+                      {new Date(a.checkedAt).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 max-w-[200px] truncate" title={a.url}>
+                      {a.url}
+                    </td>
+                    <td className="px-3 py-2 text-center">{a.articlesFound}</td>
+                    <td className="px-3 py-2 text-center font-medium text-green-600">{a.articlesNew}</td>
+                    <td className="px-3 py-2 text-center text-[var(--color-text-secondary)]">{a.articlesSkipped}</td>
+                    <td className="px-3 py-2 text-center">
+                      {a.articlesFailed > 0 ? (
+                        <span className="text-red-500 font-medium">{a.articlesFailed}</span>
+                      ) : (
+                        <span className="text-[var(--color-text-muted)]">0</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <Badge variant={a.listingChanged ? 'info' : 'neutral'}>
+                        {a.listingChanged ? 'Yes' : 'No'}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-center text-[var(--color-text-secondary)]">
+                      {a.durationMs > 1000 ? `${(a.durationMs / 1000).toFixed(1)}s` : `${a.durationMs}ms`}
+                    </td>
+                    <td className="px-3 py-2 max-w-[200px] truncate text-red-500" title={a.errors || ''}>
+                      {a.errors || '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {activityPages > 1 && (
+          <div className="flex items-center justify-center gap-2 pt-3">
+            <button
+              onClick={() => setActivityPage(p => Math.max(1, p - 1))}
+              disabled={activityPage <= 1}
+              className="p-1.5 rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] disabled:opacity-30"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-xs text-[var(--color-text-secondary)]">{activityPage} / {activityPages}</span>
+            <button
+              onClick={() => setActivityPage(p => Math.min(activityPages, p + 1))}
+              disabled={activityPage >= activityPages}
+              className="p-1.5 rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)] disabled:opacity-30"
+            >
+              <ChevRight size={16} />
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Articles */}
       <div>

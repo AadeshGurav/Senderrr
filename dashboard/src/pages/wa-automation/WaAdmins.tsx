@@ -14,6 +14,7 @@ import {
   useWaAdminsQuery,
   useCreateWaAdminMutation,
   useToggleWaAdminMutation,
+  useToggleWarmupMutation,
   useAdminSessionsQuery,
   useCreateAdminSessionsMutation,
   useStartAdminSessionMutation,
@@ -36,6 +37,7 @@ interface Admin {
   totalFailed: number;
   isActive: boolean;
   isSuperAdmin: boolean;
+  skipWarmup: boolean;
   openwaSessionId: string | null;
 }
 
@@ -63,6 +65,7 @@ export default function WaAdmins() {
   const importGroupsMutate = useImportGroupsMutation();
   const importCommunitiesMutate = useImportCommunitiesMutation();
   const superAdminMutate = useToggleSuperAdminMutation();
+  const warmupMutate = useToggleWarmupMutation();
   const { success, error: showError } = useToast();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -219,6 +222,27 @@ export default function WaAdmins() {
         if (anyReady) return <Badge variant="warning" dot>Partial</Badge>;
         return <Badge variant="info">{adminSess[0].openwaSessionStatus}</Badge>;
       },
+    },
+    {
+      id: 'warmup',
+      header: 'Warmup',
+      cell: ({ row }) => (
+        <label
+          className="relative inline-flex items-center cursor-pointer"
+          title={row.original.skipWarmup ? 'Warmup disabled — full speed' : 'Warmup active — throttled sending'}
+        >
+          <input
+            type="checkbox"
+            checked={!row.original.skipWarmup}
+            onChange={() => warmupMutate.mutate(row.original.id)}
+            className="sr-only peer"
+          />
+          <div className="w-9 h-5 bg-[var(--color-bg-secondary)] rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 border border-[var(--color-border)]"></div>
+          <span className="ms-2 text-xs text-[var(--color-text-muted)]">
+            {row.original.skipWarmup ? 'Off' : 'On'}
+          </span>
+        </label>
+      ),
     },
     {
       id: 'superAdmin',

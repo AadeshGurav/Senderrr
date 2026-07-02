@@ -76,6 +76,7 @@ export const scraperApi = {
   runAll: () => request<{ scraped: number; articles: any[] }>('/scraper/run-all', { method: 'POST' }),
   unseed: () => request<{ success: boolean; scraped: number; articles: any[] }>('/scraper/unseed', { method: 'POST' }),
   getParsers: () => request<{ parsers: string[] }>('/scraper/parsers'),
+  getActivity: (page = 1, limit = 20) => request<{ data: any[]; total: number; page: number; limit: number }>(`/scraper/activity?page=${page}&limit=${limit}`),
 };
 
 export const campaignApi = {
@@ -83,6 +84,7 @@ export const campaignApi = {
   createAdmin: (data: { label: string; phoneNumber: string; sessionsPerAdmin?: number; autoCreateSession?: boolean; isSuperAdmin?: boolean }) =>
     request<any>('/campaigns/admins', { method: 'POST', body: JSON.stringify(data) }),
   toggleAdmin: (id: number) => request<any>(`/campaigns/admins/${id}/toggle`, { method: 'POST' }),
+  toggleWarmup: (id: number) => request<any>(`/campaigns/admins/${id}/warmup`, { method: 'POST' }),
   toggleSuperAdmin: (id: number, isSuperAdmin: boolean) =>
     request<any>(`/campaigns/admins/${id}/super-admin`, { method: 'POST', body: JSON.stringify({ isSuperAdmin }) }),
 
@@ -101,9 +103,14 @@ export const campaignApi = {
   communityBroadcast: (id: number) =>
     request<any>(`/campaigns/communities/${id}/broadcast`, { method: 'POST' }),
 
-  getBroadcasts: () => request<any[]>('/campaigns/broadcasts'),
+  getBroadcasts: (page = 1, limit = 25, status?: string) => {
+    let url = `/campaigns/broadcasts?page=${page}&limit=${limit}`;
+    if (status) url += `&status=${status}`;
+    return request<{ data: any[]; total: number; page: number; limit: number }>(url);
+  },
   getBroadcast: (id: number) => request<{ broadcast: any; tasks: any[] }>(`/campaigns/broadcasts/${id}`),
   retryBroadcast: (id: number) => request<{ retried: number }>(`/campaigns/broadcasts/${id}/retry`, { method: 'POST' }),
+  retryAllBroadcasts: () => request<{ retried: number; broadcasts: number }>('/campaigns/broadcasts/retry-all', { method: 'POST' }),
   recoverGroups: () => request<{ recovered: number }>('/campaigns/recover-groups', { method: 'POST' }),
   setGroupTargets: (groupIds: number[]) =>
     request<{ targeted: number }>('/campaigns/groups/set-targets', {
@@ -111,6 +118,33 @@ export const campaignApi = {
       body: JSON.stringify({ groupIds }),
     }),
 };
+
+async function uploadFile<T>(endpoint: string, file: File, fieldName = 'file'): Promise<T> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append(fieldName, file);
+
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    redirectToLogin();
+    throw new Error('Please sign in again. Your session has expired.');
+  }
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
 
 export const adApi = {
   list: () => request<any[]>('/advertisements'),
@@ -120,6 +154,8 @@ export const adApi = {
   update: (id: number, data: any) => request<any>(`/advertisements/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   send: (id: number) => request<any>(`/advertisements/${id}/send`, { method: 'POST' }),
   delete: (id: number) => request<void>(`/advertisements/${id}`, { method: 'DELETE' }),
+  uploadMedia: (id: number, file: File) =>
+    uploadFile<any>(`/advertisements/${id}/media`, file, 'file'),
 };
 
 export const automationApi = {
