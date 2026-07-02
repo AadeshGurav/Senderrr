@@ -39,6 +39,21 @@ services:
       retries: 3
       start_period: 30s
 
+  # ngrok tunnel for webhook testing (only starts when NGROK_AUTH_TOKEN is set)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: openwa-ngrok
+    profiles:
+      - ngrok
+    ports:
+      - "4040:4040"
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTH_TOKEN:-}
+    command: http openwa:2785 ${NGROK_URL:+--url=}${NGROK_URL}
+    depends_on:
+      - openwa
+    restart: unless-stopped
+
 volumes:
   openwa-data:
     driver: local
