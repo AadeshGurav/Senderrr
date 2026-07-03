@@ -71,7 +71,9 @@ export class CampaignService {
     groups: WhatsAppGroup[],
   ): Promise<{ broadcastId: number; tasksCreated: number }> {
     const template = await this.templateService.getActive();
-    const messageText = template.templateText;
+    const messageText = await this.templateRenderer.render(template.templateText, {
+      title: '', description: '', url: '', imageUrl: '', source: '', publishedAt: '', time: '',
+    });
 
     const broadcast = this.broadcastRepo.create({
       status: BroadcastStatus.PENDING,
@@ -146,7 +148,7 @@ export class CampaignService {
         ? article.publishedAt.toLocaleString('en-IN', { timeZone: tz })
         : '',
     };
-    const messageText = this.templateRenderer.render(template.templateText, placeholders);
+    const messageText = await this.templateRenderer.render(template.templateText, placeholders);
 
     // Create broadcast event
     const broadcast = this.broadcastRepo.create({
@@ -442,7 +444,7 @@ export class CampaignService {
         ? article.publishedAt.toLocaleString('en-IN', { timeZone: tz })
         : '',
     };
-    return this.templateRenderer.render(template.templateText, placeholders);
+    return await this.templateRenderer.render(template.templateText, placeholders);
   }
 
   /** Compose broadcast message text using the active template (for community broadcasts, fallback). */
@@ -458,6 +460,6 @@ export class CampaignService {
       publishedAt: '',
       time: '',
     };
-    return this.templateRenderer.render(template.templateText, placeholders);
+    return await this.templateRenderer.render(template.templateText, placeholders);
   }
 }

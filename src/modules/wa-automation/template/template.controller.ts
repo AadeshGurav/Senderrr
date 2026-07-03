@@ -72,6 +72,6 @@ export class TemplateController {
       publishedAt: new Date().toISOString(),
       time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
     };
-    return { rendered: this.renderer.render(body.templateText, sample) };
+    return { rendered: await this.renderer.render(body.templateText, sample) };
   }
 }

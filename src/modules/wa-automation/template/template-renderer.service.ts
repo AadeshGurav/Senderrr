@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { SettingsService } from '../settings/settings.service';
 
 export interface NewsPlaceholders {
   title: string;
@@ -12,8 +13,12 @@ export interface NewsPlaceholders {
 
 @Injectable()
 export class TemplateRendererService {
+  constructor(private readonly settingsService: SettingsService) {}
+
   /** Replace {news.*} placeholders with actual values */
-  render(template: string, data: NewsPlaceholders): string {
+  async render(template: string, data: NewsPlaceholders): Promise<string> {
+    const tz = await this.settingsService.get('TIMEZONE', 'UTC');
+
     let result = template
       .replace(/\{news\.title\}/g, data.title)
       .replace(/\{news\.description\}/g, data.description)
@@ -25,8 +30,8 @@ export class TemplateRendererService {
 
     // Apply WhatsApp Markdown formatting
     result = this.formatMarkdown(result);
-    // Substitute dynamic variables
-    result = this.substituteVariables(result);
+    // Substitute dynamic variables with timezone
+    result = this.substituteVariables(result, tz);
 
     return result;
   }
@@ -34,37 +39,39 @@ export class TemplateRendererService {
   /** Apply WhatsApp Markdown formatting */
   private formatMarkdown(text: string): string {
     return text
-      // Bold: *text*
       .replace(/\*([^*]+)\*/g, '*$1*')
-      // Italic: _text_
       .replace(/_([^_]+)_/g, '_$1_')
-      // Strikethrough: ~text~
       .replace(/~([^~]+)~/g, '~$1~')
-      // Code: `text`
-      .replace(/`([^`]+)`/g, '`$1`')
-      // Preserve newlines (WhatsApp preserves single newlines)
-      .replace(/\n/g, '\n');
+      .replace(/`([^`]+)`/g, '`$1`');
   }
 
-  /** Substitute dynamic variables */
-  private substituteVariables(text: string): string {
+  /** Substitute dynamic variables with timezone-aware formatting */
+  private substituteVariables(text: string, tz: string): string {
     const now = new Date();
+    const fmt: Intl.DateTimeFormatOptions = { timeZone: tz, timeZoneName: 'short' };
+
     return text
-      // Current date: {{current_date}}
       .replace(/\{\{current_date\}\}/g, now.toLocaleDateString('en-IN', {
+        ...fmt,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
       }))
-      // Current time: {{current_time}}
       .replace(/\{\{current_time\}\}/g, now.toLocaleTimeString('en-IN', {
+        ...fmt,
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
       }))
-      // Current datetime: {{current_datetime}}
-      .replace(/\{\{current_datetime\}\}/g, now.toISOString())
-      // Current timestamp: {{current_timestamp}}
+      .replace(/\{\{current_datetime\}\}/g, now.toLocaleString('en-IN', {
+        ...fmt,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }))
       .replace(/\{\{current_timestamp\}\}/g, now.getTime().toString());
   }
 }
