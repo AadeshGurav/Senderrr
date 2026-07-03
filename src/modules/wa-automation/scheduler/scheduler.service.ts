@@ -10,6 +10,7 @@ import { RateLimiterService } from '../automation/rate-limiter.service';
 import { WorkerTrackerService } from '../automation/worker-tracker.service';
 import { GroupSyncService } from '../automation/group-sync.service';
 import { AdvertisementService } from '../advertisement/advertisement.service';
+import { SettingsService } from '../settings/settings.service';
 import { BroadcastEvent, BroadcastStatus } from '../campaign/entities/broadcast-event.entity';
 import { GenericParser } from '../scraper/parsers/built-in/generic.parser';
 import { ConfigService } from '@nestjs/config';
@@ -32,6 +33,7 @@ export class SchedulerService {
     private readonly workerTracker: WorkerTrackerService,
     private readonly groupSyncService: GroupSyncService,
     private readonly adService: AdvertisementService,
+    private readonly settingsService: SettingsService,
     @InjectRepository(BroadcastEvent, 'data')
     private readonly broadcastRepo: Repository<BroadcastEvent>,
     configService: ConfigService,
@@ -48,7 +50,7 @@ export class SchedulerService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async checkForNewArticles(): Promise<void> {
-    if (!this.isScraperActive()) return;
+    if (!(await this.isScraperActive())) return;
 
     this.logger.log('Running scraper cycle...');
     const parser = new GenericParser();
@@ -220,14 +222,26 @@ export class SchedulerService {
     return false;
   }
 
-  private isScraperActive(): boolean {
+  private async isScraperActive(): Promise<boolean> {
+    const tz = await this.settingsService.get('TIMEZONE', 'UTC');
     const now = new Date();
-    const hour = now.getHours();
+    const hour = this.getHourInTimezone(now, tz);
     const day = now.getDay();
     if (!this.activeWeekdays.includes(day)) return false;
     if (this.activeHourStart <= this.activeHourEnd) {
       return hour >= this.activeHourStart && hour < this.activeHourEnd;
     }
     return hour >= this.activeHourStart || hour < this.activeHourEnd;
+  }
+
+  private getHourInTimezone(date: Date, timezone: string): number {
+    try {
+      return parseInt(
+        new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', hour12: false }).format(date),
+        10,
+      );
+    } catch {
+      return date.getHours();
+    }
   }
 }
