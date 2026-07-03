@@ -99,7 +99,19 @@ export class AutomationService {
       let result: any;
 
       if (imageUrl) {
-        result = await engine.sendImageMessage(chatId, { mimetype: 'image/jpeg', data: imageUrl, caption: text });
+        // Strip data URI prefix for engines that expect raw base64
+        let mediaData = imageUrl;
+        let mediaMime = 'image/jpeg';
+        if (imageUrl.startsWith('data:')) {
+          const commaIdx = imageUrl.indexOf(',');
+          if (commaIdx !== -1) {
+            const header = imageUrl.substring(5, commaIdx); // strip 'data:'
+            mediaData = imageUrl.substring(commaIdx + 1);
+            const semiIdx = header.indexOf(';');
+            if (semiIdx !== -1) mediaMime = header.substring(0, semiIdx);
+          }
+        }
+        result = await engine.sendImageMessage(chatId, { mimetype: mediaMime, data: mediaData, caption: text });
       } else {
         result = await engine.sendTextMessage(chatId, text);
       }

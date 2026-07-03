@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, MoreThanOrEqual } from 'typeorm';
+import * as fs from 'fs/promises';
 import { Advertisement, AdvertisementStatus, AdvertisementTargetType } from './entities/advertisement.entity';
 import { MediaAttachment } from './entities/media-attachment.entity';
 import { WhatsAppGroup } from '../campaign/entities/whatsapp-group.entity';
@@ -119,6 +120,22 @@ export class AdvertisementService {
       return;
     }
 
+    // Resolve first media attachment for imageUrl
+    let imageUrl: string | undefined;
+    const media = await this.mediaRepo.findOne({
+      where: { advertisement: { id: ad.id } },
+      order: { createdAt: 'ASC' },
+    });
+    if (media?.filePath) {
+      try {
+        const fileBuffer = await fs.readFile(media.filePath);
+        const mimeType = this.getMimeType(media.filePath);
+        imageUrl = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+      } catch (err) {
+        this.logger.warn(`Ad #${ad.id}: could not read media file ${media.filePath}: ${(err as Error).message}`);
+      }
+    }
+
     const broadcast = this.broadcastRepo.create({
       advertisementId: ad.id,
       messageText: ad.body,
@@ -156,7 +173,8 @@ export class AdvertisementService {
     // Fire-and-forget dispatch through the existing broadcast dispatcher
     // This reuses the full anti-ban pipeline: rate limits, jitter, human-like pacing,
     // quiet hours, group health, retry with backoff, etc.
-    this.dispatcher.dispatchBroadcast(saved.id, ad.body).catch((err: Error) => {
+    // Pass the ad body as messageText and first media as imageUrl
+    this.dispatcher.dispatchBroadcast(saved.id, ad.body, imageUrl).catch((err: Error) => {
       this.logger.error(`Ad broadcast #${saved.id} crashed: ${err.message}`);
       this.broadcastRepo.update(saved.id, {
         status: BroadcastStatus.FAILED,
@@ -227,6 +245,19 @@ export class AdvertisementService {
       }
     }
     return 'document';
+  }
+
+  private getMimeType(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    const mimeMap: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      gif: 'image/gif', webp: 'image/webp',
+      mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo', mkv: 'video/x-matroska',
+      pdf: 'application/pdf', doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      txt: 'text/plain',
+    };
+    return mimeMap[ext] || 'application/octet-stream';
   }
 
   /** Mark ad as used for the day */

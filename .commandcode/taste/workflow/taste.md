@@ -1,4 +1,5 @@
 # workflow
+- Use `caffeinate` (macOS) when starting Docker containers via `docker compose up` to prevent the system from sleeping during the process. Confidence: 0.85
 - Index and analyze the entire relevant codebase to fully understand the problem before attempting to write or suggest a solution. Confidence: 1
 - Do not restart the dev server; it's already running and changes are picked up automatically after rebuilding. Confidence: 0.65
 - When building features incrementally, work on a single development instance (avoid separate dev+test environments) — changes are tested on the same live data. Confidence: 0.85

@@ -91,7 +91,11 @@ _check-deps:
 
 _start:
 	@echo "  Starting container ..."
-	@docker compose $(_ngrok) up -d
+	@if command -v caffeinate >/dev/null 2>&1; then \
+		caffeinate -dimsu docker compose $(_ngrok) up -d; \
+	else \
+		docker compose $(_ngrok) up -d; \
+	fi
 	@echo "  Waiting for OpenWA ..."
 	@for i in $$(seq 1 60); do \
 		if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
