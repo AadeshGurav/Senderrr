@@ -145,7 +145,7 @@ export class CampaignService {
       source: article.sourceName || '',
       publishedAt: article.publishedAt?.toISOString() || '',
       time: article.publishedAt
-        ? article.publishedAt.toLocaleString('en-IN', { timeZone: tz })
+        ? article.publishedAt.toLocaleTimeString('en-IN', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true })
         : '',
     };
     const messageText = await this.templateRenderer.render(template.templateText, placeholders);
@@ -450,7 +450,7 @@ export class CampaignService {
       source: article.sourceName || '',
       publishedAt: article.publishedAt?.toISOString() || '',
       time: article.publishedAt
-        ? article.publishedAt.toLocaleString('en-IN', { timeZone: tz })
+        ? article.publishedAt.toLocaleTimeString('en-IN', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true })
         : '',
     };
     return await this.templateRenderer.render(template.templateText, placeholders);

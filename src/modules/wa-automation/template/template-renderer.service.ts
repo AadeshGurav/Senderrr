@@ -48,29 +48,28 @@ export class TemplateRendererService {
   /** Substitute dynamic variables with timezone-aware formatting */
   private substituteVariables(text: string, tz: string): string {
     const now = new Date();
-    const fmt: Intl.DateTimeFormatOptions = { timeZone: tz, timeZoneName: 'short' };
 
     return text
       .replace(/\{\{current_date\}\}/g, now.toLocaleDateString('en-IN', {
-        ...fmt,
+        timeZone: tz,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
       }))
       .replace(/\{\{current_time\}\}/g, now.toLocaleTimeString('en-IN', {
-        ...fmt,
+        timeZone: tz,
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
+        hour12: true,
       }))
       .replace(/\{\{current_datetime\}\}/g, now.toLocaleString('en-IN', {
-        ...fmt,
+        timeZone: tz,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
+        hour12: true,
       }))
       .replace(/\{\{current_timestamp\}\}/g, now.getTime().toString());
   }
