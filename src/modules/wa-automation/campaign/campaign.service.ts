@@ -153,6 +153,7 @@ export class CampaignService {
     // Create broadcast event
     const broadcast = this.broadcastRepo.create({
       article: { id: article.id } as any,
+      messageText,
       status: BroadcastStatus.PENDING,
       totalMessages: groups.length,
     });
@@ -207,9 +208,17 @@ export class CampaignService {
       return this.retryFromArticle(broadcast);
     }
 
-    if (retryableTasks.length === 0 || !broadcast.article) return 0;
+    if (retryableTasks.length === 0) return 0;
 
-    const messageText = await this.composeArticleText(broadcast.article);
+    // Use stored messageText if available (immutable snapshot from creation time)
+    let messageText = broadcast.messageText;
+    let imageUrl: string | undefined;
+
+    if (!messageText && broadcast.article) {
+      messageText = await this.composeArticleText(broadcast.article);
+      imageUrl = (broadcast.article as any).imageUrl || undefined;
+    }
+
     if (!messageText) return 0;
 
     let retried = 0;
@@ -222,7 +231,7 @@ export class CampaignService {
       retried++;
     }
 
-    this.dispatcher.dispatchBroadcast(broadcastId, messageText, broadcast.article.imageUrl || undefined)
+    this.dispatcher.dispatchBroadcast(broadcastId, messageText, imageUrl)
       .catch(err => {
         this.logger.error(`Retry broadcast #${broadcastId} crashed: ${err.message}`, err.stack);
         this.broadcastRepo.update(broadcastId, {
@@ -318,12 +327,12 @@ export class CampaignService {
       let messageText: string | null = null;
       let imageUrl: string | undefined;
 
-      if (broadcastWithArticle.article) {
+      // Use stored messageText if available (article broadcasts, ads, communities)
+      if (broadcastWithArticle.messageText) {
+        messageText = broadcastWithArticle.messageText;
+      } else if (broadcastWithArticle.article) {
         messageText = await this.composeArticleText(broadcastWithArticle.article);
         imageUrl = (broadcastWithArticle.article as any).imageUrl || undefined;
-      } else if (broadcastWithArticle.messageText) {
-        // Advertisement or community broadcast with stored message text
-        messageText = broadcastWithArticle.messageText;
       } else {
         // Fallback to active template
         messageText = await this.composeBroadcastText();
