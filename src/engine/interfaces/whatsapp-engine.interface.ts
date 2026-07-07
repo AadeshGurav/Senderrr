@@ -301,4 +301,7 @@ export interface IWhatsAppEngine {
   getProduct(productId: string): Promise<Product | null>;
   sendProduct(chatId: string, productId: string, body?: string): Promise<MessageResult>;
   sendCatalog(chatId: string, body?: string): Promise<MessageResult>;
+
+  // Link Preview (pre-warm WhatsApp's server-side cache before dispatching)
+  warmUpLinkPreview?(url: string): Promise<void>;
 }

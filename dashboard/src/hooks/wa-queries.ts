@@ -206,6 +206,20 @@ export function useWaAdvertisementsQuery() {
   return useQuery({ queryKey: waKeys.advertisements, queryFn: () => adApi.list() });
 }
 
+export function useAdTelemetryQuery(id: number) {
+  return useQuery({
+    queryKey: [...waKeys.advertisements, 'telemetry', id],
+    queryFn: () => adApi.getTelemetry(id),
+    enabled: !!id,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      // Poll every 30s for active campaigns, stop polling for completed/cancelled
+      if (data && (data.status === 'completed' || data.status === 'cancelled')) return false;
+      return 30_000;
+    },
+  });
+}
+
 export function useDeleteAdMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -218,6 +232,14 @@ export function useSendAdMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => adApi.send(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
+  });
+}
+
+export function useUpdateAdMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => adApi.update(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
   });
 }

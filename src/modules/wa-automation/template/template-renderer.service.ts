@@ -9,6 +9,7 @@ export interface NewsPlaceholders {
   source: string;
   publishedAt: string;
   time: string;
+  bullets: string;
 }
 
 @Injectable()
@@ -22,6 +23,7 @@ export class TemplateRendererService {
     let result = template
       .replace(/\{news\.title\}/g, data.title)
       .replace(/\{news\.description\}/g, data.description)
+      .replace(/\{news\.bullets\}/g, data.bullets)
       .replace(/\{news\.url\}/g, data.url)
       .replace(/\{news\.image_url\}/g, data.imageUrl)
       .replace(/\{news\.source\}/g, data.source)

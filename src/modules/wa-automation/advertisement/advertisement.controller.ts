@@ -35,6 +35,12 @@ export class AdvertisementController {
     return this.adService.getStatistics(id);
   }
 
+  @Get(':id/telemetry')
+  @ApiOperation({ summary: 'Get detailed advertisement telemetry with per-group breakdown' })
+  async getTelemetry(@Param('id', ParseIntPipe) id: number) {
+    return this.adService.getTelemetry(id);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create advertisement' })
   async create(@Body() body: Partial<import('./entities/advertisement.entity').Advertisement>) {

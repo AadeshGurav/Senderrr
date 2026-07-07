@@ -39,6 +39,7 @@ export class AdvertisementService {
   ) {}
 
   async findAll(): Promise<Advertisement[]> {
+    await this.checkExpired();
     return this.adRepo.find({
       order: { createdAt: 'DESC' },
       relations: ['targetGroups', 'targetCommunities', 'mediaAttachments'],
@@ -46,6 +47,7 @@ export class AdvertisementService {
   }
 
   async findOne(id: number): Promise<Advertisement | null> {
+    await this.checkExpired();
     return this.adRepo.findOne({
       where: { id },
       relations: ['targetGroups', 'targetCommunities', 'mediaAttachments'],
@@ -78,6 +80,120 @@ export class AdvertisementService {
       daysUsed: ad.daysUsed,
       daysRemaining: Math.max(0, ad.packageDays - ad.daysUsed),
       isSendable: ad.status === AdvertisementStatus.DRAFT || (ad.status === AdvertisementStatus.ACTIVE && ad.daysUsed < ad.packageDays),
+    };
+  }
+
+  /**
+   * Auto-transition ACTIVE ads whose package days have been fully used to COMPLETED.
+   * Called automatically at the start of findAll() and findOne().
+   */
+  async checkExpired(): Promise<void> {
+    try {
+      const expired = await this.adRepo
+        .createQueryBuilder('ad')
+        .where('ad.status = :active', { active: AdvertisementStatus.ACTIVE })
+        .andWhere('ad.daysUsed >= ad.packageDays')
+        .getMany();
+      for (const ad of expired) {
+        ad.status = AdvertisementStatus.COMPLETED;
+        await this.adRepo.save(ad);
+        this.logger.log(`Ad #${ad.id}: auto-transitioned to COMPLETED (${ad.daysUsed}/${ad.packageDays} days used)`);
+      }
+    } catch (err) {
+      this.logger.warn(`checkExpired error: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Get detailed telemetry for an ad campaign including per-group breakdown.
+   */
+  async getTelemetry(id: number): Promise<{
+    totalSent: number;
+    totalFailed: number;
+    todaySent: number;
+    todayFailed: number;
+    daysRemaining: number;
+    totalGroups: number;
+    perGroup: Array<{ groupName: string; totalSent: number; totalFailed: number; todaySent: number }>;
+    packageDays: number;
+    daysUsed: number;
+    status: string;
+  }> {
+    const ad = await this.findOne(id);
+    if (!ad) {
+      return { totalSent: 0, totalFailed: 0, todaySent: 0, todayFailed: 0, daysRemaining: 0, totalGroups: 0, perGroup: [], packageDays: 0, daysUsed: 0, status: 'unknown' };
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // All broadcasts for this ad
+    const broadcasts = await this.broadcastRepo.find({
+      where: { advertisementId: id },
+    });
+    const broadcastIds = broadcasts.map(b => b.id);
+
+    if (broadcastIds.length === 0) {
+      return {
+        totalSent: 0, totalFailed: 0, todaySent: 0, todayFailed: 0,
+        daysRemaining: Math.max(0, ad.packageDays - ad.daysUsed),
+        totalGroups: 0, perGroup: [],
+        packageDays: ad.packageDays, daysUsed: ad.daysUsed, status: ad.status,
+      };
+    }
+
+    // Total counts
+    const [totalSent, totalFailed] = await Promise.all([
+      this.taskRepo.count({
+        where: { broadcast: { id: In(broadcastIds) }, status: MessageTaskStatus.SENT },
+      }),
+      this.taskRepo.count({
+        where: { broadcast: { id: In(broadcastIds) }, status: MessageTaskStatus.FAILED },
+      }),
+    ]);
+
+    // Today counts
+    const [todaySent, todayFailed] = await Promise.all([
+      this.taskRepo.count({
+        where: { broadcast: { id: In(broadcastIds) }, status: MessageTaskStatus.SENT, lastAttemptAt: MoreThanOrEqual(todayStart) },
+      }),
+      this.taskRepo.count({
+        where: { broadcast: { id: In(broadcastIds) }, status: MessageTaskStatus.FAILED, lastAttemptAt: MoreThanOrEqual(todayStart) },
+      }),
+    ]);
+
+    // Per-group breakdown — compatible with both SQLite and PostgreSQL
+    const perGroupRaw = await this.taskRepo
+      .createQueryBuilder('task')
+      .select('"group".name', 'groupName')
+      .addSelect('COUNT(CASE WHEN task.status = \'sent\' THEN 1 END)', 'totalSent')
+      .addSelect('COUNT(CASE WHEN task.status = \'failed\' THEN 1 END)', 'totalFailed')
+      .addSelect('COUNT(CASE WHEN task.status = \'sent\' AND task.lastAttemptAt >= :todayStart THEN 1 END)', 'todaySent')
+      .leftJoin('task.group', '"group"')
+      .where('task.broadcastId IN (:...broadcastIds)', { broadcastIds })
+      .groupBy('"group".name')
+      .orderBy('"group".name', 'ASC')
+      .setParameter('todayStart', todayStart)
+      .getRawMany();
+
+    const perGroup = perGroupRaw.map((r: any) => ({
+      groupName: r.groupName || 'Unknown',
+      totalSent: parseInt(r.totalSent, 10) || 0,
+      totalFailed: parseInt(r.totalFailed, 10) || 0,
+      todaySent: parseInt(r.todaySent, 10) || 0,
+    }));
+
+    return {
+      totalSent,
+      totalFailed,
+      todaySent,
+      todayFailed,
+      daysRemaining: Math.max(0, ad.packageDays - ad.daysUsed),
+      totalGroups: perGroup.length,
+      perGroup,
+      packageDays: ad.packageDays,
+      daysUsed: ad.daysUsed,
+      status: ad.status,
     };
   }
 
@@ -186,35 +302,6 @@ export class AdvertisementService {
     this.logger.log(`Dispatched ad #${ad.id} day ${ad.daysUsed}/${ad.packageDays} (broadcast #${saved.id}, ${tasksCreated} tasks)`);
   }
 
-  /**
-   * Dispatch the next day for an active ad (called by scheduler).
-   * Guards against double-dispatch on the same day.
-   */
-  async dispatchNextDay(id: number): Promise<void> {
-    const ad = await this.findOne(id);
-    if (!ad || ad.status !== AdvertisementStatus.ACTIVE) return;
-
-    if (ad.daysUsed >= ad.packageDays) {
-      ad.status = AdvertisementStatus.COMPLETED;
-      await this.adRepo.save(ad);
-      this.logger.log(`Ad #${id}: package days exhausted, marking completed`);
-      return;
-    }
-
-    // Check if already dispatched today to prevent double-send
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const existing = await this.broadcastRepo.findOne({
-      where: { advertisementId: id, createdAt: MoreThanOrEqual(todayStart) },
-    });
-    if (existing) {
-      this.logger.debug(`Ad #${id}: already dispatched today, skipping`);
-      return;
-    }
-
-    await this.dispatchDay(ad);
-  }
-
   async addMedia(id: number, filePath: string, originalFilename: string, mediaType: string): Promise<MediaAttachment> {
     const ad = await this.findOne(id);
     if (!ad) {
@@ -270,14 +357,6 @@ export class AdvertisementService {
       }
       await this.adRepo.save(ad);
     }
-  }
-
-  /** Due ads that are active and haven't exhausted package days */
-  async findDue(): Promise<Advertisement[]> {
-    return this.adRepo.find({
-      where: { status: AdvertisementStatus.ACTIVE },
-      relations: ['targetGroups', 'targetCommunities'],
-    });
   }
 
   /**

@@ -286,11 +286,52 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   async sendTextMessage(chatId: string, text: string): Promise<MessageResult> {
     this.ensureReady();
-    const msg = await this.client!.sendMessage(chatId, text);
+    const msg = await this.client!.sendMessage(chatId, text, {
+      linkPreview: true,
+    });
     return {
       id: msg.id._serialized,
       timestamp: msg.timestamp,
     };
+  }
+
+  /**
+   * Poll WhatsApp's internal getLinkPreview API until Meta's server-side crawl
+   * completes and returns valid preview data. Once the browser's page context
+   * has a successful preview, ALL subsequent sendMessage calls in the same
+   * browser session resolve the preview from Meta's cached result instantly.
+   *
+   * Pre-warming before the first send eliminates the root cause of inconsistent
+   * previews: Meta's first crawl returns null (still in progress), so groups
+   * sent early miss the preview. Later groups hit the cached result.
+   */
+  async warmUpLinkPreview(url: string): Promise<any> {
+    if (!this.client || !this.client.pupPage) return null;
+    try {
+      return await this.client.pupPage.evaluate(async (linkUrl: string) => {
+        const { findLink } = window.require('WALinkify');
+        const link = findLink(linkUrl);
+        if (!link) return null;
+
+        for (let attempt = 0; attempt < 20; attempt++) {
+          try {
+            const result = await window
+              .require('WAWebLinkPreviewChatAction')
+              .getLinkPreview(link);
+
+            if (result && result.data) {
+              return result.data;
+            }
+          } catch {
+            // Retry
+          }
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        return null;
+      }, url);
+    } catch {
+      return null;
+    }
   }
 
   async sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult> {

@@ -9,7 +9,6 @@ import { MaintenanceService } from '../campaign/maintenance.service';
 import { RateLimiterService } from '../automation/rate-limiter.service';
 import { WorkerTrackerService } from '../automation/worker-tracker.service';
 import { GroupSyncService } from '../automation/group-sync.service';
-import { AdvertisementService } from '../advertisement/advertisement.service';
 import { SettingsService } from '../settings/settings.service';
 import { BroadcastEvent, BroadcastStatus } from '../campaign/entities/broadcast-event.entity';
 import { GenericParser } from '../scraper/parsers/built-in/generic.parser';
@@ -32,7 +31,6 @@ export class SchedulerService {
     private readonly rateLimiter: RateLimiterService,
     private readonly workerTracker: WorkerTrackerService,
     private readonly groupSyncService: GroupSyncService,
-    private readonly adService: AdvertisementService,
     private readonly settingsService: SettingsService,
     @InjectRepository(BroadcastEvent, 'data')
     private readonly broadcastRepo: Repository<BroadcastEvent>,
@@ -177,19 +175,6 @@ export class SchedulerService {
   async resolveStaleBroadcasts(): Promise<void> {
     const count = await this.campaignService.reDispatchStalledBroadcasts();
     if (count > 0) this.logger.log(`Resolved ${count} stale broadcasts stuck IN_PROGRESS`);
-  }
-
-  // ─── Ad dispatch: every hour ───
-
-  @Cron(CronExpression.EVERY_HOUR)
-  async dispatchDueAdvertisements(): Promise<void> {
-    const due = await this.adService.findDue();
-    for (const ad of due) {
-      this.logger.log(`Dispatching due advertisement #${ad.id}`);
-      await this.adService.dispatchNextDay(ad.id).catch(err =>
-        this.logger.error(`Ad #${ad.id} dispatch failed: ${err.message}`),
-      );
-    }
   }
 
   // ─── Private ──────────────────────────────────────────────────

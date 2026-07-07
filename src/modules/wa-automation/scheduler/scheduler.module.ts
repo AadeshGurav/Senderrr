@@ -6,7 +6,6 @@ import { SchedulerService } from './scheduler.service';
 import { ScraperModule } from '../scraper/scraper.module';
 import { CampaignModule } from '../campaign/campaign.module';
 import { AutomationModule } from '../automation/automation.module';
-import { AdvertisementModule } from '../advertisement/advertisement.module';
 import { SettingsModule } from '../settings/settings.module';
 import { BroadcastEvent } from '../campaign/entities/broadcast-event.entity';
 
@@ -18,7 +17,6 @@ import { BroadcastEvent } from '../campaign/entities/broadcast-event.entity';
     ScraperModule,
     CampaignModule,
     AutomationModule,
-    AdvertisementModule,
     SettingsModule,
   ],
   providers: [SchedulerService],

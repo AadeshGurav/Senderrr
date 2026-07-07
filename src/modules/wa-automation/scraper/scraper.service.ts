@@ -177,6 +177,7 @@ export class ScraperService {
       imageUrl: parsed.imageUrl,
       sourceName: parsed.sourceName,
       publishedAt: parsed.publishedAt,
+      bulletPoints: parsed.bulletPoints?.length ? parsed.bulletPoints : null,
     });
     return this.articleRepo.save(article);
   }

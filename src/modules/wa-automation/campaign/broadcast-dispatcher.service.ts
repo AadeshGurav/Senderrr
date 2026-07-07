@@ -199,6 +199,19 @@ export class BroadcastDispatcherService {
       return;
     }
 
+    // Pre-warm WhatsApp's server-side link preview cache before dispatching.
+    // This polls Meta's getLinkPreview API until the server-side crawl completes
+    // (typically 3-15s). Once cached, ALL subsequent sendMessage calls resolve
+    // instantly via the browser's shared page context — every group gets the
+    // same preview instead of only the ones that happen to hit a cached crawl.
+    if (!imageUrl && text) {
+      try {
+        await this.automationService.preWarmLinkPreview(sessionId, text);
+      } catch {
+        // Pre-warm is best-effort; continue without cached preview
+      }
+    }
+
     this.logger.log(`Admin #${adminId}: starting loop for ${tasks.length} tasks`);
     const warmUpMultiplier = 1.0;
 
@@ -357,7 +370,6 @@ export class BroadcastDispatcherService {
         text,
         adminId,
         workerId,
-        imageUrl,
       )
         .then(deliverResult => {
           clearTimeout(timer);

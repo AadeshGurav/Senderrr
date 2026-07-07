@@ -96,16 +96,18 @@ export class AutomationService {
           errorMessage: `Session ${sessionId} is not running`,
         };
       }
+
       let result: any;
 
       if (imageUrl) {
+        // Ad campaigns send media attachments (promotional images/videos).
         // Strip data URI prefix for engines that expect raw base64
         let mediaData = imageUrl;
         let mediaMime = 'image/jpeg';
         if (imageUrl.startsWith('data:')) {
           const commaIdx = imageUrl.indexOf(',');
           if (commaIdx !== -1) {
-            const header = imageUrl.substring(5, commaIdx); // strip 'data:'
+            const header = imageUrl.substring(5, commaIdx);
             mediaData = imageUrl.substring(commaIdx + 1);
             const semiIdx = header.indexOf(';');
             if (semiIdx !== -1) mediaMime = header.substring(0, semiIdx);
@@ -113,6 +115,9 @@ export class AutomationService {
         }
         result = await engine.sendImageMessage(chatId, { mimetype: mediaMime, data: mediaData, caption: text });
       } else {
+        // Article broadcasts: send as plain text to trigger WhatsApp's native link preview.
+        // When a URL is present, WhatsApp Web automatically renders a rich preview
+        // (thumbnail, title, description) from the article's OG meta tags.
         result = await engine.sendTextMessage(chatId, text);
       }
 
@@ -164,6 +169,26 @@ export class AutomationService {
         resolve(result);
       }, delay);
     });
+  }
+
+  /**
+   * Pre-warm WhatsApp's server-side link preview cache for a URL in a given session.
+   * Call this once per admin queue / unique URL to make sendMessage link previews
+   * consistent across groups. For multi-device accounts, previews are generated
+   * server-side on first request and cached for subsequent calls.
+   */
+  async preWarmLinkPreview(sessionId: string, text: string): Promise<void> {
+    try {
+      const urlMatch = text.match(/https?:\/\/[^\s]+/);
+      if (!urlMatch) return;
+
+      const engine = this.sessionService.getEngine(sessionId);
+      if (!engine || !engine.warmUpLinkPreview) return;
+
+      await engine.warmUpLinkPreview(urlMatch[1]);
+    } catch {
+      // Pre-warm is best-effort
+    }
   }
 
   private classifyError(message: string): ErrorCategory {

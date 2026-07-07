@@ -20,6 +20,9 @@ export class ScrapedArticle {
   @Column({ type: 'varchar', length: 1024, nullable: true })
   imageUrl: string | null;
 
+  @Column({ type: 'simple-json', nullable: true })
+  bulletPoints: string[] | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   sourceName: string | null;
 

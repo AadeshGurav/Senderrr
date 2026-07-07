@@ -72,7 +72,7 @@ export class CampaignService {
   ): Promise<{ broadcastId: number; tasksCreated: number }> {
     const template = await this.templateService.getActive();
     const messageText = await this.templateRenderer.render(template.templateText, {
-      title: '', description: '', url: '', imageUrl: '', source: '', publishedAt: '', time: '',
+      title: '', description: '', bullets: '', url: '', imageUrl: '', source: '', publishedAt: '', time: '',
     });
 
     const broadcast = this.broadcastRepo.create({
@@ -137,9 +137,13 @@ export class CampaignService {
     // Compose message content
     const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
     const template = await this.templateService.getActive();
+    const bulletsText = (article as any).bulletPoints?.length
+      ? (article as any).bulletPoints.map((bp: string) => `• ${bp}`).join('\n')
+      : article.description || '';
     const placeholders: NewsPlaceholders = {
       title: article.title || '',
       description: article.description || '',
+      bullets: bulletsText,
       url: article.url,
       imageUrl: article.imageUrl || '',
       source: article.sourceName || '',
@@ -174,8 +178,9 @@ export class CampaignService {
       await this.taskRepo.save(task);
     }
 
-    // Fire-and-forget dispatch (non-blocking)
-    this.dispatcher.dispatchBroadcast(saved.id, messageText, article.imageUrl || undefined).catch(err => {
+    // Fire-and-forget dispatch (non-blocking) — no imageUrl: WhatsApp link preview
+    // renders a rich preview from the article's OG meta tags instead.
+    this.dispatcher.dispatchBroadcast(saved.id, messageText).catch(err => {
       this.logger.error(`Broadcast #${saved.id} dispatch crashed: ${err.message}`, err.stack);
       this.broadcastRepo.update(saved.id, {
         status: BroadcastStatus.FAILED,
@@ -212,11 +217,9 @@ export class CampaignService {
 
     // Use stored messageText if available (immutable snapshot from creation time)
     let messageText = broadcast.messageText;
-    let imageUrl: string | undefined;
 
     if (!messageText && broadcast.article) {
       messageText = await this.composeArticleText(broadcast.article);
-      imageUrl = (broadcast.article as any).imageUrl || undefined;
     }
 
     if (!messageText) return 0;
@@ -231,7 +234,7 @@ export class CampaignService {
       retried++;
     }
 
-    this.dispatcher.dispatchBroadcast(broadcastId, messageText, imageUrl)
+    this.dispatcher.dispatchBroadcast(broadcastId, messageText)
       .catch(err => {
         this.logger.error(`Retry broadcast #${broadcastId} crashed: ${err.message}`, err.stack);
         this.broadcastRepo.update(broadcastId, {
@@ -325,14 +328,12 @@ export class CampaignService {
       if (!broadcastWithArticle) continue;
 
       let messageText: string | null = null;
-      let imageUrl: string | undefined;
 
       // Use stored messageText if available (article broadcasts, ads, communities)
       if (broadcastWithArticle.messageText) {
         messageText = broadcastWithArticle.messageText;
       } else if (broadcastWithArticle.article) {
         messageText = await this.composeArticleText(broadcastWithArticle.article);
-        imageUrl = (broadcastWithArticle.article as any).imageUrl || undefined;
       } else {
         // Fallback to active template
         messageText = await this.composeBroadcastText();
@@ -344,7 +345,6 @@ export class CampaignService {
       this.dispatcher.dispatchBroadcast(
         broadcast.id,
         messageText,
-        imageUrl,
       ).catch(err => {
         this.logger.error(`Re-dispatch broadcast #${broadcast.id} crashed: ${err.message}`);
       });
@@ -426,7 +426,7 @@ export class CampaignService {
       created++;
     }
 
-    this.dispatcher.dispatchBroadcast(broadcast.id, messageText, article.imageUrl || undefined)
+    this.dispatcher.dispatchBroadcast(broadcast.id, messageText)
       .catch(err => {
         this.logger.error(`Retry broadcast #${broadcast.id} (from article) crashed: ${err.message}`, err.stack);
         this.broadcastRepo.update(broadcast.id, {
@@ -442,9 +442,13 @@ export class CampaignService {
     const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
     const template = await this.templateService.getActive();
     if (!template) return null;
+    const bulletsText = article.bulletPoints?.length
+      ? article.bulletPoints.map((bp: string) => `• ${bp}`).join('\n')
+      : article.description || '';
     const placeholders: NewsPlaceholders = {
       title: article.title || '',
       description: article.description || '',
+      bullets: bulletsText,
       url: article.url,
       imageUrl: article.imageUrl || '',
       source: article.sourceName || '',
@@ -463,6 +467,7 @@ export class CampaignService {
     const placeholders: NewsPlaceholders = {
       title: '',
       description: '',
+      bullets: '',
       url: '',
       imageUrl: '',
       source: '',

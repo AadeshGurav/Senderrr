@@ -5,6 +5,7 @@ export interface ArticlePreview {
   imageUrl?: string;
   sourceName?: string;
   publishedAt?: Date;
+  bulletPoints?: string[];
 }
 
 export interface ParsedArticle {
@@ -15,6 +16,7 @@ export interface ParsedArticle {
   imageUrl?: string;
   sourceName?: string;
   publishedAt?: Date;
+  bulletPoints?: string[];
 }
 
 export interface IArticleParser {

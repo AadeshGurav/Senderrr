@@ -152,6 +152,7 @@ export class GenericParser implements IArticleParser {
     let body = '';
     let imageUrl = '';
     let publishedAt: Date | undefined;
+    let bulletPoints: string[] | undefined;
 
     try {
       const $ = cheerio.load(html);
@@ -216,6 +217,32 @@ export class GenericParser implements IArticleParser {
         if (!isNaN(d.getTime())) publishedAt = d;
       }
 
+      // Bullet points: extract heading elements with class `wp-block-heading`
+      // that exist within the primary content container to avoid picking up
+      // sidebar/footer headings that share the same class.
+      const foundBulletPoints: string[] = [];
+      const containerSelectors = [
+        'article', 'main',
+        '.td-post-content', '.entry-content', '.post-content',
+        '.article-body', '.article-content', '.content',
+        '.td-block-row', '.post', '.story-body', '.news-body',
+      ];
+      for (const sel of containerSelectors) {
+        const $container = $(sel).first();
+        if ($container.length === 0) continue;
+
+        // Find h2 and h3 with wp-block-heading class inside this container
+        $container.find('h2.wp-block-heading, h3.wp-block-heading, h4.wp-block-heading').each((_, el) => {
+          const text = $(el).text().trim();
+          if (text.length > 5) {
+            foundBulletPoints.push(text);
+          }
+        });
+
+        if (foundBulletPoints.length > 0) break;
+      }
+      if (foundBulletPoints.length > 0) bulletPoints = foundBulletPoints;
+
       // JSON-LD fallback for date
       if (!publishedAt) {
         const ldMatch = html.match(/"datePublished"\s*:\s*"([^"]+)"/i);
@@ -278,6 +305,7 @@ export class GenericParser implements IArticleParser {
       imageUrl: imageUrl?.trim() || undefined,
       sourceName: new URL(url).hostname,
       publishedAt,
+      bulletPoints,
     };
   }
 

@@ -66,6 +66,7 @@ export class TemplateController {
     const sample: NewsPlaceholders = {
       title: 'Sample News Headline',
       description: 'This is a sample description for preview purposes.',
+      bullets: '• Point one\n• Point two\n• Point three',
       url: 'https://example.com/article/123',
       imageUrl: 'https://example.com/image.jpg',
       source: 'Sample Source',

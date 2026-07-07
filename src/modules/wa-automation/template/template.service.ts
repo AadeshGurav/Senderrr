@@ -7,7 +7,7 @@ import { MessageTemplate } from './entities/message-template.entity';
 export class TemplateService {
   private readonly defaultTemplate = `*{news.title}*
 
-{news.description}
+{news.bullets}
 
 📰 *Source:* {news.source}
 🕐 *Published:* {news.time}

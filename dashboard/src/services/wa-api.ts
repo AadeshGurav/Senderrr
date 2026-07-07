@@ -150,6 +150,7 @@ export const adApi = {
   list: () => request<any[]>('/advertisements'),
   get: (id: number) => request<any>(`/advertisements/${id}`),
   getStatistics: (id: number) => request<any>(`/advertisements/${id}/statistics`),
+  getTelemetry: (id: number) => request<any>(`/advertisements/${id}/telemetry`),
   create: (data: any) => request<any>('/advertisements', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: any) => request<any>(`/advertisements/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   send: (id: number) => request<any>(`/advertisements/${id}/send`, { method: 'POST' }),
