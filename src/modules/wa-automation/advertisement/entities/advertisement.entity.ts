@@ -27,8 +27,8 @@ export class Advertisement {
   @Column({ type: 'varchar', length: 255 })
   title: string;
 
-  @Column({ type: 'text' })
-  body: string;
+  @Column({ type: 'text', nullable: true })
+  body: string | null;
 
   @Column({ type: 'varchar', length: 30, default: AdvertisementTargetType.ALL_GROUPS })
   targetType: AdvertisementTargetType;

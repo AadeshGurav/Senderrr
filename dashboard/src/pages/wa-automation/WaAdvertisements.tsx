@@ -186,6 +186,22 @@ export default function WaAdvertisements() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate: title required + at least body or attachments
+    if (!formData.title.trim()) {
+      showError('Validation', 'Campaign title is required');
+      setCreating(false);
+      return;
+    }
+    const hasBody = formData.body.trim().length > 0;
+    const hasNewMedia = mediaFiles.length > 0;
+    const hasExistingMedia = editingAd && editingAd.mediaAttachments?.length > removedMediaIds.length;
+    if (!hasBody && !hasNewMedia && !hasExistingMedia) {
+      showError('Validation', 'Provide a message body or upload at least one attachment');
+      setCreating(false);
+      return;
+    }
+
     setCreating(true);
     try {
       const payload: any = {
@@ -325,15 +341,14 @@ export default function WaAdvertisements() {
                 />
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-                    Message Body *
+                    Message Body
                   </label>
                   <div className="relative">
                     <Textarea
                       value={formData.body}
                       onChange={(e) => setFormData({ ...formData, body: e.target.value })}
-                      placeholder="Enter your promotional message..."
+                      placeholder="Enter your promotional message... Leave empty to send only attachments"
                       rows={5}
-                      required
                       className="pr-20"
                     />
                     <span className="absolute bottom-2.5 right-3 text-[10px] text-[var(--color-text-muted)] font-mono">

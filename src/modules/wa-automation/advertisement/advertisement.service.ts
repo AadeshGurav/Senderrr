@@ -293,7 +293,7 @@ export class AdvertisementService {
     // This reuses the full anti-ban pipeline: rate limits, jitter, human-like pacing,
     // quiet hours, group health, retry with backoff, etc.
     // Pass the ad body as messageText and all media as imageUrls
-    this.dispatcher.dispatchBroadcast(saved.id, ad.body, imageUrls).catch((err: Error) => {
+    this.dispatcher.dispatchBroadcast(saved.id, ad.body || '', imageUrls).catch((err: Error) => {
       this.logger.error(`Ad broadcast #${saved.id} crashed: ${err.message}`);
       this.broadcastRepo.update(saved.id, {
         status: BroadcastStatus.FAILED,
