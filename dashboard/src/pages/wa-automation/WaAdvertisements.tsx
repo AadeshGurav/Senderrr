@@ -77,6 +77,7 @@ export default function WaAdvertisements() {
   });
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
+  const [removedMediaIds, setRemovedMediaIds] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
@@ -179,6 +180,7 @@ export default function WaAdvertisements() {
     });
     setMediaFiles([]);
     setMediaPreviews([]);
+    setRemovedMediaIds([]);
     setShowForm(true);
   };
 
@@ -200,19 +202,17 @@ export default function WaAdvertisements() {
       if (editingAd) {
         await updateAd.mutateAsync({ id: editingAd.id, data: payload });
 
-        // Replace all media — remove existing, upload new
-        if (mediaFiles.length > 0 && editingAd.id) {
-          const existing = editingAd.mediaAttachments || [];
-          for (const m of existing) {
-            await adApi.removeMedia(m.id);
+        // Remove any media the user deleted
+        if (removedMediaIds.length > 0) {
+          for (const mid of removedMediaIds) {
+            await adApi.removeMedia(mid);
           }
+        }
+
+        // Upload new files
+        if (mediaFiles.length > 0) {
           for (const file of mediaFiles) {
             await adApi.uploadMedia(editingAd.id, file);
-          }
-        } else if (mediaFiles.length === 0 && editingAd.id && editingAd.mediaAttachments?.length > 0) {
-          // Explicitly removed all media
-          for (const m of editingAd.mediaAttachments) {
-            await adApi.removeMedia(m.id);
           }
         }
 
@@ -235,6 +235,7 @@ export default function WaAdvertisements() {
       setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 });
       setMediaFiles([]);
       setMediaPreviews([]);
+      setRemovedMediaIds([]);
     } catch (e: any) {
       showError('Failed to save campaign', e.message);
     } finally {
@@ -354,6 +355,30 @@ export default function WaAdvertisements() {
                   <span className="text-[11px] text-[var(--color-text-muted)]">optional</span>
                 </div>
 
+                {/* Existing attachments (edit mode only) */}
+                {editingAd && editingAd.mediaAttachments?.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {editingAd.mediaAttachments
+                      .filter((m: any) => !removedMediaIds.includes(m.id))
+                      .map((m: any) => (
+                        <div key={m.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Image size={16} className="text-[var(--color-text-muted)] flex-shrink-0" />
+                            <span className="text-xs text-[var(--color-text)] truncate">{m.originalFilename || `Attachment #${m.id}`}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setRemovedMediaIds(prev => [...prev, m.id])}
+                            className="text-xs text-red-500 hover:text-red-600 flex-shrink-0 cursor-pointer p-1"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {/* Drag-and-drop zone for new files */}
                 <div
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}

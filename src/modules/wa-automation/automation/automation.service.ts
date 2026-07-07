@@ -104,9 +104,8 @@ export class AutomationService {
       let result: any;
 
       if (imageUrls.length > 0) {
-        // Ad campaigns: send text first, then each media file sequentially
-        result = await engine.sendTextMessage(chatId, text);
-
+        // Send text as caption on the FIRST image/media, then remaining media standalone
+        let first = true;
         for (const imageUrl of imageUrls) {
           let mediaData = imageUrl;
           let mediaMime = 'image/jpeg';
@@ -124,19 +123,22 @@ export class AutomationService {
             }
           }
 
-          const mimeType = mediaMime.toLowerCase();
-          if (mimeType.startsWith('image/')) {
-            await engine.sendImageMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
-          } else if (mimeType.startsWith('video/')) {
-            await engine.sendVideoMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
-          } else if (mimeType.startsWith('audio/')) {
-            await engine.sendAudioMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
-          } else {
-            await engine.sendDocumentMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
+          const opts: any = { mimetype: mediaMime, data: mediaData, filename: mediaFilename };
+          if (first && text) {
+            opts.caption = text;  // caption on first media carries the message text
+            first = false;
           }
 
-          // Brief pause between attachments to avoid rate issues
-          await new Promise(r => setTimeout(r, 1500));
+          const mimeType = mediaMime.toLowerCase();
+          if (mimeType.startsWith('image/')) {
+            result = await engine.sendImageMessage(chatId, opts);
+          } else if (mimeType.startsWith('video/')) {
+            result = await engine.sendVideoMessage(chatId, opts);
+          } else if (mimeType.startsWith('audio/')) {
+            result = await engine.sendAudioMessage(chatId, opts);
+          } else {
+            result = await engine.sendDocumentMessage(chatId, opts);
+          }
         }
       } else {
         // Article broadcasts: send as plain text to trigger WhatsApp's native link preview.
