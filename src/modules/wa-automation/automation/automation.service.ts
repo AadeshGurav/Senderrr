@@ -104,8 +104,8 @@ export class AutomationService {
       let result: any;
 
       if (imageUrls.length > 0) {
-        // Send text as caption on the FIRST image/media, then remaining media standalone
-        let first = true;
+        // Send all media as a single album message with text as caption
+        const mediaArray: any[] = [];
         for (const imageUrl of imageUrls) {
           let mediaData = imageUrl;
           let mediaMime = 'image/jpeg';
@@ -122,24 +122,9 @@ export class AutomationService {
               }
             }
           }
-
-          const opts: any = { mimetype: mediaMime, data: mediaData, filename: mediaFilename };
-          if (first && text) {
-            opts.caption = text;  // caption on first media carries the message text
-            first = false;
-          }
-
-          const mimeType = mediaMime.toLowerCase();
-          if (mimeType.startsWith('image/')) {
-            result = await engine.sendImageMessage(chatId, opts);
-          } else if (mimeType.startsWith('video/')) {
-            result = await engine.sendVideoMessage(chatId, opts);
-          } else if (mimeType.startsWith('audio/')) {
-            result = await engine.sendAudioMessage(chatId, opts);
-          } else {
-            result = await engine.sendDocumentMessage(chatId, opts);
-          }
+          mediaArray.push({ mimetype: mediaMime, data: mediaData, filename: mediaFilename });
         }
+        result = await engine.sendAlbumMessage(chatId, mediaArray, text || undefined);
       } else {
         // Article broadcasts: send as plain text to trigger WhatsApp's native link preview.
         // When a URL is present, WhatsApp Web automatically renders a rich preview

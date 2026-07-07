@@ -338,6 +338,38 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     return this.sendMediaMessage(chatId, media);
   }
 
+  /**
+   * Send multiple media files as a single album message in WhatsApp.
+   * The text is applied as the caption on the album.
+   */
+  async sendAlbumMessage(chatId: string, mediaArray: MediaInput[], caption?: string): Promise<MessageResult> {
+    this.ensureReady();
+
+    const messageMediaArray = await Promise.all(
+      mediaArray.map(async (media) => {
+        if (typeof media.data === 'string') {
+          if (media.data.startsWith('http://') || media.data.startsWith('https://')) {
+            return MessageMedia.fromUrl(media.data);
+          }
+          return new MessageMedia(media.mimetype, media.data, media.filename);
+        }
+        return new MessageMedia(media.mimetype, media.data.toString('base64'), media.filename);
+      })
+    );
+
+    const options: any = {};
+    if (caption) {
+      options.caption = caption;
+    }
+
+    const msg = await (this.client as any).sendMessage(chatId, messageMediaArray, options);
+
+    return {
+      id: msg.id._serialized,
+      timestamp: msg.timestamp,
+    };
+  }
+
   async sendVideoMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     return this.sendMediaMessage(chatId, media);
   }
@@ -849,6 +881,22 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     }
     await message.delete(forEveryone);
     this.logger.log(`Deleted message ${messageId} from chat ${chatId} (forEveryone: ${forEveryone})`);
+  }
+
+  async editMessage(chatId: string, messageId: string, text: string): Promise<MessageResult> {
+    this.ensureReady();
+    const chat = await this.client!.getChatById(chatId);
+    const messages = await chat.fetchMessages({ limit: 100 });
+    const message = messages.find(m => m.id._serialized === messageId || m.id.id === messageId);
+    if (!message) {
+      throw new Error(`Message ${messageId} not found in chat ${chatId}`);
+    }
+    const edited = await message.edit(text);
+    this.logger.log(`Edited message ${messageId} in chat ${chatId}`);
+    return {
+      id: edited?.id?._serialized || messageId,
+      timestamp: edited?.timestamp || Date.now(),
+    };
   }
 
   // Get Profile Picture

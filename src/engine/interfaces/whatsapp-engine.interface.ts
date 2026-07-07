@@ -226,6 +226,7 @@ export interface IWhatsAppEngine {
   // Messaging - Basic
   sendTextMessage(chatId: string, text: string): Promise<MessageResult>;
   sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
+  sendAlbumMessage(chatId: string, mediaArray: MediaInput[], caption?: string): Promise<MessageResult>;
   sendVideoMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
   sendAudioMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
   sendDocumentMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
@@ -267,6 +268,7 @@ export interface IWhatsAppEngine {
 
   // Message Operations
   deleteMessage(chatId: string, messageId: string, forEveryone?: boolean): Promise<void>;
+  editMessage(chatId: string, messageId: string, text: string): Promise<MessageResult>;
 
   // Contact Extended Operations
   getProfilePicture(contactId: string): Promise<string | null>;
