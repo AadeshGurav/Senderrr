@@ -237,19 +237,21 @@ export class AdvertisementService {
       return;
     }
 
-    // Resolve first media attachment for imageUrl
-    let imageUrl: string | undefined;
-    const media = await this.mediaRepo.findOne({
+    // Resolve all media attachments as data URIs
+    const mediaItems = await this.mediaRepo.find({
       where: { advertisement: { id: ad.id } },
       order: { createdAt: 'ASC' },
     });
-    if (media?.filePath) {
-      try {
-        const fileBuffer = await fs.readFile(media.filePath);
-        const mimeType = this.getMimeType(media.filePath);
-        imageUrl = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
-      } catch (err) {
-        this.logger.warn(`Ad #${ad.id}: could not read media file ${media.filePath}: ${(err as Error).message}`);
+    const imageUrls: string[] = [];
+    for (const m of mediaItems) {
+      if (m.filePath) {
+        try {
+          const fileBuffer = await fs.readFile(m.filePath);
+          const mimeType = this.getMimeType(m.filePath);
+          imageUrls.push(`data:${mimeType};base64,${fileBuffer.toString('base64')}`);
+        } catch (err) {
+          this.logger.warn(`Ad #${ad.id}: could not read media file ${m.filePath}: ${(err as Error).message}`);
+        }
       }
     }
 
@@ -290,8 +292,8 @@ export class AdvertisementService {
     // Fire-and-forget dispatch through the existing broadcast dispatcher
     // This reuses the full anti-ban pipeline: rate limits, jitter, human-like pacing,
     // quiet hours, group health, retry with backoff, etc.
-    // Pass the ad body as messageText and first media as imageUrl
-    this.dispatcher.dispatchBroadcast(saved.id, ad.body, imageUrl).catch((err: Error) => {
+    // Pass the ad body as messageText and all media as imageUrls
+    this.dispatcher.dispatchBroadcast(saved.id, ad.body, imageUrls).catch((err: Error) => {
       this.logger.error(`Ad broadcast #${saved.id} crashed: ${err.message}`);
       this.broadcastRepo.update(saved.id, {
         status: BroadcastStatus.FAILED,

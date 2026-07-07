@@ -51,7 +51,7 @@ export class BroadcastDispatcherService {
   async dispatchBroadcast(
     broadcastId: number,
     messageText: string,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<void> {
     // Allow re-dispatch if broadcast is still IN_PROGRESS and has remaining pending tasks
     if (this.dispatchingBroadcasts.has(broadcastId)) {
@@ -75,7 +75,7 @@ export class BroadcastDispatcherService {
     this.dispatchingBroadcasts.add(broadcastId);
 
     try {
-      await this.dispatchBroadcastInner(broadcastId, messageText, imageUrl);
+      await this.dispatchBroadcastInner(broadcastId, messageText, imageUrls);
     } catch (err) {
       this.logger.error(`Broadcast #${broadcastId} dispatch crashed: ${(err as Error).message}`, (err as Error).stack);
       // Mark as FAILED so it doesn't stay IN_PROGRESS forever
@@ -91,7 +91,7 @@ export class BroadcastDispatcherService {
   private async dispatchBroadcastInner(
     broadcastId: number,
     messageText: string,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<void> {
     const broadcast = await this.broadcastRepo.findOne({ where: { id: broadcastId } });
     if (!broadcast) {
@@ -138,7 +138,7 @@ export class BroadcastDispatcherService {
 
     // Fire all admin queues in parallel
     const queues = [...byAdmin.entries()].map(([adminId, adminTasks]) =>
-      this.processAdminQueue(adminId, adminTasks, messageText, imageUrl),
+      this.processAdminQueue(adminId, adminTasks, messageText, imageUrls),
     );
     const results = await Promise.allSettled(queues);
 
@@ -157,10 +157,10 @@ export class BroadcastDispatcherService {
     adminId: number,
     tasks: MessageTask[],
     text: string,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<void> {
     try {
-      await this.processAdminQueueInner(adminId, tasks, text, imageUrl);
+      await this.processAdminQueueInner(adminId, tasks, text, imageUrls);
     } catch (err) {
       this.logger.error(`Admin #${adminId} queue crashed: ${(err as Error).message}`);
       // Leave remaining tasks PENDING — retry cron will pick them up
@@ -171,7 +171,7 @@ export class BroadcastDispatcherService {
     adminId: number,
     tasks: MessageTask[],
     text: string,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<void> {
     // Resolve the admin's ready session with timeout
     let sessionId: string | null = null;
@@ -204,7 +204,7 @@ export class BroadcastDispatcherService {
     // (typically 3-15s). Once cached, ALL subsequent sendMessage calls resolve
     // instantly via the browser's shared page context — every group gets the
     // same preview instead of only the ones that happen to hit a cached crawl.
-    if (!imageUrl && text) {
+    if (imageUrls.length === 0 && text) {
       try {
         await this.automationService.preWarmLinkPreview(sessionId, text);
       } catch {
@@ -247,7 +247,7 @@ export class BroadcastDispatcherService {
         }
       }
 
-      await this.deliverTaskWithRetry(tasks[i], sessionId, text, imageUrl);
+      await this.deliverTaskWithRetry(tasks[i], sessionId, text, imageUrls);
     }
   }
 
@@ -259,7 +259,7 @@ export class BroadcastDispatcherService {
     task: MessageTask,
     sessionId: string,
     text: string,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<void> {
     const maxDeliveryAttempts = 3;
     let lastError: string | null = null;
@@ -267,7 +267,7 @@ export class BroadcastDispatcherService {
     let lastResponseTime = 0;
 
     for (let attempt = 1; attempt <= maxDeliveryAttempts; attempt++) {
-      const result = await this.attemptDelivery(task, sessionId, text, imageUrl);
+      const result = await this.attemptDelivery(task, sessionId, text, imageUrls);
 
       if (result.success) {
         this.logger.log(
@@ -295,11 +295,14 @@ export class BroadcastDispatcherService {
           await this.sleep(backoffMs);
           continue;
         }
-        // Last attempt exhausted — leave as PENDING for retry cron
+        // Last attempt exhausted — mark as FAILED so tally/telemetry reflects it
+        this.logger.error(`Task #${task.id} failed after ${maxDeliveryAttempts} attempts: ${lastError}`);
         await this.taskRepo.update(task.id, {
-          status: MessageTaskStatus.PENDING,
-          nextRetryAt: new Date(Date.now() + 60_000),
+          status: MessageTaskStatus.FAILED,
+          errorCategory: lastCategory,
+          errorMessage: lastError || 'Max delivery attempts exceeded',
         });
+        await this.maintenanceService.markGroupFailed(task.group.id);
         return;
       }
 
@@ -332,7 +335,7 @@ export class BroadcastDispatcherService {
     task: MessageTask,
     sessionId: string,
     text: string,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<DeliveryResult> {
     if (!task.group || !task.admin?.id) {
       return {
@@ -370,7 +373,7 @@ export class BroadcastDispatcherService {
         text,
         adminId,
         workerId,
-        imageUrl,
+        imageUrls,
       )
         .then(deliverResult => {
           clearTimeout(timer);

@@ -29,6 +29,10 @@ export interface DeliveryResult {
   responseTime?: number;
 }
 
+export function isMediaMime(mime: string): boolean {
+  return mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf';
+}
+
 @Injectable()
 export class AutomationService {
   private readonly logger = new Logger('AutomationService');
@@ -59,7 +63,7 @@ export class AutomationService {
     text: string,
     adminId: number,
     workerId: string,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<DeliveryResult> {
     const startTime = Date.now();
 
@@ -99,21 +103,41 @@ export class AutomationService {
 
       let result: any;
 
-      if (imageUrl) {
-        // Ad campaigns send media attachments (promotional images/videos).
-        // Strip data URI prefix for engines that expect raw base64
-        let mediaData = imageUrl;
-        let mediaMime = 'image/jpeg';
-        if (imageUrl.startsWith('data:')) {
-          const commaIdx = imageUrl.indexOf(',');
-          if (commaIdx !== -1) {
-            const header = imageUrl.substring(5, commaIdx);
-            mediaData = imageUrl.substring(commaIdx + 1);
-            const semiIdx = header.indexOf(';');
-            if (semiIdx !== -1) mediaMime = header.substring(0, semiIdx);
+      if (imageUrls.length > 0) {
+        // Ad campaigns: send text first, then each media file sequentially
+        result = await engine.sendTextMessage(chatId, text);
+
+        for (const imageUrl of imageUrls) {
+          let mediaData = imageUrl;
+          let mediaMime = 'image/jpeg';
+          let mediaFilename = `attachment.${this.mimeToExt(mediaMime)}`;
+          if (imageUrl.startsWith('data:')) {
+            const commaIdx = imageUrl.indexOf(',');
+            if (commaIdx !== -1) {
+              const header = imageUrl.substring(5, commaIdx);
+              mediaData = imageUrl.substring(commaIdx + 1);
+              const semiIdx = header.indexOf(';');
+              if (semiIdx !== -1) {
+                mediaMime = header.substring(0, semiIdx);
+                mediaFilename = `attachment.${this.mimeToExt(mediaMime)}`;
+              }
+            }
           }
+
+          const mimeType = mediaMime.toLowerCase();
+          if (mimeType.startsWith('image/')) {
+            await engine.sendImageMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
+          } else if (mimeType.startsWith('video/')) {
+            await engine.sendVideoMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
+          } else if (mimeType.startsWith('audio/')) {
+            await engine.sendAudioMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
+          } else {
+            await engine.sendDocumentMessage(chatId, { mimetype: mediaMime, data: mediaData, filename: mediaFilename });
+          }
+
+          // Brief pause between attachments to avoid rate issues
+          await new Promise(r => setTimeout(r, 1500));
         }
-        result = await engine.sendImageMessage(chatId, { mimetype: mediaMime, data: mediaData, caption: text });
       } else {
         // Article broadcasts: send as plain text to trigger WhatsApp's native link preview.
         // When a URL is present, WhatsApp Web automatically renders a rich preview
@@ -156,7 +180,7 @@ export class AutomationService {
     adminId: number,
     workerId: string,
     batchIndex: number,
-    imageUrl?: string,
+    imageUrls: string[] = [],
   ): Promise<DeliveryResult> {
     const delay = this.jitterService.calculateDelay(batchIndex);
     this.logger.debug(`Scheduling delivery to ${chatId} with ${Math.round(delay / 1000)}s jitter`);
@@ -164,7 +188,7 @@ export class AutomationService {
     return new Promise(resolve => {
       setTimeout(async () => {
         const result = await this.deliverMessage(
-          sessionId, chatId, text, adminId, workerId, imageUrl,
+          sessionId, chatId, text, adminId, workerId, imageUrls,
         );
         resolve(result);
       }, delay);
@@ -188,6 +212,67 @@ export class AutomationService {
       await engine.warmUpLinkPreview(urlMatch[1]);
     } catch {
       // Pre-warm is best-effort
+    }
+  }
+
+  /**
+   * Edit a previously sent WhatsApp message in a given group.
+   */
+  async editMessage(
+    sessionId: string,
+    chatId: string,
+    messageId: string,
+    newText: string,
+  ): Promise<DeliveryResult> {
+    const startTime = Date.now();
+    try {
+      const engine = this.sessionService.getEngine(sessionId);
+      if (!engine) {
+        return {
+          success: false,
+          errorCategory: ErrorCategory.SESSION_EXPIRED,
+          errorMessage: `Session ${sessionId} is not running`,
+        };
+      }
+      await engine.editMessage(chatId, messageId, newText);
+      return { success: true, responseTime: Date.now() - startTime };
+    } catch (err) {
+      return {
+        success: false,
+        errorCategory: this.classifyError((err as Error).message),
+        errorMessage: (err as Error).message,
+        responseTime: Date.now() - startTime,
+      };
+    }
+  }
+
+  /**
+   * Delete a previously sent WhatsApp message in a given group.
+   */
+  async deleteMessage(
+    sessionId: string,
+    chatId: string,
+    messageId: string,
+  ): Promise<DeliveryResult> {
+    const startTime = Date.now();
+    try {
+      const engine = this.sessionService.getEngine(sessionId);
+      if (!engine) {
+        return {
+          success: false,
+          errorCategory: ErrorCategory.SESSION_EXPIRED,
+          errorMessage: `Session ${sessionId} is not running`,
+        };
+      }
+      await engine.deleteMessage(chatId, messageId, true);
+      return { success: true, responseTime: Date.now() - startTime };
+    } catch (err) {
+      return {
+        success: false,
+        errorCategory: this.classifyError((err as Error).message),
+        errorMessage: (err as Error).message,
+        responseTime: Date.now() - startTime,
+      };
     }
   }
 
@@ -215,5 +300,18 @@ export class AutomationService {
       return ErrorCategory.SEND_FAILED;
     }
     return ErrorCategory.UNKNOWN;
+  }
+
+  private mimeToExt(mime: string): string {
+    const map: Record<string, string> = {
+      'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
+      'video/mp4': 'mp4', 'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3', 'audio/ogg': 'ogg',
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'text/plain': 'txt',
+    };
+    return map[mime] || 'bin';
   }
 }

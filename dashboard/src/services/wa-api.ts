@@ -109,6 +109,14 @@ export const campaignApi = {
     return request<{ data: any[]; total: number; page: number; limit: number }>(url);
   },
   getBroadcast: (id: number) => request<{ broadcast: any; tasks: any[] }>(`/campaigns/broadcasts/${id}`),
+  editBroadcast: (id: number, messageText: string) =>
+    request<{ edited: number; failed: number }>(`/campaigns/broadcasts/${id}/edit`, {
+      method: 'PATCH', body: JSON.stringify({ messageText }),
+    }),
+  deleteBroadcast: (id: number) =>
+    request<{ deleted: number; failed: number }>(`/campaigns/broadcasts/${id}`, {
+      method: 'DELETE',
+    }),
   retryBroadcast: (id: number) => request<{ retried: number }>(`/campaigns/broadcasts/${id}/retry`, { method: 'POST' }),
   retryAllBroadcasts: () => request<{ retried: number; broadcasts: number }>('/campaigns/broadcasts/retry-all', { method: 'POST' }),
   recoverGroups: () => request<{ recovered: number }>('/campaigns/recover-groups', { method: 'POST' }),

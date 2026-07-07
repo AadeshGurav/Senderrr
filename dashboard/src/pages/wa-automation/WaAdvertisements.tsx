@@ -75,8 +75,8 @@ export default function WaAdvertisements() {
     selectedCommunities: [] as Community[],
     packageDays: 1,
   });
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
@@ -143,15 +143,28 @@ export default function WaAdvertisements() {
     }
   };
 
-  const handleFileSelect = (file: File | null) => {
-    setMediaFile(file);
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => setMediaPreview(e.target?.result as string);
-      reader.readAsDataURL(file);
-    } else {
-      setMediaPreview(null);
+  const handleFilesSelect = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const newFiles: File[] = [];
+    const newPreviews: string[] = [];
+    for (const file of files) {
+      newFiles.push(file);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setMediaPreviews(prev => [...prev, e.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        newPreviews.push('');
+      }
     }
+    setMediaFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const removeMedia = (index: number) => {
+    setMediaFiles(prev => prev.filter((_, i) => i !== index));
+    setMediaPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const openEditModal = (ad: any) => {
@@ -164,8 +177,8 @@ export default function WaAdvertisements() {
       selectedCommunities: ad.targetCommunities || [],
       packageDays: ad.packageDays || 1,
     });
-    setMediaFile(null);
-    setMediaPreview(ad.mediaAttachments?.length > 0 ? 'EXISTING' : null);
+    setMediaFiles([]);
+    setMediaPreviews([]);
     setShowForm(true);
   };
 
@@ -185,31 +198,32 @@ export default function WaAdvertisements() {
       }
 
       if (editingAd) {
-        // Edit existing — update in place, works for active campaigns too
         await updateAd.mutateAsync({ id: editingAd.id, data: payload });
 
-        // Handle media replacement: remove existing, upload new
-        if (mediaFile && editingAd.id) {
-          const existingMedia = editingAd.mediaAttachments;
-          if (existingMedia?.length > 0) {
-            await adApi.removeMedia(existingMedia[0].id);
+        // Replace all media — remove existing, upload new
+        if (mediaFiles.length > 0 && editingAd.id) {
+          const existing = editingAd.mediaAttachments || [];
+          for (const m of existing) {
+            await adApi.removeMedia(m.id);
           }
-          await adApi.uploadMedia(editingAd.id, mediaFile);
-        } else if (!mediaFile && !mediaPreview && editingAd.id) {
-          // Media was explicitly removed
-          const existingMedia = editingAd.mediaAttachments;
-          if (existingMedia?.length > 0) {
-            await adApi.removeMedia(existingMedia[0].id);
+          for (const file of mediaFiles) {
+            await adApi.uploadMedia(editingAd.id, file);
+          }
+        } else if (mediaFiles.length === 0 && editingAd.id && editingAd.mediaAttachments?.length > 0) {
+          // Explicitly removed all media
+          for (const m of editingAd.mediaAttachments) {
+            await adApi.removeMedia(m.id);
           }
         }
 
         success('Campaign updated', `"${formData.title}" saved`);
       } else {
-        // Create new — save as draft, no auto-send
         const ad = await adApi.create(payload);
 
-        if (mediaFile && ad?.id) {
-          await adApi.uploadMedia(ad.id, mediaFile);
+        if (mediaFiles.length > 0 && ad?.id) {
+          for (const file of mediaFiles) {
+            await adApi.uploadMedia(ad.id, file);
+          }
         }
 
         success('Campaign saved as draft. Use Send Now to dispatch.');
@@ -219,8 +233,8 @@ export default function WaAdvertisements() {
       setShowForm(false);
       setEditingAd(null);
       setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 });
-      setMediaFile(null);
-      setMediaPreview(null);
+      setMediaFiles([]);
+      setMediaPreviews([]);
     } catch (e: any) {
       showError('Failed to save campaign', e.message);
     } finally {
@@ -251,7 +265,7 @@ export default function WaAdvertisements() {
           <h1 className="text-2xl font-bold text-[var(--color-text)]">Advertisements</h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">Manage promotional ad campaigns</p>
         </div>
-        <Button icon={Plus} onClick={() => { setEditingAd(null); setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 }); setShowForm(true); }}>New Campaign</Button>
+        <Button icon={Plus} onClick={() => { setEditingAd(null); setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 }); setMediaFiles([]); setMediaPreviews([]); setShowForm(true); }}>New Campaign</Button>
       </div>
 
       {/* ─── Empty / Grid ───────────────────────────────────── */}
@@ -330,62 +344,62 @@ export default function WaAdvertisements() {
               </div>
             </div>
 
-            {/* ── Media (image) upload right below message body ── */}
+            {/* ── Media / Attachments upload right below message body ── */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
                     <Image size={15} />
                   </div>
-                  <h3 className="text-sm font-semibold text-[var(--color-text)]">Image Attachment</h3>
+                  <h3 className="text-sm font-semibold text-[var(--color-text)]">Attachments</h3>
                   <span className="text-[11px] text-[var(--color-text-muted)]">optional</span>
                 </div>
 
                 <div
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]); }}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFilesSelect(e.dataTransfer.files); }}
                   className={`relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
                     dragOver
                       ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                      : mediaFile || mediaPreview
+                      : mediaFiles.length > 0
                         ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10'
                         : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] bg-[var(--color-bg-secondary)]'
                   }`}
                 >
                   <input
                     type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                    multiple
+                    onChange={(e) => handleFilesSelect(e.target.files)}
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
 
-                  {mediaFile && mediaPreview ? (
-                    <>
-                      <img src={mediaPreview} alt="preview" className="max-h-24 rounded-lg mb-2 object-contain" />
-                      <p className="text-xs font-medium text-[var(--color-text)]">{mediaFile?.name}</p>
-                      <button type="button" onClick={() => { setMediaFile(null); setMediaPreview(editingAd?.mediaAttachments?.length > 0 ? 'EXISTING' : null); }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
-                    </>
-                  ) : mediaPreview === 'EXISTING' && !mediaFile ? (
-                    <>
-                      <Image size={32} className="text-emerald-500 mb-2" />
-                      <p className="text-xs font-medium text-[var(--color-text)]">Image attached (click or drop to replace)</p>
-                      <button type="button" onClick={async () => {
-                        try {
-                          if (editingAd?.mediaAttachments?.length > 0) {
-                            await adApi.removeMedia(editingAd.mediaAttachments[0].id);
-                          }
-                        } catch {}
-                        setMediaFile(null);
-                        setMediaPreview(null);
-                      }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
-                    </>
+                  {mediaFiles.length > 0 ? (
+                    <div className="w-full space-y-2">
+                      {mediaFiles.map((file, i) => (
+                        <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--color-bg)]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {mediaPreviews[i] ? (
+                              <img src={mediaPreviews[i]} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
+                                <Upload size={16} className="text-[var(--color-text-muted)]" />
+                              </div>
+                            )}
+                            <span className="text-xs text-[var(--color-text)] truncate">{file.name}</span>
+                          </div>
+                          <button type="button" onClick={() => removeMedia(i)} className="text-xs text-red-500 hover:text-red-600 flex-shrink-0 cursor-pointer p-1">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <>
                       <Upload size={24} className="text-[var(--color-text-muted)] mb-2" />
                       <p className="text-xs text-[var(--color-text-secondary)]">
                         <span className="text-[var(--color-primary)] font-medium">Click to upload</span> or drag and drop
                       </p>
-                      <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Images only — will be sent as the ad image</p>
+                      <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Any file type — images, videos, documents</p>
                     </>
                   )}
                 </div>
@@ -659,7 +673,6 @@ function AdCard({
           </>
         ) : (
           <>
-            {/* Edit (mid-campaign) — always available for non-locked campaigns */}
             {canEdit && (
               <Button
                 size="sm"
@@ -671,7 +684,6 @@ function AdCard({
               </Button>
             )}
 
-            {/* Manual Send — always available for ACTIVE/Paused campaigns */}
             {(ad.status === 'draft' || ad.status === 'active' || ad.status === 'paused') && (
               <Button
                 size="sm"
@@ -684,7 +696,6 @@ function AdCard({
               </Button>
             )}
 
-            {/* Pause / Resume toggle */}
             {(ad.status === 'active' || ad.status === 'paused') && (
               <Button
                 size="sm"
@@ -697,7 +708,6 @@ function AdCard({
               </Button>
             )}
 
-            {/* Stop — only for active */}
             {ad.status === 'active' && (
               <Button
                 size="sm"
@@ -710,7 +720,6 @@ function AdCard({
               </Button>
             )}
 
-            {/* Draft/Paused: delete */}
             {(ad.status === 'draft' || ad.status === 'paused') && (
               <Button
                 size="sm"
