@@ -198,16 +198,17 @@ export class AdvertisementService {
   }
 
   /**
-   * Called by user "Send" button. Activates the ad and dispatches the first day's broadcast
+   * Called by user "Send" button. Activates the ad and dispatches immediately
    * through the existing anti-ban/rate-limited broadcast pipeline.
+   * No day-count restriction — admins can send as many times as they want per day.
    */
   async sendAdvertisement(id: number): Promise<{ success: boolean; message: string }> {
     const ad = await this.findOne(id);
     if (!ad) {
       return { success: false, message: 'Advertisement not found' };
     }
-    if (!ad.isSendable) {
-      return { success: false, message: 'Advertisement cannot be sent' };
+    if (ad.status === AdvertisementStatus.COMPLETED || ad.status === AdvertisementStatus.CANCELLED) {
+      return { success: false, message: 'Advertisement is completed or cancelled' };
     }
 
     // Activate the ad if it's in DRAFT status
@@ -347,15 +348,35 @@ export class AdvertisementService {
     return mimeMap[ext] || 'application/octet-stream';
   }
 
-  /** Mark ad as used for the day */
+  /**
+   * Mark ad as used for the day — only increments daysUsed if this is the
+   * first dispatch on a new calendar day. Multiple sends within the same day
+   * do NOT consume extra package days.
+   */
   async markDayUsed(id: number): Promise<void> {
-    const ad = await this.findOne(id);
-    if (ad) {
+    const ad = await this.adRepo.findOne({ where: { id } });
+    if (!ad) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const lastDispatch = ad.lastDispatchedAt ? new Date(ad.lastDispatchedAt) : null;
+    const isNewDay = !lastDispatch || lastDispatch < today;
+
+    if (isNewDay) {
       ad.daysUsed++;
+      ad.lastDispatchedAt = new Date();
+      // Only auto-complete if daysUsed exceeds packageDays AND it's a new day
       if (ad.daysUsed >= ad.packageDays) {
         ad.status = AdvertisementStatus.COMPLETED;
       }
       await this.adRepo.save(ad);
+      this.logger.log(`Ad #${id}: daysUsed=${ad.daysUsed}/${ad.packageDays} (new day)`);
+    } else {
+      // Same day, just update lastDispatchedAt timestamp without consuming a day
+      ad.lastDispatchedAt = new Date();
+      await this.adRepo.save(ad);
+      this.logger.log(`Ad #${id}: re-dispatched same day (daysUsed stays ${ad.daysUsed}/${ad.packageDays})`);
     }
   }
 

@@ -157,6 +157,7 @@ export const adApi = {
   delete: (id: number) => request<void>(`/advertisements/${id}`, { method: 'DELETE' }),
   uploadMedia: (id: number, file: File) =>
     uploadFile<any>(`/advertisements/${id}/media`, file, 'file'),
+  removeMedia: (id: number) => request<void>(`/advertisements/media/${id}`, { method: 'DELETE' }),
 };
 
 export const automationApi = {

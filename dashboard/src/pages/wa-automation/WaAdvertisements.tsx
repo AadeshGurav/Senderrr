@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Square, Pause, PlayIcon } from 'lucide-react';
+import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Square, Pause, PlayIcon, Edit3, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -12,8 +12,10 @@ import { useToast } from '../../components/Toast';
 import {
   useWaAdvertisementsQuery,
   useDeleteAdMutation,
+  useAdTelemetryQuery,
   useWaGroupsQuery,
   useWaCommunitiesQuery,
+  useUpdateAdMutation,
 } from '../../hooks/wa-queries';
 import { adApi } from '../../services/wa-api';
 
@@ -55,12 +57,15 @@ export default function WaAdvertisements() {
   const { data: groups = [] } = useWaGroupsQuery();
   const { data: communities = [] } = useWaCommunitiesQuery();
   const deleteMutate = useDeleteAdMutation();
+  const updateAd = useUpdateAdMutation();
   const { success, error: showError } = useToast();
   const queryClient = useQueryClient();
   const waKeys = { advertisements: ['wa', 'advertisements'] as const };
 
   const [showForm, setShowForm] = useState(false);
+  const [editingAd, setEditingAd] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  const [expandedAd, setExpandedAd] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -69,7 +74,6 @@ export default function WaAdvertisements() {
     selectedGroups: [] as Group[],
     selectedCommunities: [] as Community[],
     packageDays: 1,
-    preferredTime: '',
   });
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -116,10 +120,8 @@ export default function WaAdvertisements() {
         await adApi.update(ad.id, { status: 'active' });
         success('Campaign resumed', `"${ad.title}" will continue sending`);
       } else if (ad.status === 'cancelled') {
-        // Can't resume cancelled ads
         showError('Cannot resume a cancelled campaign');
       }
-      // Invalidate cache so the list updates immediately
       queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
     } catch (e: any) {
       showError('Failed to update campaign', e.message);
@@ -152,7 +154,22 @@ export default function WaAdvertisements() {
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openEditModal = (ad: any) => {
+    setEditingAd(ad);
+    setFormData({
+      title: ad.title || '',
+      body: ad.body || '',
+      targetType: ad.targetType || 'all_groups',
+      selectedGroups: ad.targetGroups || [],
+      selectedCommunities: ad.targetCommunities || [],
+      packageDays: ad.packageDays || 1,
+    });
+    setMediaFile(null);
+    setMediaPreview(ad.mediaAttachments?.length > 0 ? 'EXISTING' : null);
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
     try {
@@ -161,36 +178,66 @@ export default function WaAdvertisements() {
         body: formData.body,
         targetType: formData.targetType,
         packageDays: formData.packageDays,
-        preferredTime: formData.preferredTime || null,
       };
       if (formData.targetType === 'specific') {
         payload.targetGroups = formData.selectedGroups.map((g: Group) => ({ id: g.id }));
         payload.targetCommunities = formData.selectedCommunities.map((c: Community) => ({ id: c.id }));
       }
 
-      const ad = await adApi.create(payload);
+      if (editingAd) {
+        // Edit existing — update in place, works for active campaigns too
+        await updateAd.mutateAsync({ id: editingAd.id, data: payload });
 
-      // Upload media if selected
-      if (mediaFile && ad?.id) {
-        await adApi.uploadMedia(ad.id, mediaFile);
-      }
+        // Handle media replacement: remove existing, upload new
+        if (mediaFile && editingAd.id) {
+          const existingMedia = editingAd.mediaAttachments;
+          if (existingMedia?.length > 0) {
+            await adApi.removeMedia(existingMedia[0].id);
+          }
+          await adApi.uploadMedia(editingAd.id, mediaFile);
+        } else if (!mediaFile && !mediaPreview && editingAd.id) {
+          // Media was explicitly removed
+          const existingMedia = editingAd.mediaAttachments;
+          if (existingMedia?.length > 0) {
+            await adApi.removeMedia(existingMedia[0].id);
+          }
+        }
 
-      // Auto-start: activate and dispatch immediately
-      if (ad?.id) {
-        await adApi.send(ad.id);
+        success('Campaign updated', `"${formData.title}" saved`);
+      } else {
+        // Create new — save as draft, no auto-send
+        const ad = await adApi.create(payload);
+
+        if (mediaFile && ad?.id) {
+          await adApi.uploadMedia(ad.id, mediaFile);
+        }
+
+        success('Campaign saved as draft. Use Send Now to dispatch.');
       }
 
       queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
-
-      success('Campaign created and started automatically');
       setShowForm(false);
-      setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1, preferredTime: '' });
+      setEditingAd(null);
+      setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 });
       setMediaFile(null);
       setMediaPreview(null);
     } catch (e: any) {
-      showError('Failed to create campaign', e.message);
+      showError('Failed to save campaign', e.message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleManualSend = async (ad: any) => {
+    setTogglingStatus(ad.id);
+    try {
+      await adApi.send(ad.id);
+      success('Campaign dispatched', `"${ad.title}" sent to targets`);
+      queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
+    } catch (e: any) {
+      showError('Failed to dispatch campaign', e.message);
+    } finally {
+      setTogglingStatus(null);
     }
   };
 
@@ -204,7 +251,7 @@ export default function WaAdvertisements() {
           <h1 className="text-2xl font-bold text-[var(--color-text)]">Advertisements</h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">Manage promotional ad campaigns</p>
         </div>
-        <Button icon={Plus} onClick={() => setShowForm(true)}>New Campaign</Button>
+        <Button icon={Plus} onClick={() => { setEditingAd(null); setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 }); setShowForm(true); }}>New Campaign</Button>
       </div>
 
       {/* ─── Empty / Grid ───────────────────────────────────── */}
@@ -224,74 +271,25 @@ export default function WaAdvertisements() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ads.map((a: any) => (
-            <Card key={a.id} hover>
-              <CardBody>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-[var(--color-primary)]/10 flex items-center justify-center flex-shrink-0 text-[var(--color-primary)]">
-                      <Megaphone size={20} />
-                    </div>
-                    <h3 className="font-semibold text-sm text-[var(--color-text)] truncate">{a.title}</h3>
-                  </div>
-                  <Badge variant={statusVariant(a.status)} className="flex-shrink-0">{a.status}</Badge>
-                </div>
-                <p className="text-xs text-[var(--color-text-secondary)] line-clamp-3 mb-4 leading-relaxed">{a.body}</p>
-                <div className="space-y-2 mb-4">
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-text-secondary)]">
-                    <span>Target: <strong>{a.targetType.replace('_', ' ')}</strong></span>
-                    <span>Package: <strong>{a.daysUsed}/{a.packageDays}d</strong></span>
-                    <span>Sent: <strong>{a.totalSent}</strong> / Failed: <strong>{a.totalFailed}</strong></span>
-                  </div>
-                  {a.mediaAttachments?.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
-                      <Image size={14} />
-                      <span>{a.mediaAttachments.length} attachment{a.mediaAttachments.length > 1 ? 's' : ''}</span>
-                    </div>
-                  )}
-                </div>
-              </CardBody>
-              <CardFooter className="gap-2">
-                {(a.status === 'active' || a.status === 'paused') && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={a.status === 'active' ? Pause : PlayIcon}
-                    onClick={() => handleToggleStatus(a)}
-                    loading={togglingStatus === a.id}
-                  >
-                    {a.status === 'active' ? 'Pause' : 'Resume'}
-                  </Button>
-                )}
-                {a.status === 'active' && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={Square}
-                    onClick={() => handleCancel(a)}
-                    loading={togglingStatus === a.id}
-                  >
-                    Stop
-                  </Button>
-                )}
-                {(a.status === 'draft' || a.status === 'completed' || a.status === 'cancelled') && (
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    icon={Trash2}
-                    onClick={() => setDeleteTarget({ id: a.id, title: a.title })}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
+            <AdCard
+              key={a.id}
+              ad={a}
+              expandedAd={expandedAd}
+              setExpandedAd={setExpandedAd}
+              onEdit={openEditModal}
+              onDelete={setDeleteTarget}
+              onToggleStatus={handleToggleStatus}
+              onCancel={handleCancel}
+              onManualSend={handleManualSend}
+              togglingStatus={togglingStatus}
+            />
           ))}
         </div>
       )}
 
-      {/* ─── Create Modal ───────────────────────────────────── */}
-      <Modal open={!!showForm} onClose={() => setShowForm(false)} title="Create Campaign" size="lg">
-        <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
+      {/* ─── Create/Edit Modal ───────────────────────────────────── */}
+      <Modal open={!!showForm} onClose={() => { setShowForm(false); setEditingAd(null); }} title={editingAd ? 'Edit Campaign' : 'Create Campaign'} size="lg">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <ModalBody>
 
             {/* ── Section: Campaign Details ───────────────────── */}
@@ -332,52 +330,66 @@ export default function WaAdvertisements() {
               </div>
             </div>
 
-            {/* ── Media (image) upload right below message body ──────────────────────────────── */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                  <Image size={15} />
+            {/* ── Media (image) upload right below message body ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                    <Image size={15} />
+                  </div>
+                  <h3 className="text-sm font-semibold text-[var(--color-text)]">Image Attachment</h3>
+                  <span className="text-[11px] text-[var(--color-text-muted)]">optional</span>
                 </div>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Image Attachment</h3>
-                <span className="text-[11px] text-[var(--color-text-muted)]">optional</span>
-              </div>
 
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]); }}
-                className={`relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
-                  dragOver
-                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                    : mediaFile
-                      ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10'
-                      : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] bg-[var(--color-bg-secondary)]'
-                }`}
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                />
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]); }}
+                  className={`relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
+                    dragOver
+                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                      : mediaFile || mediaPreview
+                        ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10'
+                        : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] bg-[var(--color-bg-secondary)]'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
 
-                {mediaPreview ? (
-                  <>
-                    <img src={mediaPreview} alt="preview" className="max-h-24 rounded-lg mb-2 object-contain" />
-                    <p className="text-xs font-medium text-[var(--color-text)]">{mediaFile?.name}</p>
-                    <button type="button" onClick={() => { setMediaFile(null); setMediaPreview(null); }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
-                  </>
-                ) : (
-                  <>
-                    <Upload size={24} className="text-[var(--color-text-muted)] mb-2" />
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      <span className="text-[var(--color-primary)] font-medium">Click to upload</span> or drag and drop
-                    </p>
-                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Images only — will be sent as the ad image</p>
-                  </>
-                )}
+                  {mediaFile && mediaPreview ? (
+                    <>
+                      <img src={mediaPreview} alt="preview" className="max-h-24 rounded-lg mb-2 object-contain" />
+                      <p className="text-xs font-medium text-[var(--color-text)]">{mediaFile?.name}</p>
+                      <button type="button" onClick={() => { setMediaFile(null); setMediaPreview(editingAd?.mediaAttachments?.length > 0 ? 'EXISTING' : null); }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
+                    </>
+                  ) : mediaPreview === 'EXISTING' && !mediaFile ? (
+                    <>
+                      <Image size={32} className="text-emerald-500 mb-2" />
+                      <p className="text-xs font-medium text-[var(--color-text)]">Image attached (click or drop to replace)</p>
+                      <button type="button" onClick={async () => {
+                        try {
+                          if (editingAd?.mediaAttachments?.length > 0) {
+                            await adApi.removeMedia(editingAd.mediaAttachments[0].id);
+                          }
+                        } catch {}
+                        setMediaFile(null);
+                        setMediaPreview(null);
+                      }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={24} className="text-[var(--color-text-muted)] mb-2" />
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        <span className="text-[var(--color-primary)] font-medium">Click to upload</span> or drag and drop
+                      </p>
+                      <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Images only — will be sent as the ad image</p>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
 
             {/* ── Section: Targeting ──────────────────────────── */}
             <div>
@@ -484,8 +496,8 @@ export default function WaAdvertisements() {
                 </div>
                 <h3 className="text-sm font-semibold text-[var(--color-text)]">Schedule & Package</h3>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 gap-3">
+                <div className="max-w-xs">
                   <Input
                     label="Package Days"
                     type="number"
@@ -496,23 +508,15 @@ export default function WaAdvertisements() {
                   />
                   <p className="text-[11px] text-[var(--color-text-muted)] mt-1">How many days this campaign runs</p>
                 </div>
-                <div>
-                  <Input
-                    label="Preferred Send Time"
-                    type="time"
-                    value={formData.preferredTime}
-                    onChange={(e) => setFormData({ ...formData, preferredTime: e.target.value })}
-                  />
-                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1">Optional — leave blank for any time</p>
-                </div>
               </div>
             </div>
-
-                      </ModalBody>
+          </ModalBody>
 
           <ModalFooter>
-            <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button type="submit" loading={creating} icon={Send}>Launch Campaign</Button>
+            <Button type="button" variant="ghost" onClick={() => { setShowForm(false); setEditingAd(null); }}>Cancel</Button>
+            <Button type="submit" loading={creating} icon={editingAd ? Edit3 : Send}>
+              {editingAd ? 'Save Changes' : 'Save as Draft'}
+            </Button>
           </ModalFooter>
         </form>
       </Modal>
@@ -530,5 +534,196 @@ export default function WaAdvertisements() {
         </ModalFooter>
       </Modal>
     </div>
+  );
+}
+
+/** Individual campaign card with telemetry, edit, and lifecycle-aware actions. */
+function AdCard({
+  ad,
+  expandedAd,
+  setExpandedAd,
+  onEdit,
+  onDelete,
+  onToggleStatus,
+  onCancel,
+  onManualSend,
+  togglingStatus,
+}: {
+  ad: any;
+  expandedAd: number | null;
+  setExpandedAd: (id: number | null) => void;
+  onEdit: (ad: any) => void;
+  onDelete: (target: { id: number; title: string }) => void;
+  onToggleStatus: (ad: any) => void;
+  onCancel: (ad: any) => void;
+  onManualSend: (ad: any) => void;
+  togglingStatus: number | null;
+}) {
+  const { data: telemetry } = useAdTelemetryQuery(ad.id);
+  const isExpanded = expandedAd === ad.id;
+  const isLocked = ad.status === 'completed' || ad.status === 'cancelled';
+  const canEdit = ad.status === 'draft' || ad.status === 'active' || ad.status === 'paused';
+
+  const daysRemaining = telemetry?.daysRemaining ?? Math.max(0, (ad.packageDays || 1) - (ad.daysUsed || 0));
+
+  return (
+    <Card hover>
+      <CardBody>
+        {/* ── Header ──────────────────────── */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-10 h-10 rounded-lg bg-[var(--color-primary)]/10 flex items-center justify-center flex-shrink-0 text-[var(--color-primary)]">
+              <Megaphone size={20} />
+            </div>
+            <h3 className="font-semibold text-sm text-[var(--color-text)] truncate">{ad.title}</h3>
+          </div>
+          <Badge variant={statusVariant(ad.status)} className="flex-shrink-0">{ad.status}</Badge>
+        </div>
+
+        {/* ── Body ────────────────────────── */}
+        <p className="text-xs text-[var(--color-text-secondary)] line-clamp-3 mb-4 leading-relaxed">{ad.body}</p>
+
+        {/* ── Telemetry Stats ──────────────── */}
+        <div className="space-y-2 mb-3">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-text-secondary)]">
+            <span>Target: <strong>{ad.targetType?.replace('_', ' ')}</strong></span>
+            <span>Package: <strong>{ad.daysUsed}/{ad.packageDays}d</strong></span>
+            <span>Remaining: <strong>{daysRemaining}d</strong></span>
+          </div>
+          {telemetry ? (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <span className="text-emerald-600 dark:text-emerald-400">Sent: <strong>{telemetry.totalSent}</strong></span>
+              <span className="text-red-500">Failed: <strong>{telemetry.totalFailed}</strong></span>
+              <span className="text-[var(--color-text-secondary)]">
+                Today: <strong className="text-[var(--color-primary)]">{telemetry.todaySent}</strong> sent
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-text-secondary)]">
+              <span>Sent: <strong>{ad.totalSent || 0}</strong></span>
+              <span>Failed: <strong>{ad.totalFailed || 0}</strong></span>
+            </div>
+          )}
+          {ad.mediaAttachments?.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+              <Image size={14} />
+              <span>{ad.mediaAttachments.length} attachment{ad.mediaAttachments.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
+
+          {/* ── Per-group expandable breakdown ──────── */}
+          {telemetry && telemetry.perGroup && telemetry.perGroup.length > 0 && (
+            <div className="mt-1">
+              <button
+                type="button"
+                onClick={() => setExpandedAd(isExpanded ? null : ad.id)}
+                className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+              >
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <BarChart3 size={12} />
+                Per-group breakdown ({telemetry.perGroup.length} groups)
+              </button>
+              {isExpanded && (
+                <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                  {telemetry.perGroup.map((pg: any) => (
+                    <div key={pg.groupName} className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-[var(--color-bg-secondary)]">
+                      <span className="text-[var(--color-text-secondary)] truncate mr-2">{pg.groupName}</span>
+                      <span className="flex-shrink-0 text-[var(--color-text-muted)]">
+                        Total <strong className="text-emerald-600 dark:text-emerald-400">{pg.totalSent}</strong>
+                        {pg.todaySent > 0 && (
+                          <span className="ml-1.5 text-[var(--color-primary)]">(+{pg.todaySent} today)</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </CardBody>
+
+      {/* ── Actions ──────────────────────── */}
+      <CardFooter className="gap-2 flex-wrap">
+        {isLocked ? (
+          <>
+            <Badge variant="info" className="text-[11px]">{ad.status === 'completed' ? 'Completed' : 'Cancelled'}</Badge>
+            <Button
+              size="sm"
+              variant="danger"
+              icon={Trash2}
+              onClick={() => onDelete({ id: ad.id, title: ad.title })}
+            >
+              Delete
+            </Button>
+          </>
+        ) : (
+          <>
+            {/* Edit (mid-campaign) — always available for non-locked campaigns */}
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={Edit3}
+                onClick={() => onEdit(ad)}
+              >
+                Edit
+              </Button>
+            )}
+
+            {/* Manual Send — always available for ACTIVE/Paused campaigns */}
+            {(ad.status === 'draft' || ad.status === 'active' || ad.status === 'paused') && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={Send}
+                onClick={() => onManualSend(ad)}
+                loading={togglingStatus === ad.id}
+              >
+                Send Now
+              </Button>
+            )}
+
+            {/* Pause / Resume toggle */}
+            {(ad.status === 'active' || ad.status === 'paused') && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={ad.status === 'active' ? Pause : PlayIcon}
+                onClick={() => onToggleStatus(ad)}
+                loading={togglingStatus === ad.id}
+              >
+                {ad.status === 'active' ? 'Pause' : 'Resume'}
+              </Button>
+            )}
+
+            {/* Stop — only for active */}
+            {ad.status === 'active' && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={Square}
+                onClick={() => onCancel(ad)}
+                loading={togglingStatus === ad.id}
+              >
+                Stop
+              </Button>
+            )}
+
+            {/* Draft/Paused: delete */}
+            {(ad.status === 'draft' || ad.status === 'paused') && (
+              <Button
+                size="sm"
+                variant="danger"
+                icon={Trash2}
+                onClick={() => onDelete({ id: ad.id, title: ad.title })}
+              >
+                Delete
+              </Button>
+            )}
+          </>
+        )}
+      </CardFooter>
+    </Card>
   );
 }

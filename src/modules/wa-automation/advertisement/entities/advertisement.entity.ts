@@ -59,6 +59,9 @@ export class Advertisement {
   @Column({ type: 'datetime', nullable: true })
   nextScheduledAt: Date | null;
 
+  @Column({ type: 'datetime', nullable: true })
+  lastDispatchedAt: Date | null;
+
   @Column({ default: 0 })
   totalSent: number;
 
