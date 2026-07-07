@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, FileText, Calendar, Square, Pause, PlayIcon } from 'lucide-react';
+import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Square, Pause, PlayIcon } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -291,7 +291,7 @@ export default function WaAdvertisements() {
 
       {/* ─── Create Modal ───────────────────────────────────── */}
       <Modal open={!!showForm} onClose={() => setShowForm(false)} title="Create Campaign" size="lg">
-        <form onSubmit={handleCreate}>
+        <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
           <ModalBody>
 
             {/* ── Section: Campaign Details ───────────────────── */}
@@ -329,6 +329,53 @@ export default function WaAdvertisements() {
                   </div>
                   <p className="text-[11px] text-[var(--color-text-muted)] mt-1">Supports WhatsApp formatting: *bold*, _italic_, ~strikethrough~</p>
                 </div>
+              </div>
+            </div>
+
+            {/* ── Media (image) upload right below message body ──────────────────────────────── */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                  <Image size={15} />
+                </div>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">Image Attachment</h3>
+                <span className="text-[11px] text-[var(--color-text-muted)]">optional</span>
+              </div>
+
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]); }}
+                className={`relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
+                  dragOver
+                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                    : mediaFile
+                      ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10'
+                      : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] bg-[var(--color-bg-secondary)]'
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+
+                {mediaPreview ? (
+                  <>
+                    <img src={mediaPreview} alt="preview" className="max-h-24 rounded-lg mb-2 object-contain" />
+                    <p className="text-xs font-medium text-[var(--color-text)]">{mediaFile?.name}</p>
+                    <button type="button" onClick={() => { setMediaFile(null); setMediaPreview(null); }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={24} className="text-[var(--color-text-muted)] mb-2" />
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                      <span className="text-[var(--color-primary)] font-medium">Click to upload</span> or drag and drop
+                    </p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Images only — will be sent as the ad image</p>
+                  </>
+                )}
               </div>
             </div>
 
@@ -461,60 +508,7 @@ export default function WaAdvertisements() {
               </div>
             </div>
 
-            {/* ── Section: Media ──────────────────────────────── */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                  <Image size={15} />
-                </div>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Media Attachment</h3>
-                <span className="text-[11px] text-[var(--color-text-muted)]">optional</span>
-              </div>
-
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]); }}
-                className={`relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
-                  dragOver
-                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                    : mediaFile
-                      ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10'
-                      : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] bg-[var(--color-bg-secondary)]'
-                }`}
-              >
-                <input
-                  type="file"
-                  accept="image/*,video/*,.pdf,.doc,.docx,.txt"
-                  onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                />
-
-                {mediaPreview ? (
-                  <>
-                    <img src={mediaPreview} alt="preview" className="max-h-24 rounded-lg mb-2 object-contain" />
-                    <p className="text-xs font-medium text-[var(--color-text)]">{mediaFile?.name}</p>
-                    <button type="button" onClick={() => { setMediaFile(null); setMediaPreview(null); }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
-                  </>
-                ) : mediaFile ? (
-                  <>
-                    <FileText size={24} className="text-emerald-500 mb-2" />
-                    <p className="text-xs font-medium text-[var(--color-text)]">{mediaFile?.name}</p>
-                    <button type="button" onClick={() => { setMediaFile(null); setMediaPreview(null); }} className="text-xs text-red-500 hover:text-red-600 mt-1 cursor-pointer">Remove</button>
-                  </>
-                ) : (
-                  <>
-                    <Upload size={24} className="text-[var(--color-text-muted)] mb-2" />
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      <span className="text-[var(--color-primary)] font-medium">Click to upload</span> or drag and drop
-                    </p>
-                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Images, videos, PDFs, documents</p>
-                  </>
-                )}
-              </div>
-            </div>
-
-          </ModalBody>
+                      </ModalBody>
 
           <ModalFooter>
             <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
