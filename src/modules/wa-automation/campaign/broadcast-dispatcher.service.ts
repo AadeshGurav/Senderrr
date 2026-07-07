@@ -370,6 +370,7 @@ export class BroadcastDispatcherService {
         text,
         adminId,
         workerId,
+        imageUrl,
       )
         .then(deliverResult => {
           clearTimeout(timer);
@@ -388,7 +389,11 @@ export class BroadcastDispatcherService {
 
     // On success, update task status directly
     if (result.success) {
-      await this.taskRepo.update(task.id, { status: MessageTaskStatus.SENT });
+      const updateData: Partial<MessageTask> = { status: MessageTaskStatus.SENT };
+      if (result.messageId) {
+        updateData.waMessageId = result.messageId;
+      }
+      await this.taskRepo.update(task.id, updateData);
       await this.maintenanceService.markGroupSuccess(task.group.id);
     }
 
