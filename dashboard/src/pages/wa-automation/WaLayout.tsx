@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -49,22 +49,33 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [disconnectedSessions, setDisconnectedSessions] = useState<{ adminId: number; label: string | null; sessionName: string; status: string }[]>([]);
+  const reconnectingRef = useRef(false);
 
-  // Poll for disconnected sessions every 15 seconds
-  const fetchDisconnected = useCallback(async () => {
+  // Poll for disconnected sessions every 15 seconds and auto-reconnect
+  const fetchAndReconnect = useCallback(async () => {
+    if (reconnectingRef.current) return;
+    reconnectingRef.current = true;
     try {
-      const sessions = await automationApi.listDisconnectedSessions();
-      setDisconnectedSessions(sessions);
+      const result = await automationApi.autoReconnectSessions();
+      setDisconnectedSessions(result.failed);
     } catch {
-      // ignore — token might not exist yet
+      // On API error, fall back to listing disconnected sessions passively
+      try {
+        const sessions = await automationApi.listDisconnectedSessions();
+        setDisconnectedSessions(sessions);
+      } catch {
+        // ignore — token might not exist yet
+      }
+    } finally {
+      reconnectingRef.current = false;
     }
   }, []);
 
   useEffect(() => {
-    fetchDisconnected();
-    const interval = setInterval(fetchDisconnected, 15_000);
+    fetchAndReconnect();
+    const interval = setInterval(fetchAndReconnect, 15_000);
     return () => clearInterval(interval);
-  }, [fetchDisconnected]);
+  }, [fetchAndReconnect]);
 
   const handleLogout = () => {
     setMobileOpen(false);
@@ -261,7 +272,7 @@ export default function WaLayout({ children, onLogout }: WaLayoutProps) {
               style={{ textShadow: '0 0 6px rgba(255,255,255,0.25)' }}
             >
               {disconnectedSessions.map(s => s.label || `Admin #${s.adminId}`).join(', ')}
-              {' — click to reconnect'}
+              {' — click to retry'}
             </div>
           </div>
         </div>

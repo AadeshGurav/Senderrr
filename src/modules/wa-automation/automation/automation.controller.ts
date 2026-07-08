@@ -111,6 +111,12 @@ export class AutomationController {
     return this.adminSessionService.listDisconnectedSessions();
   }
 
+  @Post('admin/sessions/auto-reconnect')
+  @ApiOperation({ summary: 'Auto-reconnect all disconnected sessions (up to 3 attempts each)' })
+  async autoReconnectSessions() {
+    return this.adminSessionService.autoReconnectSessions();
+  }
+
   @Get('admin/:adminId/sessions')
   @ApiOperation({ summary: 'List sessions for a specific admin' })
   async listAdminSessions(@Param('adminId', ParseIntPipe) adminId: number) {

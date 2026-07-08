@@ -227,7 +227,12 @@ export const automationApi = {
   ),
   getRateLimits: (adminId: number) => request<any>(`/automation/rate-limits/${adminId}`),
   listDisconnectedSessions: () =>
-    request<Array<{ adminId: number; label: string | null; sessionName: string; status: string }>>(
+    request<Array<{ adminId: number; sessionIndex: number; label: string | null; sessionName: string; status: string }>>(
       '/automation/admin/sessions/disconnected'
     ),
+  autoReconnectSessions: () =>
+    request<{
+      reconnected: { adminId: number; sessionIndex: number }[];
+      failed: { adminId: number; sessionIndex: number; label: string | null; sessionName: string; status: string }[];
+    }>('/automation/admin/sessions/auto-reconnect', { method: 'POST' }),
 };

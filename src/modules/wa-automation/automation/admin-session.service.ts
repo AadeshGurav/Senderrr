@@ -115,19 +115,19 @@ export class AdminSessionService {
     return this.adminSessionRepo.find({ order: { adminId: 'ASC', sessionIndex: 'ASC' } });
   }
 
-  async listDisconnectedSessions(): Promise<{ adminId: number; label: string | null; sessionName: string; status: string }[]> {
+  async listDisconnectedSessions(): Promise<{ adminId: number; sessionIndex: number; label: string | null; sessionName: string; status: string }[]> {
     const sessions = await this.adminSessionRepo.find({
       where: [{ openwaSessionStatus: 'disconnected' }, { openwaSessionStatus: 'failed' }] as any,
       order: { adminId: 'ASC', sessionIndex: 'ASC' },
     });
-    const result: { adminId: number; label: string | null; sessionName: string; status: string }[] = [];
+    const result: { adminId: number; sessionIndex: number; label: string | null; sessionName: string; status: string }[] = [];
     for (const s of sessions) {
       let label: string | null = null;
       try {
         const admin = await this.adminRepo.findOne({ where: { id: s.adminId } as any });
         label = admin?.label || null;
       } catch { /* ok */ }
-      result.push({ adminId: s.adminId, label, sessionName: `wa-admin-${s.adminId}-${s.sessionIndex}`, status: s.openwaSessionStatus });
+      result.push({ adminId: s.adminId, sessionIndex: s.sessionIndex, label, sessionName: `wa-admin-${s.adminId}-${s.sessionIndex}`, status: s.openwaSessionStatus });
     }
     return result;
   }
@@ -141,6 +141,10 @@ export class AdminSessionService {
   async startSession(adminSessionId: number): Promise<{ status: string; qrCode?: string }> {
     const adminSession = await this.adminSessionRepo.findOne({ where: { id: adminSessionId } });
     if (!adminSession) throw new NotFoundException(`Admin session #${adminSessionId} not found`);
+
+    // Reset auto-reconnect counter on manual start
+    const key = `${adminSession.adminId}-${adminSession.sessionIndex}`;
+    this.reconnectAttempts.delete(key);
 
     const result = await this.sessionService.start(adminSession.openwaSessionId);
     adminSession.openwaSessionStatus = result.status;
@@ -247,6 +251,65 @@ export class AdminSessionService {
     // Community auto-detection is not supported by whatsapp-web.js.
     // Users create communities manually via the dashboard.
     return { imported: 0, skipped: 0 };
+  }
+
+  // ─── Auto-Reconnect ──────────────────────────────────────────
+
+  private reconnectAttempts = new Map<string, number>();
+
+  async resetReconnectCounter(sessionId: string): Promise<void> {
+    this.reconnectAttempts.delete(sessionId);
+  }
+
+  async autoReconnectSessions(): Promise<{
+    reconnected: { adminId: number; sessionIndex: number }[];
+    failed: { adminId: number; sessionIndex: number; label: string | null; sessionName: string; status: string }[];
+  }> {
+    const disconnected = await this.adminSessionRepo.find({
+      where: [{ openwaSessionStatus: 'disconnected' }, { openwaSessionStatus: 'failed' }] as any,
+      order: { adminId: 'ASC', sessionIndex: 'ASC' },
+    });
+
+    const reconnected: { adminId: number; sessionIndex: number }[] = [];
+    const failed: { adminId: number; sessionIndex: number; label: string | null; sessionName: string; status: string }[] = [];
+
+    for (const s of disconnected) {
+      const key = `${s.adminId}-${s.sessionIndex}`;
+      const attempt = (this.reconnectAttempts.get(key) || 0) + 1;
+      this.reconnectAttempts.set(key, attempt);
+
+      try {
+        const result = await this.sessionService.start(s.openwaSessionId);
+        s.openwaSessionStatus = result.status;
+        await this.adminSessionRepo.save(s);
+
+        // Reset attempt counter on success
+        this.reconnectAttempts.delete(key);
+        reconnected.push({ adminId: s.adminId, sessionIndex: s.sessionIndex });
+      } catch {
+        // Update status from error context if available
+        s.openwaSessionStatus = 'disconnected';
+        await this.adminSessionRepo.save(s);
+
+        // Only report as failed after 3 attempts
+        if (attempt >= 3) {
+          let label: string | null = null;
+          try {
+            const admin = await this.adminRepo.findOne({ where: { id: s.adminId } as any });
+            label = admin?.label || null;
+          } catch { /* ok */ }
+          failed.push({
+            adminId: s.adminId,
+            sessionIndex: s.sessionIndex,
+            label,
+            sessionName: `wa-admin-${s.adminId}-${s.sessionIndex}`,
+            status: s.openwaSessionStatus,
+          });
+        }
+      }
+    }
+
+    return { reconnected, failed };
   }
 
   // ─── Super Admin ──────────────────────────────────────────────
