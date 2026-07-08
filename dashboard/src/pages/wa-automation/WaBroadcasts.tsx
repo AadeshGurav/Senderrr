@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, RotateCcw, Radio, ChevronLeft, ChevronRight as ChevRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, RotateCcw, Radio, ChevronLeft, ChevronRight as ChevRight, Pencil, Trash2 } from 'lucide-react';
 import { Card, CardBody } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +10,8 @@ import {
   useWaBroadcastQuery,
   useRetryBroadcastMutation,
   useRetryAllBroadcastsMutation,
+  useEditBroadcastMutation,
+  useDeleteBroadcastMutation,
 } from '../../hooks/wa-queries';
 
 const STATUSES = ['all', 'pending', 'in_progress', 'completed', 'partial', 'failed'] as const;
@@ -20,6 +22,7 @@ const statusVariant = (status: string) => {
     case 'failed': return 'error' as const;
     case 'in_progress': case 'processing': return 'info' as const;
     case 'pending': return 'warning' as const;
+    case 'cancelled': return 'neutral' as const;
     default: return 'neutral' as const;
   }
 };
@@ -52,8 +55,12 @@ export default function WaBroadcasts() {
   const totalPages = Math.ceil(total / limit);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const { data: selected } = useWaBroadcastQuery(selectedId ?? 0);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
   const retryMutate = useRetryBroadcastMutation();
   const retryAllMutate = useRetryAllBroadcastsMutation();
+  const editMutate = useEditBroadcastMutation();
+  const deleteMutate = useDeleteBroadcastMutation();
   const { success, error: showError } = useToast();
 
   const handleRetry = async (id: number) => {
@@ -143,19 +150,37 @@ export default function WaBroadcasts() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-[var(--color-text)] truncate">
                           #{displayNumber} — {b.article?.title || `Advertisement #${b.advertisementId || 'N/A'}`}
+                          {b.editHistory?.length > 0 && <span className="ml-2 text-xs text-[var(--color-text-muted)] italic">(edited)</span>}
                         </p>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                           {new Date(b.createdAt).toLocaleString()} · {b.totalMessages} messages
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                       <span className="text-xs text-[var(--color-text-secondary)]">S: {b.sentCount} / F: {b.failedCount}</span>
                       <Badge variant={statusVariant(b.status)}>{b.status}</Badge>
                       {(b.failedCount > 0 || b.status === 'failed') && (
                         <Button size="sm" variant="ghost" icon={RotateCcw} onClick={e => { e.stopPropagation(); handleRetry(b.id); }}>
                           Retry
                         </Button>
+                      )}
+                      {b.status !== 'cancelled' && (
+                        <>
+                          <Button size="sm" variant="ghost" icon={Pencil} onClick={e => { e.stopPropagation(); setEditingId(b.id); setEditText(b.messageText || ''); }}>
+                            Edit
+                          </Button>
+                          <Button size="sm" variant="ghost" icon={Trash2} onClick={e => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete broadcast #${displayNumber}? This will permanently remove the message from all WhatsApp groups.`)) {
+                              deleteMutate.mutateAsync(b.id)
+                                .then(r => success('Deleted', `${r.deleted} messages removed from WhatsApp`))
+                                .catch(e => showError('Delete failed', e.message));
+                            }
+                          }}>
+                            Delete
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -223,6 +248,39 @@ export default function WaBroadcasts() {
           >
             <ChevRight size={18} />
           </button>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editingId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingId(null)}>
+          <div className="bg-[var(--color-bg)] rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">Edit Broadcast Message</h2>
+            <textarea
+              className="w-full h-32 p-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-bg-secondary)] text-sm resize-y text-[var(--color-text)]"
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+            />
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">Supports WhatsApp Markdown formatting</p>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  try {
+                    const result = await editMutate.mutateAsync({ id: editingId, messageText: editText });
+                    success('Edited', `${result.edited} messages updated across WhatsApp groups`);
+                    setEditingId(null);
+                  } catch (e: any) {
+                    showError('Edit failed', e.message);
+                  }
+                }}
+                disabled={editMutate.isPending || !editText.trim()}
+              >
+                {editMutate.isPending ? 'Editing...' : 'Save & Update'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

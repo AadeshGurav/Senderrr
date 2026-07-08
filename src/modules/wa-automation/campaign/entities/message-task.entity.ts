@@ -35,6 +35,9 @@ export class MessageTask {
   @Column({ type: 'varchar', length: 100, nullable: true })
   workerId: string | null;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  waMessageId: string | null;
+
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
 

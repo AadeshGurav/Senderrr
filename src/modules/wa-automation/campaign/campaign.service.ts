@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, LessThan } from 'typeorm';
 import { BroadcastEvent, BroadcastStatus } from './entities/broadcast-event.entity';
@@ -11,6 +11,8 @@ import { BroadcastDispatcherService } from './broadcast-dispatcher.service';
 import { TemplateRendererService, NewsPlaceholders } from '../template/template-renderer.service';
 import { TemplateService } from '../template/template.service';
 import { SettingsService } from '../settings/settings.service';
+import { AdminSessionService } from '../automation/admin-session.service';
+import { AutomationService } from '../automation/automation.service';
 
 @Injectable()
 export class CampaignService {
@@ -30,6 +32,8 @@ export class CampaignService {
     private readonly templateService: TemplateService,
     private readonly templateRenderer: TemplateRendererService,
     private readonly settingsService: SettingsService,
+    private readonly adminSessionService: AdminSessionService,
+    private readonly automationService: AutomationService,
   ) {}
 
   async getEligibleGroups(): Promise<WhatsAppGroup[]> {
@@ -388,6 +392,134 @@ export class CampaignService {
     }
 
     return { retried: totalTasks, broadcasts: totalBroadcasts };
+  }
+
+  // ─── Edit / Delete Broadcast ──────────────────────────────────
+
+  /**
+   * Edit a broadcast's message text across all groups where it was successfully sent.
+   * Previous text is pushed into editHistory, then each sent message is updated via WhatsApp's edit API.
+   */
+  async editBroadcastText(broadcastId: number, newText: string): Promise<{ edited: number; failed: number }> {
+    const broadcast = await this.broadcastRepo.findOne({ where: { id: broadcastId } });
+    if (!broadcast) throw new NotFoundException('Broadcast not found');
+
+    // Push old text to edit history
+    const history: Array<{ text: string; editedAt: string }> = broadcast.editHistory || [];
+    if (broadcast.messageText) {
+      history.push({ text: broadcast.messageText, editedAt: new Date().toISOString() });
+    }
+    broadcast.messageText = newText;
+    broadcast.editHistory = history;
+    await this.broadcastRepo.save(broadcast);
+
+    // Find SENT tasks with a waMessageId
+    const tasks = await this.taskRepo.find({
+      where: { broadcast: { id: broadcastId }, status: MessageTaskStatus.SENT },
+      relations: ['group', 'admin'],
+    });
+    const tasksWithId = tasks.filter(t => t.waMessageId);
+    if (tasksWithId.length === 0) return { edited: 0, failed: 0 };
+
+    // Group by admin for session resolution
+    const byAdmin = new Map<number, MessageTask[]>();
+    for (const task of tasksWithId) {
+      const adminId = task.admin?.id;
+      if (!adminId) continue;
+      const list = byAdmin.get(adminId) || [];
+      list.push(task);
+      byAdmin.set(adminId, list);
+    }
+
+    let edited = 0;
+    let failed = 0;
+
+    for (const [adminId, adminTasks] of byAdmin) {
+      const sessions = await this.adminSessionService.getAdminSessions(adminId);
+      const readySession = sessions.find(s => s.openwaSessionStatus === 'ready');
+      if (!readySession) {
+        failed += adminTasks.length;
+        continue;
+      }
+
+      for (const task of adminTasks) {
+        const result = await this.automationService.editMessage(
+          readySession.openwaSessionId,
+          task.group.groupJid,
+          task.waMessageId!,
+          newText,
+        );
+        if (result.success) edited++;
+        else failed++;
+      }
+    }
+
+    this.logger.log(`Edited broadcast #${broadcastId}: ${edited} edited, ${failed} failed`);
+    return { edited, failed };
+  }
+
+  /**
+   * Soft-delete a broadcast: remove messages from all WhatsApp groups and mark as CANCELLED.
+   */
+  async deleteBroadcast(broadcastId: number): Promise<{ deleted: number; failed: number }> {
+    const broadcast = await this.broadcastRepo.findOne({ where: { id: broadcastId } });
+    if (!broadcast) throw new NotFoundException('Broadcast not found');
+
+    const tasks = await this.taskRepo.find({
+      where: { broadcast: { id: broadcastId }, status: MessageTaskStatus.SENT },
+      relations: ['group', 'admin'],
+    });
+    const tasksWithId = tasks.filter(t => t.waMessageId);
+    if (tasksWithId.length === 0) {
+      // Still mark as CANCELLED even if no messages to delete
+      broadcast.status = BroadcastStatus.CANCELLED;
+      broadcast.completedAt = new Date();
+      await this.broadcastRepo.save(broadcast);
+      return { deleted: 0, failed: 0 };
+    }
+
+    const byAdmin = new Map<number, MessageTask[]>();
+    for (const task of tasksWithId) {
+      const adminId = task.admin?.id;
+      if (!adminId) continue;
+      const list = byAdmin.get(adminId) || [];
+      list.push(task);
+      byAdmin.set(adminId, list);
+    }
+
+    let deleted = 0;
+    let failed = 0;
+
+    for (const [adminId, adminTasks] of byAdmin) {
+      const sessions = await this.adminSessionService.getAdminSessions(adminId);
+      const readySession = sessions.find(s => s.openwaSessionStatus === 'ready');
+      if (!readySession) {
+        failed += adminTasks.length;
+        continue;
+      }
+
+      for (const task of adminTasks) {
+        try {
+          const result = await this.automationService.deleteMessage(
+            readySession.openwaSessionId,
+            task.group.groupJid,
+            task.waMessageId!,
+          );
+          if (result.success) deleted++;
+          else failed++;
+        } catch {
+          failed++;
+        }
+      }
+    }
+
+    // Mark broadcast as CANCELLED (soft delete)
+    broadcast.status = BroadcastStatus.CANCELLED;
+    broadcast.completedAt = new Date();
+    await this.broadcastRepo.save(broadcast);
+
+    this.logger.log(`Deleted broadcast #${broadcastId}: ${deleted} removed, ${failed} failed`);
+    return { deleted, failed };
   }
 
   private sleep(ms: number): Promise<void> {

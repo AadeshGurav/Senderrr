@@ -192,6 +192,23 @@ export function useRetryBroadcastMutation() {
   });
 }
 
+export function useEditBroadcastMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, messageText }: { id: number; messageText: string }) =>
+      campaignApi.editBroadcast(id, messageText),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.broadcasts }),
+  });
+}
+
+export function useDeleteBroadcastMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => campaignApi.deleteBroadcast(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.broadcasts }),
+  });
+}
+
 export function useRetryAllBroadcastsMutation() {
   const qc = useQueryClient();
   return useMutation({

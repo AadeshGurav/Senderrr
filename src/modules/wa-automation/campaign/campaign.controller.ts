@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Param, Body, ParseIntPipe, Query, DefaultValuePipe, UseGuards, HttpCode, HttpStatus,
+  Controller, Get, Post, Patch, Delete, Param, Body, ParseIntPipe, Query, DefaultValuePipe, UseGuards, HttpCode, HttpStatus, BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -230,6 +230,20 @@ export class CampaignController {
   async retryBroadcast(@Param('id', ParseIntPipe) id: number) {
     const retried = await this.campaignService.retryBroadcastTasks(id);
     return { retried };
+  }
+
+  @Patch('broadcasts/:id/edit')
+  @ApiOperation({ summary: 'Edit broadcast message text (updates in all groups via WhatsApp edit)' })
+  async editBroadcast(@Param('id', ParseIntPipe) id: number, @Body() body: { messageText: string }) {
+    if (!body.messageText?.trim()) throw new BadRequestException('messageText is required');
+    return this.campaignService.editBroadcastText(id, body.messageText);
+  }
+
+  @Delete('broadcasts/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete broadcast (removes from all groups + soft-deletes)' })
+  async deleteBroadcast(@Param('id', ParseIntPipe) id: number) {
+    return this.campaignService.deleteBroadcast(id);
   }
 
   // ─── Maintenance ───

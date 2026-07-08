@@ -9,6 +9,7 @@ export enum BroadcastStatus {
   COMPLETED = 'completed',
   PARTIAL = 'partial',
   FAILED = 'failed',
+  CANCELLED = 'cancelled',
 }
 
 @Entity({ name: 'broadcast_events' })
@@ -24,6 +25,9 @@ export class BroadcastEvent {
 
   @Column({ type: 'text', nullable: true })
   messageText: string | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  editHistory: Array<{ text: string; editedAt: string }> | null;
 
   @Column({ type: 'varchar', length: 20, default: BroadcastStatus.PENDING })
   status: BroadcastStatus;
