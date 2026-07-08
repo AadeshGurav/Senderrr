@@ -162,17 +162,17 @@ export class AdvertisementService {
       }),
     ]);
 
-    // Per-group breakdown — compatible with both SQLite and PostgreSQL
+    // Per-group breakdown — compatible with SQLite
     const perGroupRaw = await this.taskRepo
       .createQueryBuilder('task')
-      .select('"group".name', 'groupName')
+      .select('g.name', 'groupName')
       .addSelect('COUNT(CASE WHEN task.status = \'sent\' THEN 1 END)', 'totalSent')
       .addSelect('COUNT(CASE WHEN task.status = \'failed\' THEN 1 END)', 'totalFailed')
       .addSelect('COUNT(CASE WHEN task.status = \'sent\' AND task.lastAttemptAt >= :todayStart THEN 1 END)', 'todaySent')
-      .leftJoin('task.group', '"group"')
+      .leftJoin('task.group', 'g')
       .where('task.broadcastId IN (:...broadcastIds)', { broadcastIds })
-      .groupBy('"group".name')
-      .orderBy('"group".name', 'ASC')
+      .groupBy('g.name')
+      .orderBy('g.name', 'ASC')
       .setParameter('todayStart', todayStart)
       .getRawMany();
 
