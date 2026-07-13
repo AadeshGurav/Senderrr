@@ -1,4 +1,4 @@
-# OpenWA - Pure Node.js (No Python, No Django)
+# Senderrr - Pure Node.js (No Python, No Django)
 
 # ===== Stage 1: Builder =====
 FROM node:22-slim AS builder

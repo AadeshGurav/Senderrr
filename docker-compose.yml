@@ -1,12 +1,11 @@
-# OpenWA - Pure Node.js Stack
-# OpenWA has BullMQ and Redis built-in - no external services needed
+# Senderrr - Pure Node.js Stack
 
 services:
-  openwa:
+  senderrr:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: openwa
+    container_name: senderrr
     restart: unless-stopped
     ports:
       - '127.0.0.1:2785:2785'
@@ -31,7 +30,7 @@ services:
       - AUTOMATION_QUIET_HOUR_START=${AUTOMATION_QUIET_HOUR_START:-21}
       - AUTOMATION_QUIET_HOUR_END=${AUTOMATION_QUIET_HOUR_END:-3}
     volumes:
-      - openwa-data:/app/data
+      - senderrr-data:/app/data
     healthcheck:
       test: ['CMD', 'node', '-e', "require('http').get('http://localhost:2785/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 30s
@@ -42,18 +41,19 @@ services:
   # ngrok tunnel for webhook testing (only starts when NGROK_AUTH_TOKEN is set)
   ngrok:
     image: ngrok/ngrok:latest
-    container_name: openwa-ngrok
+    container_name: senderrr-ngrok
     profiles:
       - ngrok
     ports:
       - "4040:4040"
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTH_TOKEN:-}
-    command: http openwa:2785 ${NGROK_URL:+--url=}${NGROK_URL}
+    command: http senderrr:2785 ${NGROK_URL:+--url=}${NGROK_URL}
     depends_on:
-      - openwa
+      - senderrr
     restart: unless-stopped
 
 volumes:
-  openwa-data:
-    driver: local
+  senderrr-data:
+    external: true
+    name: openwa_openwa-data

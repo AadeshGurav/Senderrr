@@ -1,4 +1,4 @@
-# OpenWA - Pure Node.js Stack (No Python, No Django)
+# Senderrr - Pure Node.js Stack (No Python, No Django)
 # Usage: make setup    install everything & start
 #        make start    start the container
 #        make stop     shut down
@@ -27,11 +27,11 @@ setup: _check-deps build _start  ## Full setup - build & start everything
 	@echo "   All set! Everything is running."
 	@echo "  ================================================="
 	@echo ""
-	@echo "   OpenWA Server:  http://localhost:2785"
-	@echo "   Dashboard:      http://localhost:2785/ (or /wa/dashboard)"
-	@echo "   API Docs:       http://localhost:2785/api/docs"
-	@echo "   Queue UI:       http://localhost:2785/api/admin/queues"
-	$(if $(_ngrok), @echo "   Ngrok Tunnel:  http://localhost:4040 (dashboard)",)
+	@echo "   Senderrr Server:  http://localhost:2785"
+	@echo "   Dashboard:        http://localhost:2785/ (or /wa/dashboard)"
+	@echo "   API Docs:         http://localhost:2785/api/docs"
+	@echo "   Queue UI:         http://localhost:2785/api/admin/queues"
+	$(if $(_ngrok), @echo "   Ngrok Tunnel:    http://localhost:4040 (dashboard)",)
 	@echo ""
 	$(if $(_ngrok), @echo "   🌐  Ngrok tunnel active — webhooks reachable via ngrok URL",)
 	$(if $(_ngrok), @echo "",)
@@ -48,7 +48,7 @@ stop:  ## Stop everything
 restart: stop start  ## Rebuild & restart
 
 build: _check-deps  ## Build Docker image
-	@echo "  Building OpenWA single-container image..."
+	@echo "  Building Senderrr single-container image..."
 	@docker compose $(_ngrok) build
 
 logs:  ## Follow logs
@@ -67,20 +67,20 @@ doctor:  ## Diagnose & auto-repair
 	else \
 		echo "  OK  Container running"; \
 	fi
-	@echo "  [3/3] OpenWA health ..."
+	@echo "  [3/3] Senderrr health ..."
 	@if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
-		echo "  OK  OpenWA healthy"; \
+		echo "  OK  Senderrr healthy"; \
 	else \
-		echo "  FIX  OpenWA not responding — restarting ..."; \
+		echo "  FIX  Senderrr not responding — restarting ..."; \
 		docker compose $(_ngrok) restart; \
 		for i in $$(seq 1 30); do \
 			if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
-				echo "  OK  OpenWA recovered"; break; \
+				echo "  OK  Senderrr recovered"; break; \
 			fi; sleep 2; \
 		done; \
 	fi
-	@echo ""; echo "  OpenWA Server:  http://localhost:2785"
-	@echo "   Dashboard:      http://localhost:2785/"
+	@echo ""; echo "  Senderrr Server:  http://localhost:2785"
+	@echo "   Dashboard:       http://localhost:2785/"
 	@echo "   Login: admin / admin"
 
 # ─── Internal helpers ──────────────────────────────────────────────
@@ -96,12 +96,12 @@ _start:
 	else \
 		docker compose $(_ngrok) up -d; \
 	fi
-	@echo "  Waiting for OpenWA ..."
+	@echo "  Waiting for Senderrr ..."
 	@for i in $$(seq 1 60); do \
 		if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
-			echo "  OK  OpenWA ready"; \
+			echo "  OK  Senderrr ready"; \
 			break; \
 		fi; \
 		sleep 2; \
-		if [ $$i -eq 60 ]; then echo "FAIL  OpenWA did not start."; exit 1; fi; \
+		if [ $$i -eq 60 ]; then echo "FAIL  Senderrr did not start."; exit 1; fi; \
 	done

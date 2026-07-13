@@ -125,10 +125,10 @@ cmd_start() {
 
 # Stop OpenWA
 cmd_stop() {
-    log_info "Stopping OpenWA..."
+    log_info "Stopping Senderrr..."
     cd "$PROJECT_DIR"
     docker compose --profile postgres --profile redis --profile minio --profile with-dashboard --profile with-proxy down
-    log_success "OpenWA stopped"
+    log_success "Senderrr stopped"
 }
 
 # Restart OpenWA
@@ -176,16 +176,16 @@ cmd_update() {
 # Show help
 cmd_help() {
     echo ""
-    echo "OpenWA Smart Orchestration Script"
+    echo "Senderrr Smart Orchestration Script"
     echo ""
     echo "Usage: $0 <command> [options]"
     echo ""
     echo "Commands:"
-    echo "  start       Start OpenWA with auto-detected profiles"
-    echo "  stop        Stop all OpenWA containers"
-    echo "  restart     Restart OpenWA"
+    echo "  start       Start Senderrr with auto-detected profiles"
+    echo "  stop        Stop all Senderrr containers"
+    echo "  restart     Restart Senderrr"
     echo "  status      Show container status"
-    echo "  logs        Show logs (default: openwa-api)"
+    echo "  logs        Show logs (default: senderrr-api)"
     echo "  build       Build Docker images"
     echo "  update      Pull latest code and restart"
     echo "  help        Show this help"
