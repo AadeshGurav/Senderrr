@@ -28,9 +28,21 @@ import { HooksModule } from './core/hooks';
 import { PluginsModule } from './core/plugins';
 import { PluginsApiModule } from './modules/plugins/plugins.module';
 
-// Only import QueueModule if explicitly enabled to avoid Redis connection errors
+/**
+ * Auto-detect queue availability to avoid Redis connection errors on free tier.
+ * Mirrors the logic in configuration.ts for consistency.
+ * - QUEUE_ENABLED=true  → force enable (requires Redis)
+ * - QUEUE_ENABLED=false → force disable
+ * - unset               → auto-enable if REDIS_ENABLED=true, otherwise disable
+ */
 const queueModules: Array<Type | DynamicModule> = [];
-if (process.env.QUEUE_ENABLED === 'true') {
+const REDIS_ENABLED = process.env.REDIS_ENABLED === 'true';
+const hasExplicitQueueSetting = process.env.QUEUE_ENABLED !== undefined;
+const isQueueEnabled = hasExplicitQueueSetting
+  ? process.env.QUEUE_ENABLED === 'true'
+  : REDIS_ENABLED;
+
+if (isQueueEnabled) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const queueModule = require('./modules/queue/queue.module') as {
     QueueModule: Type;
