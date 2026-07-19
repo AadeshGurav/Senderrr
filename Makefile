@@ -83,6 +83,48 @@ doctor:  ## Diagnose & auto-repair
 	@echo "   Dashboard:       http://localhost:2785/"
 	@echo "   Login: admin / admin"
 
+# ─── Coolify + Oracle Cloud Deployment ───────────────────────────
+# See DEPLOY-ORACLE-COOLIFY.md for the full step-by-step guide
+
+.PHONY: coolify-ssh-key coolify-status coolify-logs oracle-ssh oracle-update
+
+COOLIFY_HOST ?= <your-oracle-vm-ip>
+COOLIFY_KEY  ?= ~/.ssh/openwa_key.pem
+
+coolify-ssh-key:  ## Generate a new SSH key pair for Coolify server access
+	@echo "  Generating ED25519 key pair for Coolify..."
+	@ssh-keygen -t ed25519 -f ./coolify_deploy_key -N "" -C "coolify-deploy@senderrr"
+	@echo ""
+	@echo "  Key created: ./coolify_deploy_key"
+	@echo "  Public key:"
+	@cat ./coolify_deploy_key.pub
+	@echo ""
+	@echo "  Add the public key above to Oracle Cloud instance:"
+	@echo "    Oracle Console → Instance → openwa-server → Edit → Add SSH Key"
+	@echo "  Or on the server:"
+	@echo "    echo '$(shell cat ./coolify_deploy_key.pub)' >> ~/.ssh/authorized_keys"
+	@echo ""
+	@echo "  Then set COOLIFY_KEY=./coolify_deploy_key in your env or .env file."
+
+coolify-status:  ## Show status of Coolify and app containers on Oracle VM
+	@ssh -i $(COOLIFY_KEY) ubuntu@$(COOLIFY_HOST) "sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+
+coolify-logs:  ## Follow app container logs on Oracle VM (args: CONTAINER_NAME=senderrr)
+	@ssh -i $(COOLIFY_KEY) ubuntu@$(COOLIFY_HOST) "sudo docker logs -f $(CONTAINER_NAME)"
+
+coolify-rebuild:  ## Trigger a manual rebuild on Oracle VM via Docker Compose
+	@ssh -i $(COOLIFY_KEY) ubuntu@$(COOLIFY_HOST) \
+		"cd /data/coolify && sudo docker compose pull && sudo docker compose up -d --remove-orphans"
+	@echo "  Done. Check logs: make coolify-logs"
+
+oracle-ssh:  ## SSH into Oracle Cloud VM
+	@ssh -i $(COOLIFY_KEY) ubuntu@$(COOLIFY_HOST)
+
+oracle-update:  ## Update system packages on Oracle VM
+	@ssh -i $(COOLIFY_KEY) ubuntu@$(COOLIFY_HOST) \
+		"sudo apt update && sudo apt upgrade -y && sudo docker system prune -f"
+	@echo "  System updated and Docker prune done."
+
 # ─── Internal helpers ──────────────────────────────────────────────
 
 _check-deps:
