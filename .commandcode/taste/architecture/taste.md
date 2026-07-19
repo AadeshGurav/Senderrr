@@ -8,3 +8,5 @@
 - Leverage OpenWA's built-in Redis and BullMQ instead of adding redundant separate services. Confidence: 0.65
 - When dealing with undocumented features, explore iteratively (try, fail, refine) within the actual capabilities of the underlying OpenWA engine rather than hacking/patching around it. Confidence: 0.70
 - For ngrok in docker-compose, conditionally include `--url=${NGROK_URL:-}` in the command when NGROK_URL is set in .env. Confidence: 0.65
+- For Render free tier services: do not configure persistent disks (unsupported on free plan). Confidence: 0.65
+- For Render services with an attached disk: do not set maxShutdownDelaySeconds (not supported). Confidence: 0.65

@@ -6,50 +6,57 @@ import { AppModule } from './app.module';
 import { ShutdownService } from './common/services/shutdown.service';
 import { BullBoardAuthMiddleware } from './common/security/bull-board-auth.middleware';
 import { AuthService } from './modules/auth/auth.service';
-import { ConfigService } from '@nestjs/config';
 import { Request, Response, NextFunction } from 'express';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'node:child_process';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
+// Configuration loading order (later sources do NOT override earlier ones):
+//   1. Process env (Docker, shell, systemd) — highest priority
+//   2. .env (project-level overrides committed/managed by the user)
+//   3. data/.env.generated (Dashboard-managed config; created on first run)
 const generatedEnvPath = path.resolve(process.cwd(), 'data', '.env.generated');
 const userEnvPath = path.resolve(process.cwd(), '.env');
 
+// Ensure data directory exists
 const dataDir = path.dirname(generatedEnvPath);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Load env files in priority order (later sources do NOT override earlier ones)
-// 1. Process env (highest — Docker, shell, systemd)
-// 2. .env (project-level overrides)
-// 3. data/.env.generated (Dashboard-saved config)
+// 2. User-managed .env (does not override real process env)
 if (fs.existsSync(userEnvPath)) {
+  console.log('[Bootstrap] Loading .env from:', userEnvPath);
   dotenv.config({ path: userEnvPath, override: false });
 }
+
+// 3. Dashboard-saved config (does not override .env or process env)
 if (fs.existsSync(generatedEnvPath)) {
+  console.log('[Bootstrap] Loading saved configuration from:', generatedEnvPath);
   dotenv.config({ path: generatedEnvPath, override: false });
 } else {
-  const minimalConfig = [
-    '# OpenWA Configuration',
-    '# Generated automatically on first run',
-    'DATABASE_TYPE=sqlite',
-    'POSTGRES_BUILTIN=false',
-    'REDIS_ENABLED=false',
-    'REDIS_BUILTIN=false',
-    'QUEUE_ENABLED=false',
-    'STORAGE_TYPE=local',
-    'MINIO_BUILTIN=false',
-    'STORAGE_PATH=./data/media',
-  ].join('\n');
+  console.log('[Bootstrap] First run detected, creating default configuration...');
+  const minimalConfig = `# OpenWA Configuration
+# Generated automatically on first run
+DATABASE_TYPE=sqlite
+POSTGRES_BUILTIN=false
+REDIS_ENABLED=false
+REDIS_BUILTIN=false
+QUEUE_ENABLED=false
+STORAGE_TYPE=local
+MINIO_BUILTIN=false
+STORAGE_PATH=./data/media
+`;
   fs.writeFileSync(generatedEnvPath, minimalConfig);
+  console.log('[Bootstrap] Created default configuration at:', generatedEnvPath);
   dotenv.config({ path: generatedEnvPath, override: false });
 }
 
 /**
  * Remove stale Chrome/Puppeteer lock files from session data directories.
- * On crash/kill, Chrome leaves SingletonLock/SingletonCookie/SingletonSocket
+ * On a crash/kill, Chrome leaves SingletonLock/SingletonCookie/SingletonSocket
  * files that block the next launch with "lockfile" errors.
  */
 function cleanChromeLocks(sessionDataPath: string): void {
@@ -62,172 +69,137 @@ function cleanChromeLocks(sessionDataPath: string): void {
       for (const lock of ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'Singleton']) {
         const lockPath = path.join(dir, lock);
         try {
-          if (fs.existsSync(lockPath)) fs.rmSync(lockPath, { force: true });
-        } catch { /* race — ignore */ }
+          if (fs.existsSync(lockPath)) {
+            fs.rmSync(lockPath, { force: true });
+          }
+        } catch {
+          // Race condition — another process removed it, ignore
+        }
       }
     }
-    // Kill orphaned Chrome processes from previous run
+    // Also kill any orphaned Chrome processes from a previous run
     try {
-      require('child_process').execSync(
-        'pkill -f "chrome.*--disable-setuid-sandbox" 2>/dev/null || true',
-      );
-    } catch { /* pkill not available — ignore */ }
-  } catch { /* directory might not exist yet */ }
-}
-
-/**
- * HTTPS redirect middleware for Render's HTTPS-only platform.
- * Redirects HTTP requests to HTTPS when behind the Render proxy.
- * Only active when ENFORCE_HTTPS is not explicitly disabled.
- */
-function httpsRedirectMiddleware(configService: ConfigService) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const enforceHttps = configService.get<boolean>('security.enforceHttps', true);
-    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
-    if (enforceHttps && !isHttps && process.env.NODE_ENV === 'production') {
-      const url = `https://${req.hostname}${req.originalUrl}`;
-      return res.redirect(301, url);
+      try {
+        require('child_process').execSync('pkill -f "chrome.*--disable-setuid-sandbox" 2>/dev/null || true');
+      } catch {
+        // pkill not available — ignore
+      }
+    } catch {
+      // pkill not available on all systems, ignore
     }
-    next();
-  };
+  } catch {
+    // Directory might not be accessible yet
+  }
 }
 
 async function bootstrap() {
+  // Clean up Chrome lock files from previous runs
+  cleanChromeLocks(path.resolve(process.cwd(), process.env.SESSION_DATA_PATH || './data/sessions'));
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  const configService = app.get(ConfigService);
 
-  // ── Bootstrap phase ────────────────────────────────────────────
-  const sessionDataPath = path.resolve(
-    process.cwd(),
-    configService.get<string>('engine.sessionDataPath') || './data/sessions',
-  );
-  cleanChromeLocks(sessionDataPath);
-
-  // ── Graceful shutdown ──────────────────────────────────────────
+  // Enable shutdown hooks for graceful shutdown
   app.enableShutdownHooks();
+
+  // Wire up graceful shutdown service
   const shutdownService = app.get(ShutdownService);
   shutdownService.setShutdownCallback(async () => {
+    // Manually destroy TypeORM DataSources before NestJS shutdown hooks fire.
+    // TypeOrmCoreModule.onApplicationShutdown uses moduleRef.get() which can
+    // throw when the provider isn't reachable from the module context at teardown.
+    // By destroying DataSources here (via app.get, which always resolves), the
+    // shutdown hook sees isInitialized=false and skips destroy() gracefully.
     for (const token of ['mainDataSource', 'dataDataSource']) {
       try {
         const ds = app.get(token);
         if (ds?.isInitialized) await ds.destroy();
-      } catch { /* DataSource not available — skip */ }
+      } catch {
+        // DataSource wasn't available — nothing to clean up.
+      }
     }
     await app.close();
   });
 
-  // ── Security headers ───────────────────────────────────────────
-  const isProduction = process.env.NODE_ENV === 'production';
-  const cspReportOnly = configService.get<boolean>('security.cspReportOnly', false);
-
+  // Enhanced Security Headers
   app.use(
     helmet({
-      contentSecurityPolicy: cspReportOnly
-        ? undefined
-        : {
-            directives: {
-              defaultSrc: ["'self'"],
-              styleSrc: ["'self'", "'unsafe-inline'"],
-              scriptSrc: ["'self'"],
-              imgSrc: ["'self'", 'data:', 'https:'],
-              connectSrc: ["'self'"],
-              fontSrc: ["'self'"],
-              objectSrc: ["'none'"],
-              upgradeInsecureRequests: isProduction ? [] : null,
-            },
-          },
-      crossOriginEmbedderPolicy: false,
-      hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+        },
+      },
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
       noSniff: true,
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-      frameguard: { action: 'deny' },
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
 
-  // ── HTTPS redirect (Render proxy) ─────────────────────────────
-  app.use(httpsRedirectMiddleware(configService));
-
-  // ── Request ID for tracing ─────────────────────────────────────
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const requestId = (req.headers['x-request-id'] as string) ||
-      require('crypto').randomUUID();
-    res.setHeader('X-Request-ID', requestId);
-    (req as any).requestId = requestId;
-    next();
-  });
-
-  // ── CORS ───────────────────────────────────────────────────────
-  const corsOriginsStr = configService.get<string>('security.corsOrigins') || '';
-  const allowedOrigins = corsOriginsStr
-    ? corsOriginsStr.split(',').map(o => o.trim()).filter(Boolean)
-    : [];
-
+  // CORS
+  const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || ['*'];
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Allow requests with no origin (curl, Postman, server-to-server)
       if (!origin) return callback(null, true);
-      // '*' or matching origin
       if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-        return callback(null, true);
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
       }
-      callback(new Error('Not allowed by CORS policy'), false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type', 'X-API-Key', 'Authorization', 'X-Request-ID',
-      'X-Forwarded-For', 'X-Real-IP', 'User-Agent',
-    ],
-    exposedHeaders: [
-      'X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining',
-      'X-RateLimit-Reset', 'X-RateLimit-Window',
-    ],
+    allowedHeaders: ['Content-Type', 'X-API-Key', 'Authorization', 'X-Request-ID'],
+    exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
     maxAge: 86400,
   });
 
-  // ── Global prefix ──────────────────────────────────────────────
-  app.setGlobalPrefix('api', {
-    exclude: ['health/live'], // liveness must be at root for Render health checks
-  });
+  // Global prefix
+  app.setGlobalPrefix('api');
 
-  // ── Validation pipe ────────────────────────────────────────────
+  // Validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
-      disableErrorMessages: isProduction,
+      disableErrorMessages: process.env.NODE_ENV === 'production',
     }),
   );
 
-  // ── Swagger docs ───────────────────────────────────────────────
+  // Swagger documentation
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Senderrr API')
-    .setDescription('Senderrr — WhatsApp Broadcasting System')
+    .setDescription('Senderrr - WhatsApp Broadcasting System')
     .setVersion('1.0.0')
     .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'X-API-Key')
     .addTag('sessions', 'WhatsApp session management')
     .addTag('messages', 'Send and manage messages')
-    .addTag('webhooks', 'Webhook event delivery')
-    .addTag('health', 'Health check and keep-alive endpoints')
+    .addTag('webhooks', 'Webhook configuration')
+    .addTag('health', 'Health check endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  // ── Bull Board protection ──────────────────────────────────────
-  if (configService.get<boolean>('queue.enabled')) {
-    const bullBoardAuth = new BullBoardAuthMiddleware(app.get(AuthService));
-    app.use('/api/admin/queues', (req: Request, res: Response, next: NextFunction) => {
-      void bullBoardAuth.use(req, res, next);
-    });
-  }
+  // Protect Bull Board queue UI
+  const bullBoardAuth = new BullBoardAuthMiddleware(app.get(AuthService));
+  app.use('/api/admin/queues', (req: Request, res: Response, next: NextFunction) => {
+    void bullBoardAuth.use(req, res, next);
+  });
 
-  // ── Serve React dashboard ──────────────────────────────────────
+  // Serve the React dashboard — SPA catch-all for non-API routes
   const dashboardPath = path.resolve(process.cwd(), 'dashboard-ui', 'dist');
   if (fs.existsSync(dashboardPath)) {
+    // Static files
     app.useStaticAssets(dashboardPath, { index: false });
+    // SPA catch-all — serve index.html for all non-API, non-Socket.IO routes
     app.use((req: Request, res: Response, next: NextFunction) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
         return next();
@@ -239,56 +211,40 @@ async function bootstrap() {
         next();
       }
     });
-    console.log('[Bootstrap] Serving React dashboard from:', dashboardPath);
+    console.log(`[Bootstrap] Serving React dashboard from: ${dashboardPath}`);
   } else {
     console.log('[Bootstrap] Dashboard not built — API-only mode. Run: cd dashboard-ui && npm run build');
   }
 
-  // ── Keep-alive ping for free tier spin-down prevention ─────────
-  const keepAliveEnabled = configService.get<boolean>('keepAlive.enabled', true);
-  const keepAliveIntervalMs = configService.get<number>('keepAlive.intervalMs', 420000);
-  if (keepAliveEnabled) {
-    const host = configService.get<string>('host') || '0.0.0.0';
-    const port = configService.get<number>('port') || 10000;
-    const selfUrl = `http://${host === '0.0.0.0' ? 'localhost' : host}:${port}/api/health/ping`;
+  const port = process.env.PORT || 2785;
 
-    setInterval(() => {
-      const http = require('http');
-      const req = http.get(selfUrl, (res: any) => {
-        if (res.statusCode !== 200) {
-          console.warn(`[KeepAlive] Ping returned status ${res.statusCode}`);
-        }
-      });
-      req.on('error', (err: Error) => {
-        console.warn(`[KeepAlive] Ping failed: ${err.message}`);
-      });
-      req.setTimeout(5000, () => {
-        req.destroy();
-        console.warn('[KeepAlive] Ping timed out after 5s');
-      });
-    }, keepAliveIntervalMs);
+  // Kill any previous process on the port to avoid EADDRINUSE
+  const { execSync } = require('child_process');
+  try {
+    const pid = execSync(`lsof -ti:${port}`, { encoding: 'utf8', timeout: 3000 }).trim();
+    if (pid) {
+      process.kill(parseInt(pid, 10), 'SIGKILL');
+      console.log(`[Bootstrap] Killed previous process ${pid} on port ${port}`);
+      // Give the OS a moment to release the port
+      await new Promise(r => setTimeout(r, 500));
+    }
+  } catch { /* no process on port — good */ }
 
-    console.log(`[KeepAlive] Spin-down prevention active (every ${keepAliveIntervalMs / 1000}s → ${selfUrl})`);
-  }
+  await app.listen(port);
 
-  // ── Start server ───────────────────────────────────────────────
-  const host = configService.get<string>('host') || '0.0.0.0';
-  const port = configService.get<number>('port') || 10000;
-
-  await app.listen(port, host);
-
-  console.log(`\n  Senderrr running on http://${host === '0.0.0.0' ? '0.0.0.0' : host}:${port}`);
-  console.log(`  API docs:  http://localhost:${port}/api/docs`);
-  console.log(`  Dashboard: http://localhost:${port}/wa/dashboard\n`);
+  console.log(`\n  🚀 Senderrr is running on: http://localhost:${port}`);
+  console.log(`  📚 API docs: http://localhost:${port}/api/docs`);
+  console.log(`  👤 Dashboard: http://localhost:${port}/wa/dashboard`);
+  console.log(`  🔧 Admin: http://localhost:${port}/_openwa\n`);
 }
 
-// Global error handlers — don't exit on Puppeteer/WhatsApp crashes
+// Global error handlers to prevent Puppeteer/WhatsApp-web.js crashes from killing the process
 process.on('unhandledRejection', (reason) => {
-  const msg = reason instanceof Error ? reason.message : String(reason);
-  console.error('[UnhandledRejection]', msg);
+  console.error('[UnhandledRejection]', reason instanceof Error ? reason.message : reason);
 });
 process.on('uncaughtException', (error) => {
   console.error('[UncaughtException]', error.message);
+  // Don't exit — let the process continue running
 });
 
 void bootstrap();

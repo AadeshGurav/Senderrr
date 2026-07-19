@@ -1,13 +1,4 @@
 # Senderrr - Pure Node.js Stack
-#
-# NOTE: ngrok tunnel service has been archived.
-# See archive/infrastructure/archived-docker-compose.yml for the full ngrok config.
-# See archive/infrastructure/archived-env-vars.md for ngrok env var documentation.
-#
-# For webhook testing in local dev, either:
-#   1. Use the archived ngrok config (docker compose -f archive/infrastructure/archived-docker-compose.yml ...)
-#   2. Use a separate ngrok process: ngrok http 2785 --authtoken=<token>
-#   3. Use Cloudflare Tunnel (cloudflared tunnel) as an alternative
 
 services:
   senderrr:
@@ -46,6 +37,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # ngrok tunnel for webhook testing (only starts when NGROK_AUTH_TOKEN is set)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: senderrr-ngrok
+    profiles:
+      - ngrok
+    ports:
+      - "4040:4040"
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTH_TOKEN:-}
+    command: http senderrr:2785 ${NGROK_URL:+--url=}${NGROK_URL}
+    depends_on:
+      - senderrr
+    restart: unless-stopped
 
 volumes:
   senderrr-data:

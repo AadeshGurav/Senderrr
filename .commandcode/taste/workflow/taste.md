@@ -1,5 +1,6 @@
 # workflow
-- After making code changes, always add, commit, and push them to Git to prevent loss when multiple agents work on the same directory. Confidence: 0.85
+- After making code changes, always add, commit, and push them to Git to prevent loss when multiple agents work on the same directory. Confidence: 0.90
+- Before running git operations (checkout, merge, rebase), first verify that all untracked and modified files are safe — stash, commit, or confirm they won't be lost. Confidence: 0.70
 - Use `caffeinate` (macOS) when starting Docker containers via `docker compose up` to prevent the system from sleeping during the process. Confidence: 0.85
 - Index and analyze the entire relevant codebase to fully understand the problem before attempting to write or suggest a solution. Confidence: 1
 - Do not restart the dev server; it's already running and changes are picked up automatically after rebuilding. Confidence: 0.65
