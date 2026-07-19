@@ -195,7 +195,7 @@ async function bootstrap() {
   });
 
   // Serve the React dashboard — SPA catch-all for non-API routes
-  const dashboardPath = path.resolve(process.cwd(), 'dashboard', 'dist');
+  const dashboardPath = path.resolve(process.cwd(), 'dashboard-ui', 'dist');
   if (fs.existsSync(dashboardPath)) {
     // Static files
     app.useStaticAssets(dashboardPath, { index: false });
@@ -213,7 +213,7 @@ async function bootstrap() {
     });
     console.log(`[Bootstrap] Serving React dashboard from: ${dashboardPath}`);
   } else {
-    console.log('[Bootstrap] Dashboard not built — API-only mode. Run: cd dashboard && npm run build');
+    console.log('[Bootstrap] Dashboard not built — API-only mode. Run: cd dashboard-ui && npm run build');
   }
 
   const port = process.env.PORT || 2785;

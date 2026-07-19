@@ -2,7 +2,7 @@ import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { BullBoardAuthMiddleware } from './bull-board-auth.middleware';
 import { AuthService } from '../../modules/auth/auth.service';
-import { ApiKeyRole } from '../../modules/auth/entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 describe('BullBoardAuthMiddleware', () => {
   let mw: BullBoardAuthMiddleware;

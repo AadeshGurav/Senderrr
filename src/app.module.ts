@@ -9,7 +9,7 @@ import { WebhookModule } from './modules/webhook/webhook.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuditModule } from './modules/audit/audit.module';
-import { EngineModule } from './engine/engine.module';
+import { EngineModule } from '@whatsapp-engine/engine.module';
 import { LoggerModule } from './common/services/logger.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { WaAutomationModule } from './modules/wa-automation/wa-automation.module';
@@ -54,7 +54,10 @@ if (process.env.QUEUE_ENABLED === 'true') {
       useFactory: (configService: ConfigService) => ({
         type: 'sqlite' as const,
         database: configService.get<string>('database.database', './data/main.sqlite'),
-        entities: [__dirname + '/modules/auth/**/*.entity{.ts,.js}', __dirname + '/modules/audit/**/*.entity{.ts,.js}'],
+        entities: [
+          __dirname + '/../database/entities/auth/**/*.entity{.ts,.js}',
+          __dirname + '/../database/entities/audit/**/*.entity{.ts,.js}',
+        ],
         synchronize: true,
         logging: configService.get<boolean>('database.logging', false),
       }),
@@ -69,12 +72,12 @@ if (process.env.QUEUE_ENABLED === 'true') {
         const dbType = configService.get<'sqlite' | 'postgres'>('dataDatabase.type', 'sqlite');
         const baseConfig = {
           entities: [
-            __dirname + '/modules/session/**/*.entity{.ts,.js}',
-            __dirname + '/modules/webhook/**/*.entity{.ts,.js}',
-            __dirname + '/modules/message/**/*.entity{.ts,.js}',
-            __dirname + '/modules/wa-automation/**/*.entity{.ts,.js}',
+            __dirname + '/../database/entities/session/**/*.entity{.ts,.js}',
+            __dirname + '/../database/entities/webhook/**/*.entity{.ts,.js}',
+            __dirname + '/../database/entities/message/**/*.entity{.ts,.js}',
+            __dirname + '/../database/entities/wa-automation/**/*.entity{.ts,.js}',
           ],
-          migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
+          migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
           logging: configService.get<boolean>('dataDatabase.logging', false),
         };
 

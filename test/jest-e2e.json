@@ -5,5 +5,12 @@
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "@database/(.*)$": "<rootDir>/../database/$1",
+    "@whatsapp-engine/(.*)$": "<rootDir>/../whatsapp-engine/$1",
+    "@scraper/(.*)$": "<rootDir>/../scraper/$1",
+    "@core/(.*)$": "<rootDir>/../src/core/$1",
+    "@common/(.*)$": "<rootDir>/../src/common/$1"
   }
 }

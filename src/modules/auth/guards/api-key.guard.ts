@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { AuthService } from '../auth.service';
-import { ApiKeyRole } from '../entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 import { REQUIRED_ROLE_KEY, PUBLIC_KEY } from '../decorators/auth.decorators';
 import { ipMatches, normalizeIp } from '../../../common/utils/ip';
 

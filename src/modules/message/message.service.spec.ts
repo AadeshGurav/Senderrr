@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BadRequestException } from '@nestjs/common';
 import { MessageService } from './message.service';
-import { Message, MessageDirection, MessageStatus } from './entities/message.entity';
+import { Message, MessageDirection, MessageStatus } from '@database/entities/message/message.entity';
 import { SessionService } from '../session/session.service';
 import { HookManager } from '../../core/hooks';
 

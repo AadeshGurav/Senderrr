@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { AuditService, AuditQueryOptions } from './audit.service';
-import { AuditLog, AuditAction, AuditSeverity } from './entities/audit-log.entity';
+import { AuditLog, AuditAction, AuditSeverity } from '@database/entities/audit/audit-log.entity';
 
 @ApiTags('audit')
 @Controller('audit')

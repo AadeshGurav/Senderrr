@@ -5,7 +5,7 @@ import type {
   Product,
   PaginatedProducts,
   MessageResult,
-} from '../../engine/interfaces/whatsapp-engine.interface';
+} from '@whatsapp-engine/interfaces/whatsapp-engine.interface';
 
 @Injectable()
 export class CatalogService {

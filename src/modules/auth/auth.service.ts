@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
 import { existsSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { ApiKey, ApiKeyRole } from './entities/api-key.entity';
+import { ApiKey, ApiKeyRole } from '@database/entities/auth/api-key.entity';
 import { CreateApiKeyDto, UpdateApiKeyDto } from './dto';
 import { createLogger } from '../../common/services/logger.service';
 

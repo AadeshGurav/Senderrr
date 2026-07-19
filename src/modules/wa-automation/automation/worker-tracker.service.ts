@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
-import { WorkerSession, WorkerStatus, BrowserStatus } from './entities/worker-session.entity';
-import { WorkerSessionLog, SessionEventType } from './entities/worker-session-log.entity';
+import { WorkerSession, WorkerStatus, BrowserStatus } from '@database/entities/wa-automation/worker-session.entity';
+import { WorkerSessionLog, SessionEventType } from '@database/entities/wa-automation/worker-session-log.entity';
 
 /**
  * Worker slot — a conceptual "worker" that maps to an admin + session index.

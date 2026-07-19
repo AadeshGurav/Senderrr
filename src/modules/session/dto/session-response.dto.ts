@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SessionStatus } from '../entities/session.entity';
+import { SessionStatus } from '@database/entities/session/session.entity';
 
 export class SessionResponseDto {
   @ApiProperty({ example: 'sess_123e4567-e89b-12d3-a456-426614174000' })

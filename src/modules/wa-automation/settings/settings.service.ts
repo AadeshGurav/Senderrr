@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RuntimeSetting } from './entities/runtime-setting.entity';
+import { RuntimeSetting } from '@database/entities/wa-automation/runtime-setting.entity';
 
 /**
  * Runtime settings overridable via DB table (and backed by env defaults).

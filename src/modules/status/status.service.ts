@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { SessionService } from '../session/session.service';
-import type { Status, StatusResult, TextStatusOptions } from '../../engine/interfaces/whatsapp-engine.interface';
+import type { Status, StatusResult, TextStatusOptions } from '@whatsapp-engine/interfaces/whatsapp-engine.interface';
 
 @Injectable()
 export class StatusService {

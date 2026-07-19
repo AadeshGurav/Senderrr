@@ -2,10 +2,10 @@ import { Injectable, Logger, NotFoundException, ConflictException } from '@nestj
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { SessionService } from '../../session/session.service';
-import { AdminSession } from './entities/admin-session.entity';
-import { AdminAccount } from '../campaign/entities/admin-account.entity';
-import { WhatsAppGroup } from '../campaign/entities/whatsapp-group.entity';
-import { WhatsAppCommunity } from '../campaign/entities/whatsapp-community.entity';
+import { AdminSession } from '@database/entities/wa-automation/admin-session.entity';
+import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
+import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
+import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
 
 @Injectable()
 export class AdminSessionService {

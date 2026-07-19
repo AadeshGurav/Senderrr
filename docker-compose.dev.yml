@@ -44,7 +44,7 @@ services:
   # Dashboard Frontend
   dashboard:
     build:
-      context: ./dashboard
+      context: ./dashboard-ui
       dockerfile: Dockerfile
     container_name: senderrr-dashboard
     ports:

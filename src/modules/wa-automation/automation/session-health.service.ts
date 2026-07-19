@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EngineFactory } from '../../../engine/engine.factory';
+import { EngineFactory } from '@whatsapp-engine/engine.factory';
 
 @Injectable()
 export class SessionHealthService {

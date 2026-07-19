@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { WebhookService } from './webhook.service';
-import { Webhook } from './entities/webhook.entity';
+import { Webhook } from '@database/entities/webhook/webhook.entity';
 
 @ApiTags('webhooks')
 @Controller('webhooks')

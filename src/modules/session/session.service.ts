@@ -8,10 +8,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
-import { Session, SessionStatus } from './entities/session.entity';
+import { Session, SessionStatus } from '@database/entities/session/session.entity';
 import { CreateSessionDto } from './dto';
-import { EngineFactory } from '../../engine/engine.factory';
-import { IWhatsAppEngine, EngineStatus } from '../../engine/interfaces/whatsapp-engine.interface';
+import { EngineFactory } from '@whatsapp-engine/engine.factory';
+import { IWhatsAppEngine, EngineStatus } from '@whatsapp-engine/interfaces/whatsapp-engine.interface';
 import { createLogger } from '../../common/services/logger.service';
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';

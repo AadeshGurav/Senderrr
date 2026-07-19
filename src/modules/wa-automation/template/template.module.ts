@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TemplateController } from './template.controller';
 import { TemplateService } from './template.service';
 import { TemplateRendererService } from './template-renderer.service';
-import { MessageTemplate } from './entities/message-template.entity';
+import { MessageTemplate } from '@database/entities/wa-automation/message-template.entity';
 import { SettingsModule } from '../settings/settings.module';
 
 @Module({

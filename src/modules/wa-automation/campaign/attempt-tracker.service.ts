@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MessageTask, MessageTaskStatus } from './entities/message-task.entity';
-import { MessageAttempt } from './entities/message-attempt.entity';
-import { ErrorCategory } from './entities/error-category.enum';
+import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
+import { MessageAttempt } from '@database/entities/wa-automation/message-attempt.entity';
+import { ErrorCategory } from '@database/entities/wa-automation/error-category.enum';
 
 @Injectable()
 export class AttemptTrackerService {

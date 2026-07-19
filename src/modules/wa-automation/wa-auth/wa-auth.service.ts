@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'node:crypto';
-import { WaUser, WaUserRole } from './entities/wa-user.entity';
+import { WaUser, WaUserRole } from '@database/entities/wa-automation/wa-user.entity';
 
 const SALT_LENGTH = 16;
 const HASH_ITERATIONS = 100000;

@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../../modules/auth/auth.service';
-import { ApiKeyRole } from '../../modules/auth/entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 /**
  * Protects the Bull Board UI (/admin/queues).

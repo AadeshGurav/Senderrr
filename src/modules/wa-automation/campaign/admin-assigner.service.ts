@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { WhatsAppGroupMember } from './entities/whatsapp-group-member.entity';
-import { AdminAccount } from './entities/admin-account.entity';
+import { WhatsAppGroupMember } from '@database/entities/wa-automation/whatsapp-group-member.entity';
+import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
 import { RateLimiterService } from '../automation/rate-limiter.service';
-import { MessageTask, MessageTaskStatus } from './entities/message-task.entity';
+import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
 
 @Injectable()
 export class AdminAssignerService {

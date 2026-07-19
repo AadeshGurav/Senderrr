@@ -8,10 +8,10 @@ import {
   BatchMessageStatus,
   BatchProgress,
   BatchMessageResult,
-} from './entities/message-batch.entity';
+} from '@database/entities/message/message-batch.entity';
 import { SendBulkMessageDto } from './dto/bulk-message.dto';
 import { SessionService } from '../session/session.service';
-import { IWhatsAppEngine } from '../../engine/interfaces/whatsapp-engine.interface';
+import { IWhatsAppEngine } from '@whatsapp-engine/interfaces/whatsapp-engine.interface';
 
 // Type definitions for bulk message content
 interface BulkMessageContent {

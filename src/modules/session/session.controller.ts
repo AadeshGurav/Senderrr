@@ -2,11 +2,11 @@ import { Controller, Get, Post, Delete, Param, Body, HttpCode, HttpStatus } from
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { SessionService } from './session.service';
 import { CreateSessionDto, SessionResponseDto, QRCodeResponseDto } from './dto';
-import { Session } from './entities/session.entity';
+import { Session } from '@database/entities/session/session.entity';
 import { AuditService } from '../audit/audit.service';
-import { AuditAction } from '../audit/entities/audit-log.entity';
+import { AuditAction } from '@database/entities/audit/audit-log.entity';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 @ApiTags('sessions')
 @Controller('sessions')

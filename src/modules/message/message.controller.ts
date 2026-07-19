@@ -5,7 +5,7 @@ import { BulkMessageService } from './bulk-message.service';
 import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto } from './dto';
 import { SendBulkMessageDto, BulkMessageResponseDto } from './dto/bulk-message.dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 @ApiTags('messages')
 @Controller('sessions/:sessionId/messages')

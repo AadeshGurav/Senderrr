@@ -2,9 +2,9 @@ import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus }
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { WebhookService } from './webhook.service';
 import { CreateWebhookDto, UpdateWebhookDto, WebhookResponseDto } from './dto';
-import { Webhook } from './entities/webhook.entity';
+import { Webhook } from '@database/entities/webhook/webhook.entity';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 @ApiTags('webhooks')
 @Controller('sessions/:sessionId/webhooks')

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MessageTemplate } from './entities/message-template.entity';
+import { MessageTemplate } from '@database/entities/wa-automation/message-template.entity';
 
 @Injectable()
 export class TemplateService {

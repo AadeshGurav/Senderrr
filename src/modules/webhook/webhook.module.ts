@@ -1,6 +1,6 @@
 import { Module, DynamicModule, Type } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Webhook } from './entities/webhook.entity';
+import { Webhook } from '@database/entities/webhook/webhook.entity';
 import { WebhookService } from './webhook.service';
 import { WebhookController } from './webhook.controller';
 import { WebhooksListController } from './webhooks-list.controller';

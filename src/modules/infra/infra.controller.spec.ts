@@ -8,7 +8,7 @@ jest.mock('archiver', () => ({ default: jest.fn() }));
 
 import { InfraController } from './infra.controller';
 import { REQUIRED_ROLE_KEY } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 describe('InfraController access control (Vuln 2)', () => {
   const reflector = new Reflector();
@@ -26,14 +26,16 @@ describe('InfraController access control (Vuln 2)', () => {
   ] as const;
 
   it.each(adminOnly)('%s requires the ADMIN role', method => {
-    const handler = InfraController.prototype[method as keyof InfraController] as object;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = InfraController.prototype[method as keyof InfraController] as any;
     const role = reflector.get<ApiKeyRole | undefined>(REQUIRED_ROLE_KEY, handler);
     expect(role).toBe(ApiKeyRole.ADMIN);
   });
 
   it('leaves read-only status open to any authenticated key', () => {
     // eslint-disable-next-line @typescript-eslint/unbound-method -- reading route metadata off the handler, not invoking it
-    const handler = InfraController.prototype.getStatus as object;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = InfraController.prototype.getStatus as any;
     const role = reflector.get<ApiKeyRole | undefined>(REQUIRED_ROLE_KEY, handler);
     expect(role).toBeUndefined();
   });

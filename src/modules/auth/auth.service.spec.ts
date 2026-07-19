@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { AuthService } from './auth.service';
-import { ApiKey, ApiKeyRole } from './entities/api-key.entity';
+import { ApiKey, ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 // Helpers
 const hashKey = (key: string) => createHash('sha256').update(key).digest('hex');

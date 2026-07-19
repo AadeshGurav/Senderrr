@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
-import { WhatsAppGroup } from './entities/whatsapp-group.entity';
+import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
 import { ConfigService } from '@nestjs/config';
 
 /**

@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { WaAuthController } from './wa-auth.controller';
 import { WaAuthService } from './wa-auth.service';
 import { WaAuthGuard } from './wa-auth.guard';
-import { WaUser } from './entities/wa-user.entity';
+import { WaUser } from '@database/entities/wa-automation/wa-user.entity';
 
 @Module({
   imports: [

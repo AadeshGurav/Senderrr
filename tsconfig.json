@@ -14,6 +14,14 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
+    "paths": {
+      "@whatsapp-engine/*": ["whatsapp-engine/*"],
+      "@scraper/*": ["scraper/*"],
+      "@database/*": ["database/*"],
+      "@common/*": ["src/common/*"],
+      "@core/*": ["src/core/*"],
+      "@modules/*": ["src/modules/*"]
+    },
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
@@ -22,6 +30,6 @@
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true
   },
-  "exclude": ["node_modules", "dist", "dashboard"],
-  "include": ["src", "test"]
+  "exclude": ["node_modules", "dist", "dashboard-ui"],
+  "include": ["src", "test", "whatsapp-engine", "scraper", "database"]
 }

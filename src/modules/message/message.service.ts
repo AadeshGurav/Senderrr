@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SessionService } from '../session/session.service';
 import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto } from './dto';
-import { MediaInput } from '../../engine/interfaces/whatsapp-engine.interface';
-import { Message, MessageDirection, MessageStatus } from './entities/message.entity';
+import { MediaInput } from '@whatsapp-engine/interfaces/whatsapp-engine.interface';
+import { Message, MessageDirection, MessageStatus } from '@database/entities/message/message.entity';
 import { HookManager } from '../../core/hooks';
 
 export interface GetMessagesOptions {

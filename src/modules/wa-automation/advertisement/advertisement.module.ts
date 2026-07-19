@@ -2,11 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdvertisementController } from './advertisement.controller';
 import { AdvertisementService } from './advertisement.service';
-import { Advertisement as AdvertisementEntity } from './entities/advertisement.entity';
-import { MediaAttachment } from './entities/media-attachment.entity';
-import { WhatsAppGroup, WhatsAppCommunity } from '../campaign/entities';
-import { BroadcastEvent } from '../campaign/entities/broadcast-event.entity';
-import { MessageTask } from '../campaign/entities/message-task.entity';
+import { Advertisement as AdvertisementEntity } from '@database/entities/wa-automation/advertisement.entity';
+import { MediaAttachment } from '@database/entities/wa-automation/media-attachment.entity';
+import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
+import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
+import { BroadcastEvent } from '@database/entities/wa-automation/broadcast-event.entity';
+import { MessageTask } from '@database/entities/wa-automation/message-task.entity';
 import { CampaignModule } from '../campaign/campaign.module';
 
 @Module({

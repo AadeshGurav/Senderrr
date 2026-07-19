@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ApiKeyGuard } from './api-key.guard';
 import { AuthService } from '../auth.service';
-import { ApiKey, ApiKeyRole } from '../entities/api-key.entity';
+import { ApiKey, ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 function createMockApiKey(overrides: Partial<ApiKey> = {}): ApiKey {
   return {

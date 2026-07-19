@@ -1,7 +1,7 @@
 import { SetMetadata, createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { ApiKeyRole } from '../entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 import { Request } from 'express';
-import { ApiKey } from '../entities/api-key.entity';
+import { ApiKey } from '@database/entities/auth/api-key.entity';
 
 export const REQUIRED_ROLE_KEY = 'requiredRole';
 export const PUBLIC_KEY = 'isPublic';

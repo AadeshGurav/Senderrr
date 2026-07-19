@@ -19,7 +19,7 @@ COPY . .
 RUN npm run build
 
 # Build React dashboard
-RUN cd dashboard && npm ci && npm run build
+RUN cd dashboard-ui && npm ci && npm run build
 
 # ===== Stage 2: Production =====
 FROM node:22-slim
@@ -41,7 +41,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/dashboard/dist ./dashboard/dist
+COPY --from=builder /app/dashboard-ui/dist ./dashboard-ui/dist
 
 # Create data directories
 RUN mkdir -p ./data/sessions ./data/media
@@ -54,4 +54,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # Startup script cleans Chrome locks then starts app
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/docker-entrypoint.sh"]h"]

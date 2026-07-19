@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThan } from 'typeorm';
-import { AuditLog, AuditAction, AuditSeverity } from './entities/audit-log.entity';
-import { ApiKey } from '../auth/entities/api-key.entity';
+import { AuditLog, AuditAction, AuditSeverity } from '@database/entities/audit/audit-log.entity';
+import { ApiKey } from '@database/entities/auth/api-key.entity';
 
 interface AuditContext {
   apiKey?: ApiKey;

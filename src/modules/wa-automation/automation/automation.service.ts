@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { EngineFactory } from '../../../engine/engine.factory';
+import { EngineFactory } from '@whatsapp-engine/engine.factory';
 import { RateLimiterService } from './rate-limiter.service';
 import { JitterService } from './anti-ban/jitter.service';
 import { QuietHoursService } from './anti-ban/quiet-hours.service';
 import { WorkerTrackerService } from './worker-tracker.service';
 import { ConfigService } from '@nestjs/config';
 import { SessionService } from '../../session/session.service';
-import { AdminAccount } from '../campaign/entities/admin-account.entity';
+import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
 
 export enum ErrorCategory {
   RATE_LIMITED = 'rate_limited',

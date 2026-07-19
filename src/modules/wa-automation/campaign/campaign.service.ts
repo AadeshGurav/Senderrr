@@ -1,11 +1,11 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, LessThan } from 'typeorm';
-import { BroadcastEvent, BroadcastStatus } from './entities/broadcast-event.entity';
-import { MessageTask, MessageTaskStatus } from './entities/message-task.entity';
-import { WhatsAppGroup } from './entities/whatsapp-group.entity';
-import { WhatsAppCommunity } from './entities/whatsapp-community.entity';
-import { AdminAccount } from './entities/admin-account.entity';
+import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automation/broadcast-event.entity';
+import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
+import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
+import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
+import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
 import { AdminAssignerService } from './admin-assigner.service';
 import { BroadcastDispatcherService } from './broadcast-dispatcher.service';
 import { TemplateRendererService, NewsPlaceholders } from '../template/template-renderer.service';

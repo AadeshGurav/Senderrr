@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { WaAuthModule } from './wa-auth/wa-auth.module';
 import { SettingsModule } from './settings/settings.module';
 import { TemplateModule } from './template/template.module';
-import { ScraperModule } from './scraper/scraper.module';
+import { ScraperModule } from '@scraper/scraper.module';
 import { AutomationModule } from './automation/automation.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { AdvertisementModule } from './advertisement/advertisement.module';

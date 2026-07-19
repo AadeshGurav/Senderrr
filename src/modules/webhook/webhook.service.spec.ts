@@ -6,10 +6,10 @@ import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { WebhookService, WebhookPayload } from './webhook.service';
-import { Webhook } from './entities/webhook.entity';
+import { Webhook } from '@database/entities/webhook/webhook.entity';
 import { HookManager } from '../../core/hooks';
 import { QUEUE_NAMES } from '../queue/queue-names';
-import { Session } from '../session/entities/session.entity';
+import { Session } from '@database/entities/session/session.entity';
 
 function createMockWebhook(overrides: Partial<Webhook> = {}): Webhook {
   return {

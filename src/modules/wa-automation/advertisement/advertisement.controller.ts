@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Multer } from 'multer';
 import { AdvertisementService } from './advertisement.service';
 import { WaAuthGuard } from '../wa-auth/wa-auth.guard';
+import type { Advertisement } from '@database/entities/wa-automation/advertisement.entity';
 
 @ApiTags('wa-automation / advertisements')
 @Controller('wa/advertisements')
@@ -43,7 +44,7 @@ export class AdvertisementController {
 
   @Post()
   @ApiOperation({ summary: 'Create advertisement' })
-  async create(@Body() body: Partial<import('./entities/advertisement.entity').Advertisement>) {
+  async create(@Body() body: Partial<Advertisement>) {
     return this.adService.create(body);
   }
 
@@ -97,7 +98,10 @@ export class AdvertisementController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Update advertisement' })
-  async update(@Param('id', ParseIntPipe) id: number, @Body() body: Partial<import('./entities/advertisement.entity').Advertisement>) {
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: Partial<Advertisement>,
+  ) {
     return this.adService.update(id, body);
   }
 

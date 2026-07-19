@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ScraperService } from '../scraper/scraper.service';
+import { ScraperService } from '@scraper/scraper.service';
 import { CampaignService } from '../campaign/campaign.service';
 import { AutomationService } from '../automation/automation.service';
 import { MaintenanceService } from '../campaign/maintenance.service';
@@ -10,8 +10,8 @@ import { RateLimiterService } from '../automation/rate-limiter.service';
 import { WorkerTrackerService } from '../automation/worker-tracker.service';
 import { GroupSyncService } from '../automation/group-sync.service';
 import { SettingsService } from '../settings/settings.service';
-import { BroadcastEvent, BroadcastStatus } from '../campaign/entities/broadcast-event.entity';
-import { GenericParser } from '../scraper/parsers/built-in/generic.parser';
+import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automation/broadcast-event.entity';
+import { GenericParser } from '@scraper/parsers/built-in/generic.parser';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()

@@ -71,16 +71,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: dashboard/package-lock.json
+          cache-dependency-path: dashboard-ui/package-lock.json
 
       - name: Install dependencies
-        run: cd dashboard && npm ci
+        run: cd dashboard-ui && npm ci
 
       - name: Run ESLint
-        run: cd dashboard && npm run lint
+        run: cd dashboard-ui && npm run lint
 
       - name: Build dashboard
-        run: cd dashboard && npm run build
+        run: cd dashboard-ui && npm run build
 
   build:
     name: Build

@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsArray, IsDateString, MinLength, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ApiKeyRole } from '../entities/api-key.entity';
+import { ApiKeyRole } from '@database/entities/auth/api-key.entity';
 
 export class CreateApiKeyDto {
   @ApiProperty({

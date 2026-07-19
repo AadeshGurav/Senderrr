@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { createLogger } from '../../../common/services/logger.service';
 import { QUEUE_NAMES } from '../queue-names';
 import { WebhookJobData } from '../../webhook/webhook.service';
-import { Webhook } from '../../webhook/entities/webhook.entity';
+import { Webhook } from '@database/entities/webhook/webhook.entity';
 import { HookManager } from '../../../core/hooks';
 
 export interface WebhookJobResult {

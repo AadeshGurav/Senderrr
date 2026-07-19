@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
-import { MessageTask, MessageTaskStatus } from './entities/message-task.entity';
-import { BroadcastEvent, BroadcastStatus } from './entities/broadcast-event.entity';
+import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
+import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automation/broadcast-event.entity';
 import { AutomationService, ErrorCategory, DeliveryResult } from '../automation/automation.service';
 import { RateLimiterService } from '../automation/rate-limiter.service';
 import { AttemptTrackerService } from './attempt-tracker.service';
