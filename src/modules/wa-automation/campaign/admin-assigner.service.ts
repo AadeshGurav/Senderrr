@@ -27,7 +27,9 @@ export class AdminAssignerService {
       const members = await this.memberRepo.find({ where: { groupId } });
       eligibleIds = members.map(m => m.adminId);
     } catch (err) {
-      this.logger.warn(`Group member lookup failed (schema issue?), falling back to all admins: ${(err as Error).message}`);
+      this.logger.warn(
+        `Group member lookup failed (schema issue?), falling back to all admins: ${(err as Error).message}`,
+      );
     }
 
     if (eligibleIds.length === 0) {
@@ -45,12 +47,9 @@ export class AdminAssignerService {
     let bestScore = -Infinity;
 
     for (const admin of eligibleAdmins) {
-      const warmUpMultiplier = this.rateLimiter.getWarmUpMultiplier(
-        admin.warmUpStartedAt,
-        admin.skipWarmup,
-      );
+      const warmUpMultiplier = this.rateLimiter.getWarmUpMultiplier(admin.warmUpStartedAt, admin.skipWarmup);
       const counts = this.rateLimiter.getCounts(admin.id);
-      const hourlyHeadroom = 1 - (counts.hourly / (counts.hourlyLimit * warmUpMultiplier));
+      const hourlyHeadroom = 1 - counts.hourly / (counts.hourlyLimit * warmUpMultiplier);
 
       const pendingLoad = await this.taskRepo.count({
         where: {

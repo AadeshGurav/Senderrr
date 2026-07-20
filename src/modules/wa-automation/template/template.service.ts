@@ -57,11 +57,7 @@ export class TemplateService {
 
   async activate(id: number): Promise<MessageTemplate> {
     // Deactivate all templates first
-    await this.templateRepo
-      .createQueryBuilder()
-      .update(MessageTemplate)
-      .set({ isActive: false })
-      .execute();
+    await this.templateRepo.createQueryBuilder().update(MessageTemplate).set({ isActive: false }).execute();
     // Then activate the chosen one
     const tpl = await this.findOne(id);
     tpl.isActive = true;

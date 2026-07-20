@@ -1,12 +1,25 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, ParseIntPipe, Query, DefaultValuePipe, UseGuards, HttpCode, HttpStatus, BadRequestException,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  ParseIntPipe,
+  Query,
+  DefaultValuePipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CampaignService } from './campaign.service';
 import { BroadcastStatus } from '@database/entities/wa-automation/broadcast-event.entity';
-import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
+import { MessageTask } from '@database/entities/wa-automation/message-task.entity';
 import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
 import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
 import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
@@ -42,7 +55,16 @@ export class CampaignController {
 
   @Post('admins')
   @ApiOperation({ summary: 'Create admin account' })
-  async createAdmin(@Body() body: { label: string; phoneNumber: string; sessionsPerAdmin?: number; autoCreateSession?: boolean; isSuperAdmin?: boolean }) {
+  async createAdmin(
+    @Body()
+    body: {
+      label: string;
+      phoneNumber: string;
+      sessionsPerAdmin?: number;
+      autoCreateSession?: boolean;
+      isSuperAdmin?: boolean;
+    },
+  ) {
     const admin = this.adminRepo.create({
       label: body.label,
       phoneNumber: body.phoneNumber,
@@ -81,10 +103,7 @@ export class CampaignController {
 
   @Post('admins/:id/super-admin')
   @ApiOperation({ summary: 'Toggle super admin status' })
-  async toggleSuperAdmin(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { isSuperAdmin: boolean },
-  ) {
+  async toggleSuperAdmin(@Param('id', ParseIntPipe) id: number, @Body() body: { isSuperAdmin: boolean }) {
     const admin = await this.adminRepo.findOne({ where: { id } });
     if (admin) {
       admin.isSuperAdmin = body.isSuperAdmin;
@@ -107,7 +126,7 @@ export class CampaignController {
     const group = this.groupRepo.create({
       name: body.name,
       groupJid: body.groupJid,
-      community: body.communityId ? ({ id: body.communityId } as any) : null,
+      community: body.communityId ? { id: body.communityId } : null,
     });
     return this.groupRepo.save(group);
   }
@@ -147,7 +166,7 @@ export class CampaignController {
   async unlinkGroupCommunity(@Param('id', ParseIntPipe) id: number) {
     const group = await this.groupRepo.findOne({ where: { id } });
     if (group) {
-      group.community = null as any;
+      group.community = null;
       await this.groupRepo.save(group);
     }
     return group;

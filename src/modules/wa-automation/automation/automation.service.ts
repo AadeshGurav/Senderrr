@@ -5,7 +5,6 @@ import { EngineFactory } from '@whatsapp-engine/engine.factory';
 import { RateLimiterService } from './rate-limiter.service';
 import { JitterService } from './anti-ban/jitter.service';
 import { QuietHoursService } from './anti-ban/quiet-hours.service';
-import { WorkerTrackerService } from './worker-tracker.service';
 import { ConfigService } from '@nestjs/config';
 import { SessionService } from '../../session/session.service';
 import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
@@ -30,7 +29,9 @@ export interface DeliveryResult {
 }
 
 export function isMediaMime(mime: string): boolean {
-  return mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf';
+  return (
+    mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf'
+  );
 }
 
 @Injectable()
@@ -192,10 +193,9 @@ export class AutomationService {
     this.logger.debug(`Scheduling delivery to ${chatId} with ${Math.round(delay / 1000)}s jitter`);
 
     return new Promise(resolve => {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
       setTimeout(async () => {
-        const result = await this.deliverMessage(
-          sessionId, chatId, text, adminId, workerId, imageUrls,
-        );
+        const result = await this.deliverMessage(sessionId, chatId, text, adminId, workerId, imageUrls);
         resolve(result);
       }, delay);
     });
@@ -224,12 +224,7 @@ export class AutomationService {
   /**
    * Edit a previously sent WhatsApp message in a given group.
    */
-  async editMessage(
-    sessionId: string,
-    chatId: string,
-    messageId: string,
-    newText: string,
-  ): Promise<DeliveryResult> {
+  async editMessage(sessionId: string, chatId: string, messageId: string, newText: string): Promise<DeliveryResult> {
     const startTime = Date.now();
     try {
       const engine = this.sessionService.getEngine(sessionId);
@@ -255,11 +250,7 @@ export class AutomationService {
   /**
    * Delete a previously sent WhatsApp message in a given group.
    */
-  async deleteMessage(
-    sessionId: string,
-    chatId: string,
-    messageId: string,
-  ): Promise<DeliveryResult> {
+  async deleteMessage(sessionId: string, chatId: string, messageId: string): Promise<DeliveryResult> {
     const startTime = Date.now();
     try {
       const engine = this.sessionService.getEngine(sessionId);
@@ -310,9 +301,14 @@ export class AutomationService {
 
   private mimeToExt(mime: string): string {
     const map: Record<string, string> = {
-      'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
-      'video/mp4': 'mp4', 'video/quicktime': 'mov',
-      'audio/mpeg': 'mp3', 'audio/ogg': 'ogg',
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3',
+      'audio/ogg': 'ogg',
       'application/pdf': 'pdf',
       'application/msword': 'doc',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',

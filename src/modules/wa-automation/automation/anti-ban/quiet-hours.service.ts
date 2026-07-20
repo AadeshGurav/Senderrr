@@ -64,10 +64,7 @@ export class QuietHoursService {
 
   private getMinuteInTimezone(date: Date, timezone: string): number {
     try {
-      return parseInt(
-        new Intl.DateTimeFormat('en-US', { timeZone: timezone, minute: 'numeric' }).format(date),
-        10,
-      );
+      return parseInt(new Intl.DateTimeFormat('en-US', { timeZone: timezone, minute: 'numeric' }).format(date), 10);
     } catch {
       return date.getMinutes();
     }

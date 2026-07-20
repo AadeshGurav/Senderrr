@@ -31,8 +31,8 @@ export class RateLimiterService implements OnModuleDestroy {
     const adjustedHourlyLimit = Math.floor(this.hourlyLimit * warmUpMultiplier);
     const adjustedDailyLimit = Math.floor(this.dailyLimit * warmUpMultiplier);
 
-    const hourly = this.getCount(this.hourly, `admin:${adminId}`, 3600_000);
-    const daily = this.getCount(this.daily, `admin:${adminId}`, 86400_000);
+    const hourly = this.getCount(this.hourly, `admin:${adminId}`);
+    const daily = this.getCount(this.daily, `admin:${adminId}`);
 
     if (hourly >= adjustedHourlyLimit) {
       return { allowed: false, reason: `Hourly limit (${adjustedHourlyLimit}) exceeded` };
@@ -45,8 +45,8 @@ export class RateLimiterService implements OnModuleDestroy {
 
   /** Check if admin is within rate limits with custom limits */
   checkWithLimits(adminId: number, hourlyLimit: number, dailyLimit: number): { allowed: boolean; reason?: string } {
-    const hourly = this.getCount(this.hourly, `admin:${adminId}`, 3600_000);
-    const daily = this.getCount(this.daily, `admin:${adminId}`, 86400_000);
+    const hourly = this.getCount(this.hourly, `admin:${adminId}`);
+    const daily = this.getCount(this.daily, `admin:${adminId}`);
 
     if (hourly >= hourlyLimit) {
       return { allowed: false, reason: `Hourly limit (${hourlyLimit}) exceeded` };
@@ -66,8 +66,8 @@ export class RateLimiterService implements OnModuleDestroy {
   /** Current counts for display */
   getCounts(adminId: number): { hourly: number; daily: number; hourlyLimit: number; dailyLimit: number } {
     return {
-      hourly: this.getCount(this.hourly, `admin:${adminId}`, 3600_000),
-      daily: this.getCount(this.daily, `admin:${adminId}`, 86400_000),
+      hourly: this.getCount(this.hourly, `admin:${adminId}`),
+      daily: this.getCount(this.daily, `admin:${adminId}`),
       hourlyLimit: this.hourlyLimit,
       dailyLimit: this.dailyLimit,
     };
@@ -83,7 +83,7 @@ export class RateLimiterService implements OnModuleDestroy {
     return Math.min(limits[Math.min(days - 1, 6)] / maxLimit, 1.0);
   }
 
-  private getCount(map: Map<string, RateBucket>, key: string, ttlMs: number): number {
+  private getCount(map: Map<string, RateBucket>, key: string): number {
     const bucket = map.get(key);
     if (!bucket || Date.now() >= bucket.resetAt) return 0;
     return bucket.count;

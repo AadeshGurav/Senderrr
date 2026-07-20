@@ -1,7 +1,15 @@
 import {
-  Controller, Get, Post, Put, Delete,
-  Param, Body, ParseIntPipe, UseGuards,
-  HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TemplateService } from './template.service';

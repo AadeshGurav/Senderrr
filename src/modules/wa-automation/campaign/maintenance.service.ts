@@ -54,7 +54,9 @@ export class MaintenanceService {
 
     if (group.consecutiveFailures >= this.maxConsecutiveFailures) {
       group.isHealthy = false;
-      this.logger.warn(`Group ${group.name} (${group.groupJid}) marked unhealthy after ${group.consecutiveFailures} failures`);
+      this.logger.warn(
+        `Group ${group.name} (${group.groupJid}) marked unhealthy after ${group.consecutiveFailures} failures`,
+      );
     }
 
     await this.groupRepo.save(group);

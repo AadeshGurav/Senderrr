@@ -22,14 +22,10 @@ import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      WorkerSession,
-      WorkerSessionLog,
-      AdminSession,
-      AdminAccount,
-      WhatsAppGroup,
-      WhatsAppGroupMember,
-    ], 'data'),
+    TypeOrmModule.forFeature(
+      [WorkerSession, WorkerSessionLog, AdminSession, AdminAccount, WhatsAppGroup, WhatsAppGroupMember],
+      'data',
+    ),
     EngineModule,
     forwardRef(() => SessionModule),
     SettingsModule,

@@ -25,18 +25,18 @@ describe('InfraController access control (Vuln 2)', () => {
     'importStorage', // POST /infra/storage/import
   ] as const;
 
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   it.each(adminOnly)('%s requires the ADMIN role', method => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handler = InfraController.prototype[method as keyof InfraController] as any;
+    const handler = InfraController.prototype[method as keyof InfraController];
     const role = reflector.get<ApiKeyRole | undefined>(REQUIRED_ROLE_KEY, handler);
     expect(role).toBe(ApiKeyRole.ADMIN);
   });
 
   it('leaves read-only status open to any authenticated key', () => {
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- reading route metadata off the handler, not invoking it
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handler = InfraController.prototype.getStatus as any;
+    /* eslint-disable @typescript-eslint/unbound-method */
+    const handler = InfraController.prototype.getStatus;
     const role = reflector.get<ApiKeyRole | undefined>(REQUIRED_ROLE_KEY, handler);
+    /* eslint-enable @typescript-eslint/unbound-method */
     expect(role).toBeUndefined();
   });
 });

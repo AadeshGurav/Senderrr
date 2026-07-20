@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
 import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automation/broadcast-event.entity';
 import { AutomationService, ErrorCategory, DeliveryResult } from '../automation/automation.service';
@@ -48,15 +48,14 @@ export class BroadcastDispatcherService {
    * Dispatch a broadcast's pending tasks across all assigned admins in parallel.
    * Prevents concurrent dispatch of the same broadcast to avoid duplicates.
    */
-  async dispatchBroadcast(
-    broadcastId: number,
-    messageText: string,
-    imageUrls: string[] = [],
-  ): Promise<void> {
+  async dispatchBroadcast(broadcastId: number, messageText: string, imageUrls: string[] = []): Promise<void> {
     // Allow re-dispatch if broadcast is still IN_PROGRESS and has remaining pending tasks
     if (this.dispatchingBroadcasts.has(broadcastId)) {
       const broadcast = await this.broadcastRepo.findOne({ where: { id: broadcastId } });
-      if (broadcast && (broadcast.status === BroadcastStatus.COMPLETED || broadcast.status === BroadcastStatus.FAILED)) {
+      if (
+        broadcast &&
+        (broadcast.status === BroadcastStatus.COMPLETED || broadcast.status === BroadcastStatus.FAILED)
+      ) {
         this.logger.log(`Broadcast #${broadcastId}: already ${broadcast.status}, skipping duplicate call`);
         return;
       }
@@ -79,10 +78,12 @@ export class BroadcastDispatcherService {
     } catch (err) {
       this.logger.error(`Broadcast #${broadcastId} dispatch crashed: ${(err as Error).message}`, (err as Error).stack);
       // Mark as FAILED so it doesn't stay IN_PROGRESS forever
-      await this.broadcastRepo.update(broadcastId, {
-        status: BroadcastStatus.FAILED,
-        completedAt: new Date(),
-      }).catch(e => this.logger.error(`Failed to mark broadcast #${broadcastId} as failed: ${e.message}`));
+      await this.broadcastRepo
+        .update(broadcastId, {
+          status: BroadcastStatus.FAILED,
+          completedAt: new Date(),
+        })
+        .catch(e => this.logger.error(`Failed to mark broadcast #${broadcastId} as failed: ${e.message}`));
     } finally {
       this.dispatchingBroadcasts.delete(broadcastId);
     }
@@ -120,7 +121,7 @@ export class BroadcastDispatcherService {
 
     this.logger.log(
       `Broadcast #${broadcastId}: ${tasks.length} tasks across ${byAdmin.size} admins ` +
-      `[${[...byAdmin.entries()].map(([id, t]) => `a${id}:${t.length}`).join(', ')}]`,
+        `[${[...byAdmin.entries()].map(([id, t]) => `a${id}:${t.length}`).join(', ')}]`,
     );
 
     // Mark broadcast in-progress
@@ -131,10 +132,16 @@ export class BroadcastDispatcherService {
     }
 
     // Dispatch timeout — if a queue hangs beyond this, we still tally
-    const dispatchTimeout = setTimeout(async () => {
-      this.logger.warn(`Broadcast #${broadcastId}: dispatch timed out after ${this.DISPATCH_TIMEOUT_MINUTES}min, forcing tally`);
-      await this.tallyBroadcast(broadcastId);
-    }, this.DISPATCH_TIMEOUT_MINUTES * 60 * 1000);
+    const dispatchTimeout = setTimeout(
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      async () => {
+        this.logger.warn(
+          `Broadcast #${broadcastId}: dispatch timed out after ${this.DISPATCH_TIMEOUT_MINUTES}min, forcing tally`,
+        );
+        await this.tallyBroadcast(broadcastId);
+      },
+      this.DISPATCH_TIMEOUT_MINUTES * 60 * 1000,
+    );
 
     // Fire all admin queues in parallel
     const queues = [...byAdmin.entries()].map(([adminId, adminTasks]) =>
@@ -174,14 +181,19 @@ export class BroadcastDispatcherService {
     imageUrls: string[] = [],
   ): Promise<void> {
     // Resolve the admin's ready session with timeout
+    // eslint-disable-next-line no-useless-assignment
     let sessionId: string | null = null;
     try {
-      const sessions = await Promise.race([
+      const sessions = (await Promise.race([
         this.adminSessionService.getAdminSessions(adminId),
-        this.sleep(30_000).then(() => { throw new Error('getAdminSessions timed out after 30s'); }),
-      ]) as any[];
+        this.sleep(30_000).then(() => {
+          throw new Error('getAdminSessions timed out after 30s');
+        }),
+      ])) as any[];
       sessionId = sessions.find(s => s.openwaSessionStatus === 'ready')?.openwaSessionId || null;
-      this.logger.log(`Admin #${adminId}: resolved session=${sessionId || 'none'} from ${sessions.length} sessions (${sessions.map(s => s.openwaSessionStatus).join(', ')})`);
+      this.logger.log(
+        `Admin #${adminId}: resolved session=${sessionId || 'none'} from ${sessions.length} sessions (${sessions.map(s => s.openwaSessionStatus).join(', ')})`,
+      );
     } catch (err) {
       this.logger.warn(`Admin #${adminId}: session resolution failed: ${(err as Error).message}`);
       sessionId = null;
@@ -222,8 +234,7 @@ export class BroadcastDispatcherService {
 
       // Batch pause
       if (i > 0 && i % this.BATCH_SIZE === 0) {
-        const pauseMs = this.BATCH_PAUSE_MIN_MS
-          + Math.random() * (this.BATCH_PAUSE_MAX_MS - this.BATCH_PAUSE_MIN_MS);
+        const pauseMs = this.BATCH_PAUSE_MIN_MS + Math.random() * (this.BATCH_PAUSE_MAX_MS - this.BATCH_PAUSE_MIN_MS);
         this.logger.debug(`Admin #${adminId}: pausing ${Math.round(pauseMs / 1000)}s after ${i} messages`);
         await this.sleep(pauseMs);
       }
@@ -236,7 +247,9 @@ export class BroadcastDispatcherService {
         const retryCheck = this.rateLimiter.check(adminId, warmUpMultiplier);
         if (!retryCheck.allowed) {
           // Graceful: skip remaining tasks instead of failing them
-          this.logger.warn(`Admin #${adminId} still rate-limited after 60s, skipping remaining ${tasks.length - i} tasks`);
+          this.logger.warn(
+            `Admin #${adminId} still rate-limited after 60s, skipping remaining ${tasks.length - i} tasks`,
+          );
           for (let j = i; j < tasks.length; j++) {
             await this.taskRepo.update(tasks[j].id, {
               status: MessageTaskStatus.PENDING,
@@ -264,7 +277,8 @@ export class BroadcastDispatcherService {
     const maxDeliveryAttempts = 3;
     let lastError: string | null = null;
     let lastCategory: ErrorCategory = ErrorCategory.UNKNOWN;
-    let lastResponseTime = 0;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const lastResponseTime = 0;
 
     for (let attempt = 1; attempt <= maxDeliveryAttempts; attempt++) {
       const result = await this.attemptDelivery(task, sessionId, text, imageUrls);
@@ -272,25 +286,25 @@ export class BroadcastDispatcherService {
       if (result.success) {
         this.logger.log(
           `Task #${task.id} sent to group ${task.group?.name || task.group?.groupJid || '?'} ` +
-          `via admin #${task.admin?.id} (attempt ${attempt})`,
+            `via admin #${task.admin?.id} (attempt ${attempt})`,
         );
         return; // Success (attemptDelivery already recorded it via tracker)
       }
 
       lastError = result.errorMessage || null;
       lastCategory = result.errorCategory || ErrorCategory.UNKNOWN;
-      lastResponseTime = result.responseTime || 0;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const lastResponseTime = result.responseTime || 0;
 
       // Rate-limited — wait with short backoff and retry within this loop,
       // like other transient errors. Do NOT defer to retry cron (that creates
       // a loop where the task gets rate-limited again immediately).
       if (lastCategory === ErrorCategory.RATE_LIMITED || lastCategory === ErrorCategory.SESSION_EXPIRED) {
-        const backoffMs = lastCategory === ErrorCategory.RATE_LIMITED
-          ? 15_000 * attempt  // 15s, 30s, 45s — short enough to catch bucket refresh
-          : 60_000;
-        this.logger.warn(
-          `Task #${task.id}: ${lastCategory} on attempt ${attempt} — retrying in ${backoffMs / 1000}s`,
-        );
+        const backoffMs =
+          lastCategory === ErrorCategory.RATE_LIMITED
+            ? 15_000 * attempt // 15s, 30s, 45s — short enough to catch bucket refresh
+            : 60_000;
+        this.logger.warn(`Task #${task.id}: ${lastCategory} on attempt ${attempt} — retrying in ${backoffMs / 1000}s`);
         if (attempt < maxDeliveryAttempts) {
           await this.sleep(backoffMs);
           continue;
@@ -316,9 +330,7 @@ export class BroadcastDispatcherService {
     }
 
     // All attempts exhausted — update task directly
-    this.logger.error(
-      `Task #${task.id} failed after ${maxDeliveryAttempts} attempts: ${lastError}`,
-    );
+    this.logger.error(`Task #${task.id} failed after ${maxDeliveryAttempts} attempts: ${lastError}`);
 
     task.status = MessageTaskStatus.FAILED;
     task.errorCategory = lastCategory;
@@ -367,14 +379,8 @@ export class BroadcastDispatcherService {
         });
       }, SEND_TIMEOUT_MS);
 
-      this.automationService.deliverMessage(
-        sessionId,
-        task.group.groupJid,
-        text,
-        adminId,
-        workerId,
-        imageUrls,
-      )
+      this.automationService
+        .deliverMessage(sessionId, task.group.groupJid, text, adminId, workerId, imageUrls)
         .then(deliverResult => {
           clearTimeout(timer);
           resolve(deliverResult);
@@ -420,9 +426,12 @@ export class BroadcastDispatcherService {
 
     const done = sent + failed;
     if (done >= total && pending === 0) {
-      broadcast.status = failed > 0 && sent > 0
-        ? BroadcastStatus.PARTIAL
-        : failed > 0 ? BroadcastStatus.FAILED : BroadcastStatus.COMPLETED;
+      broadcast.status =
+        failed > 0 && sent > 0
+          ? BroadcastStatus.PARTIAL
+          : failed > 0
+            ? BroadcastStatus.FAILED
+            : BroadcastStatus.COMPLETED;
       broadcast.completedAt = new Date();
     }
 

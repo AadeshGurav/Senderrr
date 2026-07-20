@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, MoreThanOrEqual } from 'typeorm';
 import * as fs from 'fs/promises';
-import { Advertisement, AdvertisementStatus, AdvertisementTargetType } from '@database/entities/wa-automation/advertisement.entity';
+import {
+  Advertisement,
+  AdvertisementStatus,
+  AdvertisementTargetType,
+} from '@database/entities/wa-automation/advertisement.entity';
 import { MediaAttachment } from '@database/entities/wa-automation/media-attachment.entity';
 import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
 import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
@@ -10,15 +14,24 @@ import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automatio
 import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
 import { AdminAssignerService } from '../campaign/admin-assigner.service';
 import { BroadcastDispatcherService } from '../campaign/broadcast-dispatcher.service';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class AdvertisementService {
   private readonly logger = new Logger('AdvertisementService');
   private readonly MEDIA_EXTENSIONS: Map<string, string> = new Map([
-    ['jpg', 'image'], ['jpeg', 'image'], ['png', 'image'], ['gif', 'image'], ['webp', 'image'],
-    ['mp4', 'video'], ['mov', 'video'], ['avi', 'video'], ['mkv', 'video'],
-    ['pdf', 'document'], ['doc', 'document'], ['docx', 'document'], ['txt', 'document'],
+    ['jpg', 'image'],
+    ['jpeg', 'image'],
+    ['png', 'image'],
+    ['gif', 'image'],
+    ['webp', 'image'],
+    ['mp4', 'video'],
+    ['mov', 'video'],
+    ['avi', 'video'],
+    ['mkv', 'video'],
+    ['pdf', 'document'],
+    ['doc', 'document'],
+    ['docx', 'document'],
+    ['txt', 'document'],
   ]);
 
   constructor(
@@ -68,7 +81,7 @@ export class AdvertisementService {
 
   async delete(id: number): Promise<boolean> {
     await this.mediaRepo.delete({ advertisement: { id } });
-    await this.broadcastRepo.update({ advertisementId: id }, { advertisementId: null as any });
+    await this.broadcastRepo.update({ advertisementId: id }, { advertisementId: null });
     const result = await this.adRepo.delete(id);
     return (result.affected ?? 0) > 0;
   }
@@ -79,7 +92,9 @@ export class AdvertisementService {
     return {
       daysUsed: ad.daysUsed,
       daysRemaining: Math.max(0, ad.packageDays - ad.daysUsed),
-      isSendable: ad.status === AdvertisementStatus.DRAFT || (ad.status === AdvertisementStatus.ACTIVE && ad.daysUsed < ad.packageDays),
+      isSendable:
+        ad.status === AdvertisementStatus.DRAFT ||
+        (ad.status === AdvertisementStatus.ACTIVE && ad.daysUsed < ad.packageDays),
     };
   }
 
@@ -121,7 +136,18 @@ export class AdvertisementService {
   }> {
     const ad = await this.findOne(id);
     if (!ad) {
-      return { totalSent: 0, totalFailed: 0, todaySent: 0, todayFailed: 0, daysRemaining: 0, totalGroups: 0, perGroup: [], packageDays: 0, daysUsed: 0, status: 'unknown' };
+      return {
+        totalSent: 0,
+        totalFailed: 0,
+        todaySent: 0,
+        todayFailed: 0,
+        daysRemaining: 0,
+        totalGroups: 0,
+        perGroup: [],
+        packageDays: 0,
+        daysUsed: 0,
+        status: 'unknown',
+      };
     }
 
     const todayStart = new Date();
@@ -135,10 +161,16 @@ export class AdvertisementService {
 
     if (broadcastIds.length === 0) {
       return {
-        totalSent: 0, totalFailed: 0, todaySent: 0, todayFailed: 0,
+        totalSent: 0,
+        totalFailed: 0,
+        todaySent: 0,
+        todayFailed: 0,
         daysRemaining: Math.max(0, ad.packageDays - ad.daysUsed),
-        totalGroups: 0, perGroup: [],
-        packageDays: ad.packageDays, daysUsed: ad.daysUsed, status: ad.status,
+        totalGroups: 0,
+        perGroup: [],
+        packageDays: ad.packageDays,
+        daysUsed: ad.daysUsed,
+        status: ad.status,
       };
     }
 
@@ -155,10 +187,18 @@ export class AdvertisementService {
     // Today counts
     const [todaySent, todayFailed] = await Promise.all([
       this.taskRepo.count({
-        where: { broadcast: { id: In(broadcastIds) }, status: MessageTaskStatus.SENT, lastAttemptAt: MoreThanOrEqual(todayStart) },
+        where: {
+          broadcast: { id: In(broadcastIds) },
+          status: MessageTaskStatus.SENT,
+          lastAttemptAt: MoreThanOrEqual(todayStart),
+        },
       }),
       this.taskRepo.count({
-        where: { broadcast: { id: In(broadcastIds) }, status: MessageTaskStatus.FAILED, lastAttemptAt: MoreThanOrEqual(todayStart) },
+        where: {
+          broadcast: { id: In(broadcastIds) },
+          status: MessageTaskStatus.FAILED,
+          lastAttemptAt: MoreThanOrEqual(todayStart),
+        },
       }),
     ]);
 
@@ -166,9 +206,9 @@ export class AdvertisementService {
     const perGroupRaw = await this.taskRepo
       .createQueryBuilder('task')
       .select('g.name', 'groupName')
-      .addSelect('COUNT(CASE WHEN task.status = \'sent\' THEN 1 END)', 'totalSent')
-      .addSelect('COUNT(CASE WHEN task.status = \'failed\' THEN 1 END)', 'totalFailed')
-      .addSelect('COUNT(CASE WHEN task.status = \'sent\' AND task.lastAttemptAt >= :todayStart THEN 1 END)', 'todaySent')
+      .addSelect("COUNT(CASE WHEN task.status = 'sent' THEN 1 END)", 'totalSent')
+      .addSelect("COUNT(CASE WHEN task.status = 'failed' THEN 1 END)", 'totalFailed')
+      .addSelect("COUNT(CASE WHEN task.status = 'sent' AND task.lastAttemptAt >= :todayStart THEN 1 END)", 'todaySent')
       .leftJoin('task.group', 'g')
       .where('task.broadcastId IN (:...broadcastIds)', { broadcastIds })
       .groupBy('g.name')
@@ -295,14 +335,18 @@ export class AdvertisementService {
     // Pass the ad body as messageText and all media as imageUrls
     this.dispatcher.dispatchBroadcast(saved.id, ad.body || '', imageUrls).catch((err: Error) => {
       this.logger.error(`Ad broadcast #${saved.id} crashed: ${err.message}`);
-      this.broadcastRepo.update(saved.id, {
-        status: BroadcastStatus.FAILED,
-        completedAt: new Date(),
-      }).catch(e => this.logger.error(`Failed to mark ad broadcast #${saved.id} as failed: ${e.message}`));
+      this.broadcastRepo
+        .update(saved.id, {
+          status: BroadcastStatus.FAILED,
+          completedAt: new Date(),
+        })
+        .catch(e => this.logger.error(`Failed to mark ad broadcast #${saved.id} as failed: ${e.message}`));
     });
 
     await this.markDayUsed(ad.id);
-    this.logger.log(`Dispatched ad #${ad.id} day ${ad.daysUsed}/${ad.packageDays} (broadcast #${saved.id}, ${tasksCreated} tasks)`);
+    this.logger.log(
+      `Dispatched ad #${ad.id} day ${ad.daysUsed}/${ad.packageDays} (broadcast #${saved.id}, ${tasksCreated} tasks)`,
+    );
   }
 
   async addMedia(id: number, filePath: string, originalFilename: string, mediaType: string): Promise<MediaAttachment> {
@@ -340,10 +384,17 @@ export class AdvertisementService {
   private getMimeType(filePath: string): string {
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
     const mimeMap: Record<string, string> = {
-      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-      gif: 'image/gif', webp: 'image/webp',
-      mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo', mkv: 'video/x-matroska',
-      pdf: 'application/pdf', doc: 'application/msword',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      mp4: 'video/mp4',
+      mov: 'video/quicktime',
+      avi: 'video/x-msvideo',
+      mkv: 'video/x-matroska',
+      pdf: 'application/pdf',
+      doc: 'application/msword',
       docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       txt: 'text/plain',
     };

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
-import { WorkerSession, WorkerStatus, BrowserStatus } from '@database/entities/wa-automation/worker-session.entity';
+import { WorkerSession, WorkerStatus } from '@database/entities/wa-automation/worker-session.entity';
 import { WorkerSessionLog, SessionEventType } from '@database/entities/wa-automation/worker-session-log.entity';
 
 /**

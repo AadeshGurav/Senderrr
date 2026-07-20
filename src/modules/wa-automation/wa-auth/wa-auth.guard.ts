@@ -53,10 +53,7 @@ export class WaAuthGuard implements CanActivate {
       const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf-8'));
       if (header.alg !== 'HS256') return null;
 
-      const signature = crypto
-        .createHmac('sha256', secret)
-        .update(`${parts[0]}.${parts[1]}`)
-        .digest('base64url');
+      const signature = crypto.createHmac('sha256', secret).update(`${parts[0]}.${parts[1]}`).digest('base64url');
 
       if (signature !== parts[2]) return null;
 
