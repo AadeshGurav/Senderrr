@@ -50,10 +50,10 @@ export class MessageTask {
   @Column({ type: 'int', default: 3 })
   maxAttempts: number;
 
-  @Column({ nullable: true })
+  @Column({ type: Date, nullable: true })
   lastAttemptAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: Date, nullable: true })
   nextRetryAt: Date | null;
 
   @CreateDateColumn()

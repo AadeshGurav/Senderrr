@@ -26,7 +26,7 @@ export class ScrapedArticle {
   @Column({ type: 'varchar', length: 255, nullable: true })
   sourceName: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: Date, nullable: true })
   publishedAt: Date | null;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
