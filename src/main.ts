@@ -79,7 +79,6 @@ function cleanChromeLocks(sessionDataPath: string): void {
     }
     // Also kill any orphaned Chrome processes from a previous run
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       execSync('pkill -f "chrome.*--disable-setuid-sandbox" 2>/dev/null || true');
     } catch {
       // pkill not available — ignore
