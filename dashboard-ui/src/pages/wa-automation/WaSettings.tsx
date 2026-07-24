@@ -84,7 +84,7 @@ export default function WaSettings() {
     if (settingsData) {
       const merged: Record<string, string> = {};
       for (const key of Object.keys(SETTING_LABELS)) {
-        const existing = settingsData.find((s: any) => s.key === key);
+        const existing = settingsData.find((s: { key: string; value: string }) => s.key === key);
         merged[key] = existing?.value ?? '';
       }
       setSettings(merged);
@@ -98,8 +98,8 @@ export default function WaSettings() {
         .map(([key, value]) => ({ key, value }));
       await updateMutate.mutateAsync(entries);
       success('Settings saved', 'Configuration updated successfully');
-    } catch (e: any) {
-      showError('Failed to save settings', e.message);
+    } catch (e: unknown) {
+      showError('Failed to save settings', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 

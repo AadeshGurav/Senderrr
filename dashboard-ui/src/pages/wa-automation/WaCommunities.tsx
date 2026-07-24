@@ -12,6 +12,7 @@ import {
   useCreateWaCommunityMutation,
   useCommunityBroadcastMutation,
 } from '../../hooks/wa-queries';
+import type { ApiCommunity } from '../../services/wa-api';
 
 export default function WaCommunities() {
   const { data: communities = [], isLoading } = useWaCommunitiesQuery();
@@ -27,8 +28,8 @@ export default function WaCommunities() {
       success('Community created', `${form.name} added successfully`);
       setModalOpen(false);
       setForm({ name: '', communityJid: '' });
-    } catch (e: any) {
-      showError('Failed to create community', e.message);
+    } catch (e: unknown) {
+      showError('Failed to create community', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
@@ -36,8 +37,8 @@ export default function WaCommunities() {
     try {
       const result = await broadcastMutate.mutateAsync(id);
       success('Broadcast triggered', `Sent to ${result.affectedGroups} groups in ${name}`);
-    } catch (e: any) {
-      showError('Broadcast failed', e.message);
+    } catch (e: unknown) {
+      showError('Broadcast failed', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
@@ -67,7 +68,7 @@ export default function WaCommunities() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {communities.map((c: any) => (
+          {communities.map((c: ApiCommunity) => (
             <Card key={c.id} hover>
               <CardBody>
                 <div className="flex items-start gap-3 mb-3">

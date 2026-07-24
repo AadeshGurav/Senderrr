@@ -36,8 +36,8 @@ export default function WaLogin({ onLogin }: WaLoginProps) {
       const result = await authApi.login(username, password);
       sessionStorage.setItem('wa_token', result.token);
       onLogin(result.token);
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }

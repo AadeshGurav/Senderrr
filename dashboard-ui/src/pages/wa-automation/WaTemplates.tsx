@@ -18,6 +18,7 @@ import {
   useDeleteTemplateMutation,
 } from '../../hooks/wa-queries';
 import { templateApi } from '../../services/wa-api';
+import type { ApiTemplate } from '../../services/wa-api';
 
 export default function WaTemplates() {
   const { data: templates = [], isLoading: templatesLoading } = useWaTemplatesQuery();
@@ -57,8 +58,8 @@ export default function WaTemplates() {
       }
       setEdit({ name: '', templateText: '' });
       setPreview('');
-    } catch (e: any) {
-      showError('Failed to save template', e.message);
+    } catch (e: unknown) {
+      showError('Failed to save template', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
@@ -78,8 +79,8 @@ export default function WaTemplates() {
       await deleteMutate.mutateAsync(deleteTarget.id);
       success('Template deleted');
       setDeleteTarget(null);
-    } catch (e: any) {
-      showError('Failed to delete', e.message);
+    } catch (e: unknown) {
+      showError('Failed to delete', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
@@ -157,7 +158,7 @@ export default function WaTemplates() {
               <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">No templates yet</p>
             ) : (
               <div className="space-y-3">
-                {templates.map((t: any) => (
+                {templates.map((t: ApiTemplate) => (
                   <div
                     key={t.id}
                     className={`p-3 rounded-xl border transition-colors ${

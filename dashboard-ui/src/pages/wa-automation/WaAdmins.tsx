@@ -39,6 +39,7 @@ interface Admin {
   isSuperAdmin: boolean;
   skipWarmup: boolean;
   openwaSessionId: string | null;
+  [key: string]: unknown;
 }
 
 interface AdminSession {

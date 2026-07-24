@@ -22,18 +22,8 @@ import {
   useAllAdminSessionsQuery,
 } from '../../hooks/wa-queries';
 import type { ColumnDef } from '@tanstack/react-table';
+import type { ApiCommunity, ApiGroup } from '../../services/wa-api';
 
-interface Group {
-  id: number;
-  name: string;
-  groupJid: string;
-  community?: { id: number; name: string } | null;
-  totalSent: number;
-  totalFailed: number;
-  isHealthy: boolean;
-  isActive: boolean;
-  isTargeted: boolean;
-}
 
 export default function WaGroups() {
   const { data: groups = [], isLoading } = useWaGroupsQuery();
@@ -47,13 +37,13 @@ export default function WaGroups() {
   const { success, error: showError } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '', groupJid: '' });
-  const [linkTarget, setLinkTarget] = useState<Group | null>(null);
-  const [selectedTargets, setSelectedTargets] = useState<Group[]>([]);
+  const [linkTarget, setLinkTarget] = useState<ApiGroup | null>(null);
+  const [selectedTargets, setSelectedTargets] = useState<ApiGroup[]>([]);
   const [importExpanded, setImportExpanded] = useState(false);
 
   // Pre-populate selected targets from server data (only on initial load)
   useEffect(() => {
-    setSelectedTargets(groups.filter((g: Group) => g.isTargeted));
+    setSelectedTargets(groups.filter((g: ApiGroup) => g.isTargeted));
   }, [groups]);
 
   const handleSaveTargets = async () => {
@@ -61,18 +51,18 @@ export default function WaGroups() {
       await setTargetsMutate.mutateAsync(selectedTargets.map(g => g.id));
       setSelectedTargets([]);
       success('Targets saved', `${selectedTargets.length} group(s) will receive article broadcasts`);
-    } catch (e: any) {
-      showError('Failed to save targets', e.message);
+    } catch (e: unknown) {
+      showError('Failed to save targets', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
-  const handleRemoveTarget = async (group: Group) => {
+  const handleRemoveTarget = async (group: ApiGroup) => {
     const updated = selectedTargets.filter(g => g.id !== group.id);
     setSelectedTargets(updated);
     try {
       await setTargetsMutate.mutateAsync(updated.map(g => g.id));
-    } catch (e: any) {
-      showError('Failed to remove target', e.message);
+    } catch (e: unknown) {
+      showError('Failed to remove target', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
@@ -82,9 +72,9 @@ export default function WaGroups() {
   const [importSessionId, setImportSessionId] = useState<number | null>(null);
 
   const connectedAdmins = allSessions
-    .filter((s: any) => s.openwaSessionStatus === 'ready')
-    .reduce((acc: any[], s: any) => {
-      if (!acc.find((a: any) => a.adminId === s.adminId)) {
+    .filter(s => s.openwaSessionStatus === 'ready')
+    .reduce((acc: { adminId: number; sessionIndex: number }[], s) => {
+      if (!acc.find(a => a.adminId === s.adminId)) {
         acc.push({ adminId: s.adminId, sessionIndex: s.sessionIndex });
       }
       return acc;
@@ -92,13 +82,13 @@ export default function WaGroups() {
 
   const handleImport = async () => {
     if (!importSessionId) return;
-    const session = connectedAdmins.find((s: any) => s.adminId === importSessionId);
+    const session = connectedAdmins.find(s => s.adminId === importSessionId);
     if (!session) return;
     try {
       const result = await importMutate.mutateAsync({ adminId: session.adminId, slot: session.sessionIndex });
       success('Groups imported', `${result.imported} new, ${result.skipped} already existed`);
-    } catch (e: any) {
-      showError('Failed to import groups', e.message);
+    } catch (e: unknown) {
+      showError('Failed to import groups', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
@@ -123,12 +113,12 @@ export default function WaGroups() {
       success('Group created', `${form.name} added successfully`);
       setModalOpen(false);
       setForm({ name: '', groupJid: '' });
-    } catch (e: any) {
-      showError('Failed to create group', e.message);
+    } catch (e: unknown) {
+      showError('Failed to create group', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
-  const columns: ColumnDef<Group, unknown>[] = [
+  const columns: ColumnDef<ApiGroup, unknown>[] = [
     { accessorKey: 'name', header: 'Name', enableSorting: true },
     {
       accessorKey: 'groupJid',
@@ -194,16 +184,16 @@ export default function WaGroups() {
 
   if (isLoading) return <PageSkeleton />;
 
-  const targetedGroups = groups.filter((g: Group) => g.isTargeted);
-  const untargetedGroups = groups.filter((g: Group) => !g.isTargeted);
+  const targetedGroups = groups.filter((g: ApiGroup) => g.isTargeted);
+  const untargetedGroups = groups.filter((g: ApiGroup) => !g.isTargeted);
 
-  const comboOptions = untargetedGroups.map((g: Group) => ({
+  const comboOptions = untargetedGroups.map((g: ApiGroup) => ({
     value: String(g.id),
     label: g.name,
     sublabel: g.groupJid,
   }));
 
-  const selectedTargetsMapped = selectedTargets.map((g: Group) => ({
+  const selectedTargetsMapped = selectedTargets.map((g: ApiGroup) => ({
     value: String(g.id),
     label: g.name,
     sublabel: g.groupJid,
@@ -250,7 +240,7 @@ export default function WaGroups() {
             options={comboOptions}
             selected={selectedTargetsMapped}
             onChange={(opts) => {
-              const groupsMap = new Map(groups.map((g: Group) => [String(g.id), g]));
+              const groupsMap = new Map(groups.map((g: ApiGroup) => [String(g.id), g]));
               setSelectedTargets(opts.map(o => groupsMap.get(o.value)!).filter(Boolean));
             }}
             emptyMessage="No groups match your search"
@@ -298,7 +288,7 @@ export default function WaGroups() {
                       text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
                   >
                     <option value="">Select a connected admin...</option>
-                    {connectedAdmins.map((s: any) => (
+                    {connectedAdmins.map(s => (
                       <option key={s.adminId} value={s.adminId}>Admin #{s.adminId}</option>
                     ))}
                   </select>
@@ -341,7 +331,7 @@ export default function WaGroups() {
             <Select
               label="Community"
               placeholder="Select a community..."
-              options={communities.map((c: any) => ({ value: String(c.id), label: c.name }))}
+              options={communities.map((c: ApiCommunity) => ({ value: String(c.id), label: c.name }))}
               onChange={e => {
                 const communityId = parseInt(e.target.value);
                 if (communityId) {

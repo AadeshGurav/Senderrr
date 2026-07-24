@@ -5,18 +5,8 @@ import { PageSkeleton } from '../../components/Skeleton';
 import { Cpu } from 'lucide-react';
 import { Card, CardBody } from '../../components/ui/Card';
 import type { ColumnDef } from '@tanstack/react-table';
+import type { ApiAdmin, ApiWorker } from '../../services/wa-api';
 
-interface Worker {
-  id: number;
-  workerId: string;
-  adminId: number;
-  status: string;
-  browserStatus: string;
-  totalSent: number;
-  totalFailed: number;
-  lastHeartbeatAt: string | null;
-  currentGroupId: string | null;
-}
 
 const statusVariant = (status: string) => {
   switch (status) {
@@ -33,9 +23,9 @@ export default function WaWorkers() {
   const { data: admins = [] } = useWaAdminsQuery();
 
   const adminLabel = (adminId: number) =>
-    admins.find((a: any) => a.id === adminId)?.label || `Admin #${adminId}`;
+    (admins as ApiAdmin[]).find(a => a.id === adminId)?.label || `Admin #${adminId}`;
 
-  const columns: ColumnDef<Worker, unknown>[] = [
+  const columns: ColumnDef<ApiWorker, unknown>[] = [
     {
       accessorKey: 'workerId',
       header: 'Worker ID',

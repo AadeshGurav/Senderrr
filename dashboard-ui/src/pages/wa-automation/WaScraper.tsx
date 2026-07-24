@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useToast } from '../../components/Toast';
 import { useWaArticlesQuery, useRunScraperMutation, useRunAllScraperMutation, useUnseedScraperMutation, useScraperActivityQuery } from '../../hooks/wa-queries';
+import type { ApiArticle, ApiScraperActivity } from '../../services/wa-api';
 
 export default function WaScraper() {
   const { data: articles = [], isLoading, isRefetching, refetch } = useWaArticlesQuery();
@@ -29,9 +30,10 @@ export default function WaScraper() {
       const result = await runMutate.mutateAsync(runUrl);
       setMessage(result.detected ? `Scraped: ${result.article?.title}` : 'No new content found at that URL');
       setRunUrl('');
-    } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
-      showError('Scraper error', e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setMessage(`Error: ${msg}`);
+      showError('Scraper error', msg);
     }
   };
 
@@ -41,9 +43,10 @@ export default function WaScraper() {
       const result = await runAllMutate.mutateAsync();
       setMessage(`Scraped ${result.scraped} new article(s) from configured URLs`);
       success('Scraper run complete', `${result.scraped} new article(s)`);
-    } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
-      showError('Scraper error', e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setMessage(`Error: ${msg}`);
+      showError('Scraper error', msg);
     }
   };
 
@@ -53,9 +56,10 @@ export default function WaScraper() {
       const result = await unseedMutate.mutateAsync();
       setMessage(`Unseeded and re-scraped — found ${result.scraped} article(s)`);
       success('Unseed complete', `${result.scraped} article(s) scraped`);
-    } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
-      showError('Failed to unseed', e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setMessage(`Error: ${msg}`);
+      showError('Failed to unseed', msg);
     }
   };
 
@@ -137,7 +141,7 @@ export default function WaScraper() {
                 </tr>
               </thead>
               <tbody>
-                {activity.map((a: any) => (
+                {activity.map((a: ApiScraperActivity) => (
                   <tr key={a.id} className="border-t border-[var(--color-border-light)]">
                     <td className="px-3 py-2 text-[var(--color-text-secondary)] whitespace-nowrap">
                       {new Date(a.checkedAt).toLocaleString()}
@@ -212,7 +216,7 @@ export default function WaScraper() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {articles.map((a: any) => (
+            {articles.map((a: ApiArticle) => (
               <Card key={a.id} hover>
                 <div className="px-5 py-3.5 flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">

@@ -18,6 +18,42 @@ import {
   useUpdateAdMutation,
 } from '../../hooks/wa-queries';
 import { adApi } from '../../services/wa-api';
+import type { ApiAd } from '../../services/wa-api';
+
+// ─── Local extended types ──────────────────────────────────────────
+
+interface MediaAttachment {
+  id: number;
+  originalFilename: string | null;
+}
+
+interface PerGroupStat {
+  groupName: string;
+  totalSent: number;
+  todaySent: number;
+}
+
+interface Telemetry {
+  totalSent: number;
+  totalFailed: number;
+  todaySent: number;
+  daysRemaining: number;
+  perGroup: PerGroupStat[];
+}
+
+/** Full ad shape as returned by the API (extends ApiAd with rich fields). */
+interface ApiAdFull extends ApiAd {
+  title: string;
+  body: string | null;
+  targetType: string;
+  packageDays: number;
+  daysUsed: number;
+  totalSent: number;
+  totalFailed: number;
+  targetGroups?: { id: number }[];
+  targetCommunities?: { id: number }[];
+  mediaAttachments?: MediaAttachment[];
+}
 
 const statusVariant = (status: string) => {
   switch (status) {
@@ -63,7 +99,7 @@ export default function WaAdvertisements() {
   const waKeys = { advertisements: ['wa', 'advertisements'] as const };
 
   const [showForm, setShowForm] = useState(false);
-  const [editingAd, setEditingAd] = useState<any | null>(null);
+  const [editingAd, setEditingAd] = useState<ApiAdFull | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [expandedAd, setExpandedAd] = useState<number | null>(null);
 
@@ -106,12 +142,12 @@ export default function WaAdvertisements() {
       await deleteMutate.mutateAsync(deleteTarget.id);
       success('Advertisement deleted', `"${deleteTarget.title}" removed`);
       setDeleteTarget(null);
-    } catch (e: any) {
-      showError('Failed to delete advertisement', e.message);
+    } catch (e: unknown) {
+      showError('Failed to delete advertisement', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
-  const handleToggleStatus = async (ad: any) => {
+  const handleToggleStatus = async (ad: ApiAdFull) => {
     setTogglingStatus(ad.id);
     try {
       if (ad.status === 'active') {
@@ -124,21 +160,21 @@ export default function WaAdvertisements() {
         showError('Cannot resume a cancelled campaign');
       }
       queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
-    } catch (e: any) {
-      showError('Failed to update campaign', e.message);
+    } catch (e: unknown) {
+      showError('Failed to update campaign', e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setTogglingStatus(null);
     }
   };
 
-  const handleCancel = async (ad: any) => {
+  const handleCancel = async (ad: ApiAdFull) => {
     setTogglingStatus(ad.id);
     try {
       await adApi.update(ad.id, { status: 'cancelled' });
       success('Campaign stopped', `"${ad.title}" was cancelled`);
       queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
-    } catch (e: any) {
-      showError('Failed to stop campaign', e.message);
+    } catch (e: unknown) {
+      showError('Failed to stop campaign', e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setTogglingStatus(null);
     }
@@ -168,14 +204,14 @@ export default function WaAdvertisements() {
     setMediaPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
-  const openEditModal = (ad: any) => {
+  const openEditModal = (ad: ApiAdFull) => {
     setEditingAd(ad);
     setFormData({
       title: ad.title || '',
       body: ad.body || '',
       targetType: ad.targetType || 'all_groups',
-      selectedGroups: ad.targetGroups || [],
-      selectedCommunities: ad.targetCommunities || [],
+      selectedGroups: (ad.targetGroups as Group[] | undefined) ?? [],
+      selectedCommunities: (ad.targetCommunities as Community[] | undefined) ?? [],
       packageDays: ad.packageDays || 1,
     });
     setMediaFiles([]);
@@ -195,7 +231,7 @@ export default function WaAdvertisements() {
     }
     const hasBody = formData.body.trim().length > 0;
     const hasNewMedia = mediaFiles.length > 0;
-    const hasExistingMedia = editingAd && editingAd.mediaAttachments?.length > removedMediaIds.length;
+    const hasExistingMedia = editingAd && (editingAd.mediaAttachments?.length ?? 0) > removedMediaIds.length;
     if (!hasBody && !hasNewMedia && !hasExistingMedia) {
       showError('Validation', 'Provide a message body or upload at least one attachment');
       setCreating(false);
@@ -204,7 +240,7 @@ export default function WaAdvertisements() {
 
     setCreating(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         title: formData.title,
         body: formData.body,
         targetType: formData.targetType,
@@ -252,21 +288,21 @@ export default function WaAdvertisements() {
       setMediaFiles([]);
       setMediaPreviews([]);
       setRemovedMediaIds([]);
-    } catch (e: any) {
-      showError('Failed to save campaign', e.message);
+    } catch (e: unknown) {
+      showError('Failed to save campaign', e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setCreating(false);
     }
   };
 
-  const handleManualSend = async (ad: any) => {
+  const handleManualSend = async (ad: ApiAdFull) => {
     setTogglingStatus(ad.id);
     try {
       await adApi.send(ad.id);
       success('Campaign dispatched', `"${ad.title}" sent to targets`);
       queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
-    } catch (e: any) {
-      showError('Failed to dispatch campaign', e.message);
+    } catch (e: unknown) {
+      showError('Failed to dispatch campaign', e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setTogglingStatus(null);
     }
@@ -301,7 +337,7 @@ export default function WaAdvertisements() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {ads.map((a: any) => (
+          {(ads as ApiAdFull[]).map(a => (
             <AdCard
               key={a.id}
               ad={a}
@@ -371,11 +407,11 @@ export default function WaAdvertisements() {
                 </div>
 
                 {/* Existing attachments (edit mode only) */}
-                {editingAd && editingAd.mediaAttachments?.length > 0 && (
+                {editingAd && (editingAd.mediaAttachments?.length ?? 0) > 0 && (
                   <div className="space-y-2 mb-3">
-                    {editingAd.mediaAttachments
-                      .filter((m: any) => !removedMediaIds.includes(m.id))
-                      .map((m: any) => (
+                    {editingAd.mediaAttachments!
+                      .filter((m: MediaAttachment) => !removedMediaIds.includes(m.id))
+                      .map((m: MediaAttachment) => (
                         <div key={m.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
                           <div className="flex items-center gap-2 min-w-0">
                             <Image size={16} className="text-[var(--color-text-muted)] flex-shrink-0" />
@@ -603,17 +639,18 @@ function AdCard({
   onManualSend,
   togglingStatus,
 }: {
-  ad: any;
+  ad: ApiAdFull;
   expandedAd: number | null;
   setExpandedAd: (id: number | null) => void;
-  onEdit: (ad: any) => void;
+  onEdit: (ad: ApiAdFull) => void;
   onDelete: (target: { id: number; title: string }) => void;
-  onToggleStatus: (ad: any) => void;
-  onCancel: (ad: any) => void;
-  onManualSend: (ad: any) => void;
+  onToggleStatus: (ad: ApiAdFull) => void;
+  onCancel: (ad: ApiAdFull) => void;
+  onManualSend: (ad: ApiAdFull) => void;
   togglingStatus: number | null;
 }) {
-  const { data: telemetry } = useAdTelemetryQuery(ad.id);
+  const { data: rawTelemetry } = useAdTelemetryQuery(ad.id);
+  const telemetry = rawTelemetry ? (rawTelemetry as unknown as Telemetry) : null;
   const isExpanded = expandedAd === ad.id;
   const isLocked = ad.status === 'completed' || ad.status === 'cancelled';
   const canEdit = ad.status === 'draft' || ad.status === 'active' || ad.status === 'paused';
@@ -646,10 +683,10 @@ function AdCard({
           </div>
           {telemetry ? (
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              <span className="text-emerald-600 dark:text-emerald-400">Sent: <strong>{telemetry.totalSent}</strong></span>
-              <span className="text-red-500">Failed: <strong>{telemetry.totalFailed}</strong></span>
+              <span className="text-emerald-600 dark:text-emerald-400">Sent: <strong>{(telemetry as Telemetry).totalSent}</strong></span>
+              <span className="text-red-500">Failed: <strong>{(telemetry as Telemetry).totalFailed}</strong></span>
               <span className="text-[var(--color-text-secondary)]">
-                Today: <strong className="text-[var(--color-primary)]">{telemetry.todaySent}</strong> sent
+                Today: <strong className="text-[var(--color-primary)]">{(telemetry as Telemetry).todaySent}</strong> sent
               </span>
             </div>
           ) : (
@@ -658,15 +695,15 @@ function AdCard({
               <span>Failed: <strong>{ad.totalFailed || 0}</strong></span>
             </div>
           )}
-          {ad.mediaAttachments?.length > 0 && (
+          {(ad.mediaAttachments?.length ?? 0) > 0 && (
             <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
               <Image size={14} />
-              <span>{ad.mediaAttachments.length} attachment{ad.mediaAttachments.length > 1 ? 's' : ''}</span>
+              <span>{ad.mediaAttachments!.length} attachment{ad.mediaAttachments!.length > 1 ? 's' : ''}</span>
             </div>
           )}
 
           {/* ── Per-group expandable breakdown ──────── */}
-          {telemetry && telemetry.perGroup && telemetry.perGroup.length > 0 && (
+          {telemetry && (telemetry as Telemetry).perGroup && (telemetry as Telemetry).perGroup.length > 0 && (
             <div className="mt-1">
               <button
                 type="button"
@@ -675,11 +712,11 @@ function AdCard({
               >
                 {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 <BarChart3 size={12} />
-                Per-group breakdown ({telemetry.perGroup.length} groups)
+                Per-group breakdown ({(telemetry as Telemetry).perGroup.length} groups)
               </button>
               {isExpanded && (
                 <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
-                  {telemetry.perGroup.map((pg: any) => (
+                  {(telemetry as Telemetry).perGroup.map(pg => (
                     <div key={pg.groupName} className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-[var(--color-bg-secondary)]">
                       <span className="text-[var(--color-text-secondary)] truncate mr-2">{pg.groupName}</span>
                       <span className="flex-shrink-0 text-[var(--color-text-muted)]">

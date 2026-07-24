@@ -13,6 +13,7 @@ import {
   useEditBroadcastMutation,
   useDeleteBroadcastMutation,
 } from '../../hooks/wa-queries';
+import type { ApiBroadcast, ApiBroadcastTask } from '../../services/wa-api';
 
 const STATUSES = ['all', 'pending', 'in_progress', 'completed', 'partial', 'failed'] as const;
 
@@ -67,8 +68,8 @@ export default function WaBroadcasts() {
     try {
       const retried = await retryMutate.mutateAsync(id);
       success('Retry initiated', `Retrying ${retried.retried} failed messages`);
-    } catch (e: any) {
-      showError('Retry failed', e.message);
+    } catch (e: unknown) {
+      showError('Retry failed', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
@@ -97,8 +98,8 @@ export default function WaBroadcasts() {
             try {
               const result = await retryAllMutate.mutateAsync();
               success('Retry all', `Retrying ${result.retried} tasks across ${result.broadcasts} broadcasts`);
-            } catch (e: any) {
-              showError('Retry all failed', e.message);
+            } catch (e: unknown) {
+              showError('Retry all failed', e instanceof Error ? e.message : 'Unknown error');
             }
           }}
           disabled={retryAllMutate.isPending}
@@ -136,7 +137,7 @@ export default function WaBroadcasts() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {broadcasts.map((b: any, idx: number) => {
+          {broadcasts.map((b: ApiBroadcast, idx: number) => {
             const displayNumber = total - 1 - (page - 1) * limit - idx;
             return (
               <Card key={b.id} hover>
@@ -150,7 +151,7 @@ export default function WaBroadcasts() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-[var(--color-text)] truncate">
                           #{displayNumber} — {b.article?.title || `Advertisement #${b.advertisementId || 'N/A'}`}
-                          {b.editHistory?.length > 0 && <span className="ml-2 text-xs text-[var(--color-text-muted)] italic">(edited)</span>}
+                          {(b.editHistory?.length ?? 0) > 0 && <span className="ml-2 text-xs text-[var(--color-text-muted)] italic">(edited)</span>}
                         </p>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                           {new Date(b.createdAt).toLocaleString()} · {b.totalMessages} messages
@@ -175,7 +176,7 @@ export default function WaBroadcasts() {
                             if (window.confirm(`Delete broadcast #${displayNumber}? This will permanently remove the message from all WhatsApp groups.`)) {
                               deleteMutate.mutateAsync(b.id)
                                 .then(r => success('Deleted', `${r.deleted} messages removed from WhatsApp`))
-                                .catch(e => showError('Delete failed', e.message));
+                                .catch((e: unknown) => showError('Delete failed', e instanceof Error ? e.message : 'Unknown error'));
                             }
                           }}>
                             Delete
@@ -206,7 +207,7 @@ export default function WaBroadcasts() {
                             </tr>
                           </thead>
                           <tbody>
-                            {selected.tasks.map((t: any) => (
+                            {selected.tasks.map((t: ApiBroadcastTask) => (
                               <tr key={t.id} className="border-t border-[var(--color-border-light)]">
                                 <td className="px-3 py-2">{t.group?.name || t.groupId}</td>
                                 <td className="px-3 py-2">{t.admin?.label || '-'}</td>
@@ -214,7 +215,7 @@ export default function WaBroadcasts() {
                                   <Badge variant={taskStatusVariant(t.status)}>{t.status}</Badge>
                                 </td>
                                 <td className="px-3 py-2 text-[var(--color-text-secondary)]">{t.attemptCount}/{t.maxAttempts}</td>
-                                <td className="px-3 py-2 text-red-500 max-w-[200px] truncate" title={t.errorMessage}>{t.errorMessage || '-'}</td>
+                                <td className="px-3 py-2 text-red-500 max-w-[200px] truncate" title={t.errorMessage ?? undefined}>{t.errorMessage || '-'}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -271,8 +272,8 @@ export default function WaBroadcasts() {
                     const result = await editMutate.mutateAsync({ id: editingId, messageText: editText });
                     success('Edited', `${result.edited} messages updated across WhatsApp groups`);
                     setEditingId(null);
-                  } catch (e: any) {
-                    showError('Edit failed', e.message);
+                  } catch (e: unknown) {
+                    showError('Edit failed', e instanceof Error ? e.message : 'Unknown error');
                   }
                 }}
                 disabled={editMutate.isPending || !editText.trim()}
