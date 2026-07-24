@@ -32,60 +32,73 @@ export class AdminSessionService {
 
   // ─── Session Lifecycle ────────────────────────────────────────
 
+  private createLock = new Set<number>();
+
   async createSessionsForAdmin(adminId: number): Promise<AdminSession[]> {
-    const admin = await this.adminRepo.findOne({ where: { id: adminId } });
-    if (!admin) throw new NotFoundException(`Admin #${adminId} not found`);
-
-    const existing = await this.adminSessionRepo.find({ where: { adminId } });
-    const count = Math.max(1, Math.min(admin.sessionsPerAdmin || 1, 4));
-    const results: AdminSession[] = [];
-
-    for (let slot = 0; slot < count; slot++) {
-      const existingSlot = existing.find(e => e.sessionIndex === slot);
-      if (existingSlot) {
-        results.push(existingSlot);
-        continue;
-      }
-
-      const sessionName = `wa-admin-${adminId}-${slot}`;
-
-      let coreSession;
-      try {
-        coreSession = await this.sessionService.create({ name: sessionName });
-      } catch (err) {
-        if (err instanceof ConflictException) {
-          // Orphaned core session with same name — delete and retry
-          this.logger.warn(`Orphaned session '${sessionName}' exists, cleaning up`);
-          try {
-            const orphaned = await this.sessionService.findByName(sessionName);
-            try {
-              await this.sessionService.stop(orphaned.id);
-            } catch {
-              /* ok */
-            }
-            await this.sessionService.delete(orphaned.id);
-          } catch {
-            /* already gone */
-          }
-          coreSession = await this.sessionService.create({ name: sessionName });
-        } else {
-          throw err;
-        }
-      }
-      const adminSession = this.adminSessionRepo.create({
-        adminId,
-        sessionIndex: slot,
-        openwaSessionId: coreSession.id,
-        openwaSessionStatus: coreSession.status,
-      });
-      results.push(await this.adminSessionRepo.save(adminSession));
+    if (this.createLock.has(adminId)) {
+      // If already creating, wait a moment and return the existing sessions
+      await new Promise(r => setTimeout(r, 500));
+      return this.getAdminSessions(adminId);
     }
+    
+    this.createLock.add(adminId);
+    try {
+      const admin = await this.adminRepo.findOne({ where: { id: adminId } });
+      if (!admin) throw new NotFoundException(`Admin #${adminId} not found`);
 
-    // Always update admin's openwaSessionId to the latest session
-    admin.openwaSessionId = results[0]?.openwaSessionId || admin.openwaSessionId;
-    await this.adminRepo.save(admin);
+      const existing = await this.adminSessionRepo.find({ where: { adminId } });
+      const count = Math.max(1, Math.min(admin.sessionsPerAdmin || 1, 4));
+      const results: AdminSession[] = [];
 
-    return results;
+      for (let slot = 0; slot < count; slot++) {
+        const existingSlot = existing.find(e => e.sessionIndex === slot);
+        if (existingSlot) {
+          results.push(existingSlot);
+          continue;
+        }
+
+        const sessionName = `wa-admin-${adminId}-${slot}`;
+
+        let coreSession;
+        try {
+          coreSession = await this.sessionService.create({ name: sessionName });
+        } catch (err) {
+          if (err instanceof ConflictException) {
+            // Orphaned core session with same name — delete and retry
+            this.logger.warn(`Orphaned session '${sessionName}' exists, cleaning up`);
+            try {
+              const orphaned = await this.sessionService.findByName(sessionName);
+              try {
+                await this.sessionService.stop(orphaned.id);
+              } catch {
+                /* ok */
+              }
+              await this.sessionService.delete(orphaned.id);
+            } catch {
+              /* already gone */
+            }
+            coreSession = await this.sessionService.create({ name: sessionName });
+          } else {
+            throw err;
+          }
+        }
+        const adminSession = this.adminSessionRepo.create({
+          adminId,
+          sessionIndex: slot,
+          openwaSessionId: coreSession.id,
+          openwaSessionStatus: coreSession.status,
+        });
+        results.push(await this.adminSessionRepo.save(adminSession));
+      }
+
+      // Always update admin's openwaSessionId to the latest session
+      admin.openwaSessionId = results[0]?.openwaSessionId || admin.openwaSessionId;
+      await this.adminRepo.save(admin);
+
+      return results;
+    } finally {
+      this.createLock.delete(adminId);
+    }
   }
 
   async getAdminSessions(adminId: number): Promise<AdminSession[]> {

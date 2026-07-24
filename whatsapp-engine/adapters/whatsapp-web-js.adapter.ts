@@ -460,14 +460,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     this.ensureReady();
     const chats = await this.client!.getChats();
 
-    // Filter only group chats
-    const groups = chats.filter(chat => chat.isGroup);
+    // Filter only group chats (use fallback check for @g.us if isGroup is missing)
+    const groups = chats.filter(chat => chat.isGroup || chat.id?._serialized?.endsWith('@g.us'));
 
     return groups.map(g => {
       const groupChat = g as unknown as GroupChat;
       return {
         id: g.id._serialized,
-        name: g.name,
+        name: g.name || g.id._serialized, // Fallback name to avoid DB null constraint errors
         participantsCount: groupChat.participants?.length,
         isAdmin: groupChat.participants?.some(
           p => p.isAdmin && p.id._serialized === this.client?.info?.wid?._serialized,
