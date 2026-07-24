@@ -37,10 +37,10 @@ export class ApiKey {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ nullable: true })
   expiresAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ nullable: true })
   lastUsedAt: Date | null;
 
   @Column({ type: 'int', default: 0 })

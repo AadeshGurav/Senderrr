@@ -56,10 +56,10 @@ export class Advertisement {
   @Column({ type: 'varchar', length: 20, nullable: true })
   preferredTime: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ nullable: true })
   nextScheduledAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ nullable: true })
   lastDispatchedAt: Date | null;
 
   @Column({ default: 0 })

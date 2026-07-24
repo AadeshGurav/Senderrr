@@ -35,7 +35,7 @@ export class WorkerSession {
   @Column({ type: 'varchar', length: 20, default: BrowserStatus.UNKNOWN })
   browserStatus: BrowserStatus;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ nullable: true })
   lastHeartbeatAt: Date | null;
 
   @Column({ type: 'int', default: 0 })

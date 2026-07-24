@@ -6,7 +6,8 @@ export class AddBulletPointsToArticles1790000000000 implements MigrationInterfac
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Check if column already exists before adding
     const table = await queryRunner.getTable('scraped_articles');
-    const col = table?.findColumnByName('bulletPoints');
+    if (!table) return;
+    const col = table.findColumnByName('bulletPoints');
     if (!col) {
       try {
         // Use TEXT for SQLite (JSON stored as text), JSON for PostgreSQL
