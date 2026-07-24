@@ -50,6 +50,11 @@ export class PostgresRemoteAuthStore {
       throw new Error(`Session ${session} not found in wa_sessions`);
     }
 
+    const dir = path.dirname(destPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
     fs.writeFileSync(destPath, result[0].data);
   }
 
