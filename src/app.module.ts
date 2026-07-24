@@ -172,4 +172,4 @@ if (process.env.QUEUE_ENABLED === 'true') {
     WaAutomationModule,
   ],
 })
-export class AppModule { }
+export class AppModule {}

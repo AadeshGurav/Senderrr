@@ -31,6 +31,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
   // In-memory map of active engine instances
   private engines: Map<string, IWhatsAppEngine> = new Map();
 
+  // Track pending engine initializations to prevent teardown race conditions
+  private initializingPromises: Map<string, Promise<void>> = new Map();
+
   // Reconnection state per session
   private reconnectStates: Map<string, ReconnectState> = new Map();
 
@@ -153,6 +156,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
     // Cancel any reconnection attempts
     this.cancelReconnect(id);
 
+    // Wait for any pending initialization to settle before tearing down
+    const pendingInit = this.initializingPromises.get(id);
+    if (pendingInit) {
+      this.logger.debug(`Waiting for pending initialization to settle before deleting session ${id}`);
+      await pendingInit.catch(() => {});
+    }
+
     // Stop engine if running
     const engine = this.engines.get(id);
     if (engine) {
@@ -231,7 +241,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
     });
     this.engines.set(id, engine);
 
-    await engine.initialize({
+    await this.updateStatus(id, SessionStatus.INITIALIZING);
+
+    const initPromise = engine.initialize({
       onQRCode: (): void => {
         this.logger.log('QR code generated', {
           sessionId: id,
@@ -350,7 +362,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
       },
     });
 
-    await this.updateStatus(id, SessionStatus.INITIALIZING);
+    this.initializingPromises.set(id, initPromise);
+
+    try {
+      await initPromise;
+    } finally {
+      this.initializingPromises.delete(id);
+    }
   }
 
   private scheduleReconnect(id: string, session: Session): void {
@@ -387,6 +405,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
 
   private async executeReconnect(id: string, session: Session, state: ReconnectState): Promise<void> {
     try {
+      // Wait for any pending initialization to settle before tearing down
+      const pendingInit = this.initializingPromises.get(id);
+      if (pendingInit) {
+        this.logger.debug(`Waiting for pending initialization to settle before reconnecting session ${id}`);
+        await pendingInit.catch(() => {});
+      }
+
       // Clean up old engine
       const oldEngine = this.engines.get(id);
       if (oldEngine) {
@@ -421,6 +446,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
 
     // Cancel any reconnection attempts
     this.cancelReconnect(id);
+
+    // Wait for any pending initialization to settle before tearing down
+    const pendingInit = this.initializingPromises.get(id);
+    if (pendingInit) {
+      this.logger.debug(`Waiting for pending initialization to settle before stopping session ${id}`);
+      await pendingInit.catch(() => {});
+    }
 
     const engine = this.engines.get(id);
 

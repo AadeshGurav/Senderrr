@@ -50,7 +50,10 @@ export default () => ({
     type: process.env.ENGINE_TYPE || 'whatsapp-web.js',
     puppeteer: {
       headless: process.env.PUPPETEER_HEADLESS !== 'false',
-      args: (process.env.PUPPETEER_ARGS || '--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-accelerated-2d-canvas,--no-first-run,--no-zygote,--disable-gpu').split(','),
+      args: (
+        process.env.PUPPETEER_ARGS ||
+        '--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-accelerated-2d-canvas,--no-first-run,--no-zygote,--disable-gpu'
+      ).split(','),
     },
     // sessionDataPath removed — RemoteAuth stores WhatsApp sessions in Postgres via
     // PostgresRemoteAuthStore. Keep SESSION_DATA_PATH env var for disk-based cleanup
