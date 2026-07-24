@@ -149,7 +149,7 @@ export default function WaAdminHealth() {
                                 size="sm"
                                 variant="secondary"
                                 icon={QrCode}
-                                onClick={() => handleShowQr(w.openwaSessionId)}
+                                onClick={() => handleShowQr(w.openwaSessionId!)}
                               >
                                 Show QR
                               </Button>
@@ -157,7 +157,7 @@ export default function WaAdminHealth() {
                                 size="sm"
                                 variant="secondary"
                                 icon={Activity}
-                                onClick={() => handleCheckSession(w.openwaSessionId)}
+                                onClick={() => handleCheckSession(w.openwaSessionId!)}
                               >
                                 Check
                               </Button>
