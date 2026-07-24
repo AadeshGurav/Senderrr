@@ -458,7 +458,24 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   async getGroups(): Promise<Group[]> {
     this.ensureReady();
-    const chats = await this.client!.getChats();
+    
+    let chats: any[] = [];
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        chats = await this.client!.getChats();
+        break; // Success
+      } catch (err) {
+        attempts++;
+        this.logger.warn(`Failed to get chats (attempt ${attempts}/3)`, String(err));
+        if (attempts >= 3) {
+          // Fail gracefully after 3 attempts instead of crashing the process
+          return [];
+        }
+        // Wait 2 seconds before retrying
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
 
     // Filter only group chats (use fallback check for @g.us if isGroup is missing)
     const groups = chats.filter(chat => chat.isGroup || chat.id?._serialized?.endsWith('@g.us'));
