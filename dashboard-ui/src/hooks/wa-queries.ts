@@ -9,6 +9,30 @@ import {
   automationApi,
 } from '../services/wa-api';
 
+// ─── Shared domain types (minimal shapes used across queries) ────
+
+interface Admin {
+  id: number;
+  totalSent: number;
+  totalFailed: number;
+  isActive: boolean;
+}
+
+interface Group {
+  id: number;
+  isActive: boolean;
+  isTargeted: boolean;
+}
+
+interface Broadcast {
+  status: string;
+}
+
+interface Worker {
+  status: string;
+  openwaSessionStatus: string;
+}
+
 // ─── Query Keys ──────────────────────────────────────────────────
 
 export const waKeys = {
@@ -125,10 +149,10 @@ export function useSetGroupTargetsMutation() {
       // Snapshot previous value
       const previous = qc.getQueryData(waKeys.groups);
       // Optimistic update: set isTargeted based on the new groupIds
-      qc.setQueryData(waKeys.groups, (old: any[] | undefined) => {
+      qc.setQueryData(waKeys.groups, (old: Group[] | undefined) => {
         if (!old) return old;
         const targetSet = new Set(groupIds);
-        return old.map((g: any) => ({ ...g, isTargeted: targetSet.has(g.id) }));
+        return old.map(g => ({ ...g, isTargeted: targetSet.has(g.id) }));
       });
       return { previous };
     },
@@ -256,7 +280,7 @@ export function useSendAdMutation() {
 export function useUpdateAdMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => adApi.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => adApi.update(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
   });
 }
@@ -368,30 +392,32 @@ export function useWaDashboardStatsQuery() {
     queryKey: ['wa', 'dashboard-stats'],
     queryFn: async () => {
       const [admins, groups, broadcasts, workers, articles] = await Promise.all([
-        campaignApi.getAdmins().catch(() => []),
-        campaignApi.getGroups().catch(() => []),
-        campaignApi.getBroadcasts().catch(() => ({ data: [] as any[], total: 0, page: 1, limit: 25 })),
-        automationApi.getWorkers().catch(() => []),
-        scraperApi.getArticles().catch(() => []),
+        campaignApi.getAdmins().catch(() => [] as Admin[]),
+        campaignApi.getGroups().catch(() => [] as Group[]),
+        campaignApi.getBroadcasts().catch(() => ({ data: [] as Broadcast[], total: 0, page: 1, limit: 25 })),
+        automationApi.getWorkers().catch(() => [] as Worker[]),
+        scraperApi.getArticles().catch(() => [] as unknown[]),
       ]);
 
-      const bcList = broadcasts.data || [];
-      const totalSent = admins.reduce((sum: number, a: any) => sum + (a.totalSent || 0), 0);
-      const totalFailed = admins.reduce((sum: number, a: any) => sum + (a.totalFailed || 0), 0);
+      const bcList = (broadcasts.data || []) as Broadcast[];
+      const adminList = admins as Admin[];
+      const totalSent = adminList.reduce((sum, a) => sum + (a.totalSent || 0), 0);
+      const totalFailed = adminList.reduce((sum, a) => sum + (a.totalFailed || 0), 0);
       const totalAttempted = totalSent + totalFailed;
       const deliveryRate = totalAttempted > 0 ? Math.round((totalSent / totalAttempted) * 100) : 100;
-      const activeBroadcasts = bcList.filter((b: any) =>
+      const activeBroadcasts = bcList.filter(b =>
         b.status === 'in_progress' || b.status === 'pending'
       ).length;
-      const readySessions = workers.filter((w: any) => w.openwaSessionStatus === 'ready').length;
-      const totalSessions = workers.length;
+      const workerList = workers as Worker[];
+      const readySessions = workerList.filter(w => w.openwaSessionStatus === 'ready').length;
+      const totalSessions = workerList.length;
 
       return {
-        activeAdmins: admins.length,
-        activeGroups: groups.filter((g: any) => g.isActive).length,
+        activeAdmins: adminList.length,
+        activeGroups: (groups as Group[]).filter(g => g.isActive).length,
         totalBroadcasts: broadcasts.total,
         activeBroadcasts,
-        activeWorkers: workers.filter((w: any) => w.status === 'active').length,
+        activeWorkers: workerList.filter(w => w.status === 'active').length,
         scrapedArticles: articles.length,
         totalSent,
         totalFailed,

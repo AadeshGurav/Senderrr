@@ -42,7 +42,7 @@ export function Sessions() {
     ),
   });
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       setLoading(true);
       const data = await sessionApi.list();
@@ -52,12 +52,11 @@ export function Sessions() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     fetchSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchSessions]);
 
   const qrRefreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentSessionName = useRef<string>('');
@@ -83,7 +82,7 @@ export function Sessions() {
         fetchSessions();
       }
     }
-  }, []);
+  }, [fetchSessions]);
 
   useEffect(() => {
     if (qrData) {

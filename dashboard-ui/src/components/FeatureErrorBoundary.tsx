@@ -1,4 +1,4 @@
-import { Component, type ReactNode, type ErrorInfo } from 'react';
+import { Component, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { toUserMessage } from '../services/error-handler';
 
@@ -27,7 +27,7 @@ export class FeatureErrorBoundary extends Component<Props, State> {
     return { hasError: true, message: toUserMessage(error) };
   }
 
-  componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error) {
     console.error(`[FeatureErrorBoundary${this.props.name ? ` ${this.props.name}` : ''}]`, error.message);
   }
 

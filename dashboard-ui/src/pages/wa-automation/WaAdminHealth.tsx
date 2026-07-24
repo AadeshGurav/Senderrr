@@ -7,6 +7,28 @@ import { useToast } from '../../components/Toast';
 import { useWaWorkersQuery, useWaAdminsQuery } from '../../hooks/wa-queries';
 import { automationApi } from '../../services/wa-api';
 
+interface WaAdmin {
+  id: number;
+  label: string;
+  phoneNumber: string;
+  sessionsPerAdmin: number;
+  skipWarmup: boolean;
+  warmUpStartedAt: string | null;
+}
+
+interface WaWorker {
+  id: number;
+  adminId: number;
+  workerId: string;
+  status: string;
+  browserStatus: string;
+  totalSent: number;
+  totalFailed: number;
+  lastError: string | null;
+  openwaSessionId: string | null;
+  openwaSessionStatus: string | null;
+}
+
 const workerStatusVariant = (status: string) => {
   switch (status) {
     case 'active': return 'success' as const;
@@ -32,8 +54,9 @@ export default function WaAdminHealth() {
       } else {
         showError('No QR available', 'Session may already be connected');
       }
-    } catch (e: any) {
-      showError('QR error', e.message);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      showError('QR error', msg);
     }
   };
 
@@ -41,8 +64,9 @@ export default function WaAdminHealth() {
     try {
       const result = await automationApi.checkSession(sessionId);
       success(`Session ${sessionId}`, `Status: ${result.status}`);
-    } catch (e: any) {
-      showError('Check failed', e.message);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      showError('Check failed', msg);
     }
   };
 
@@ -69,8 +93,8 @@ export default function WaAdminHealth() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {admins.map((admin: any) => {
-            const adminWorkers = workers.filter((w: any) => w.adminId === admin.id);
+          {admins.map((admin: WaAdmin) => {
+            const adminWorkers = (workers as WaWorker[]).filter(w => w.adminId === admin.id);
             return (
               <Card key={admin.id}>
                 <CardBody>
@@ -97,7 +121,7 @@ export default function WaAdminHealth() {
                     </p>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {adminWorkers.map((w: any) => (
+                      {adminWorkers.map((w: WaWorker) => (
                         <div
                           key={w.id}
                           className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)]"

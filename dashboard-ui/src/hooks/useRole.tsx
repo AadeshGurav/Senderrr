@@ -32,6 +32,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useRole(): RoleContextType {
   const context = useContext(RoleContext);
   if (context === undefined) {

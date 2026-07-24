@@ -41,6 +41,16 @@ interface Admin {
   openwaSessionId: string | null;
 }
 
+interface AdminSession {
+  id: number;
+  adminId: number;
+  sessionIndex: number;
+  openwaSessionId: string;
+  openwaSessionStatus: string;
+  phone: string | null;
+  pushName: string | null;
+}
+
 const sessionStatusVariant = (status: string) => {
   switch (status) {
     case 'ready': return 'success' as const;
@@ -107,7 +117,7 @@ export default function WaAdmins() {
     try {
       await toggleMutate.mutateAsync(id);
       success('Admin updated', 'Status toggled');
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Something went wrong', toUserMessage(e));
     }
   }, [toggleMutate, success, showError]);
@@ -122,7 +132,7 @@ export default function WaAdmins() {
         await createSessionsMutate.mutateAsync(admin.id);
         setExpandedAdmin(admin.id);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Failed to create admin', toUserMessage(e));
     }
   };
@@ -132,7 +142,7 @@ export default function WaAdmins() {
       const result = await createSessionsMutate.mutateAsync(adminId);
       success('Sessions created', `${result.sessions.length} session(s) created for admin`);
       setExpandedAdmin(adminId);
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Failed to create sessions', toUserMessage(e));
     }
   };
@@ -145,7 +155,7 @@ export default function WaAdmins() {
     try {
       await startMutate.mutateAsync({ adminId, slot });
       // QR modal is opened by the useEffect above
-    } catch (e: any) {
+    } catch {
       // Error is handled by the useEffect above
     }
   };
@@ -154,7 +164,7 @@ export default function WaAdmins() {
     try {
       await stopMutate.mutateAsync({ adminId, slot });
       success('Session stopped');
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Something went wrong', toUserMessage(e));
     }
   };
@@ -163,7 +173,7 @@ export default function WaAdmins() {
     try {
       await deleteMutate.mutateAsync({ adminId, slot });
       success('Session deleted');
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Something went wrong', toUserMessage(e));
     }
   };
@@ -172,7 +182,7 @@ export default function WaAdmins() {
     try {
       await superAdminMutate.mutateAsync({ id, isSuperAdmin: !current });
       success(!current ? 'Super admin set' : 'Super admin removed');
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Something went wrong', toUserMessage(e));
     }
   };
@@ -181,7 +191,7 @@ export default function WaAdmins() {
     try {
       const result = await importGroupsMutate.mutateAsync({ adminId, slot });
       success('Groups imported', `${result.imported} new, ${result.skipped} already existed`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Failed to import groups', toUserMessage(e));
     }
   };
@@ -190,7 +200,7 @@ export default function WaAdmins() {
     try {
       const result = await importCommunitiesMutate.mutateAsync({ adminId, slot });
       success('Communities imported', `${result.imported} new, ${result.skipped} already existed`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       showError('Failed to import communities', toUserMessage(e));
     }
   };
@@ -214,10 +224,10 @@ export default function WaAdmins() {
       id: 'sessionStatus',
       header: 'Session',
       cell: ({ row }) => {
-        const adminSess = allSessions.filter((s: any) => s.adminId === row.original.id);
+        const adminSess = (allSessions as AdminSession[]).filter(s => s.adminId === row.original.id);
         if (adminSess.length === 0) return <Badge variant="neutral">No session</Badge>;
-        const allReady = adminSess.every((s: any) => s.openwaSessionStatus === 'ready');
-        const anyReady = adminSess.some((s: any) => s.openwaSessionStatus === 'ready');
+        const allReady = adminSess.every(s => s.openwaSessionStatus === 'ready');
+        const anyReady = adminSess.some(s => s.openwaSessionStatus === 'ready');
         if (allReady) return <Badge variant="success" dot>Connected</Badge>;
         if (anyReady) return <Badge variant="warning" dot>Partial</Badge>;
         return <Badge variant="info">{adminSess[0].openwaSessionStatus}</Badge>;
@@ -355,7 +365,7 @@ export default function WaAdmins() {
               </p>
             ) : (
               <div className="space-y-3">
-                {adminSessions.map((s: any) => {
+                {(adminSessions as AdminSession[]).map(s => {
                   const isReady = s.openwaSessionStatus === 'ready';
                   const isRunning = ['initializing', 'authenticating', 'qr_ready'].includes(s.openwaSessionStatus);
                   return (
