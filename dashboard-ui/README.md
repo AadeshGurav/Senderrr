@@ -1,10 +1,10 @@
-# OpenWA Dashboard
+# Senderrr Dashboard
 
 <p align="center">
   <img src="../docs/logo/Senderrr_logo.webp" alt="Senderrr Logo" width="120"/>
 </p>
 
-Modern web dashboard for managing OpenWA WhatsApp API Gateway sessions, webhooks, and infrastructure.
+Modern web dashboard for managing Senderrr WhatsApp API Gateway sessions, webhooks, and infrastructure.
 
 ## ✨ Features
 
@@ -86,4 +86,4 @@ VITE_API_URL=http://localhost:2785
 
 ## 📄 License
 
-MIT License - Part of the [OpenWA](https://github.com/rmyndharis/OpenWA) project.
+MIT License - Part of the [Senderrr](https://github.com/aadeshgurav/OpenWA) project.

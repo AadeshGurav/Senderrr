@@ -1,8 +1,7 @@
 import { EventEmitter } from 'events';
-import { Client, LocalAuth, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Client, RemoteAuth, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { DataSource } from 'typeorm';
 import * as qrcode from 'qrcode';
-import * as path from 'path';
-import * as fs from 'fs';
 import {
   IWhatsAppEngine,
   EngineStatus,
@@ -36,10 +35,11 @@ import {
   WwjsChannelData,
   GroupCreateResult,
 } from '../types/whatsapp-web-js.types';
+import { PostgresRemoteAuthStore } from '../stores/postgres-remote-auth.store';
 
 export interface WhatsAppWebJsConfig {
   sessionId: string;
-  sessionDataPath: string;
+  // sessionDataPath removed — RemoteAuth stores sessions in Postgres via PostgresRemoteAuthStore
   puppeteer?: {
     headless?: boolean;
     args?: string[];
@@ -59,7 +59,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private pushName: string | null = null;
   private callbacks: EngineEventCallbacks = {};
 
-  constructor(private readonly config: WhatsAppWebJsConfig) {
+  constructor(
+    private readonly config: WhatsAppWebJsConfig,
+    private readonly dataSource: DataSource,
+  ) {
     super();
   }
 
@@ -68,9 +71,6 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   async initialize(callbacks: EngineEventCallbacks): Promise<void> {
     this.callbacks = callbacks;
     this.setStatus(EngineStatus.INITIALIZING);
-
-    // Clean stale Chrome lockfiles before every init attempt
-    this.cleanChromeLockFiles();
 
     try {
       // Build puppeteer args, including proxy if configured
@@ -93,9 +93,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       }
 
       this.client = new Client({
-        authStrategy: new LocalAuth({
+        authStrategy: new RemoteAuth({
           clientId: this.config.sessionId,
-          dataPath: path.resolve(this.config.sessionDataPath),
+          store: new PostgresRemoteAuthStore(this.dataSource),
+          backupSyncIntervalMs: 300000, // 5-minute minimum required by whatsapp-web.js
         }),
         puppeteer: {
           headless: this.config.puppeteer?.headless ?? true,
@@ -1030,34 +1031,6 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private ensureReady(): void {
     if (this.status !== EngineStatus.READY || !this.client) {
       throw new Error('WhatsApp client is not ready');
-    }
-  }
-
-  /**
-   * Remove Chrome/Puppeteer lock files from the session's user data dir.
-   * On a container crash or SIGKILL, Chrome leaves SingletonLock files that
-   * prevent the next initialize() from starting a new browser instance.
-   */
-  private cleanChromeLockFiles(): void {
-    try {
-      const dataPath = path.resolve(this.config.sessionDataPath);
-      if (!fs.existsSync(dataPath)) return;
-
-      const entries = fs.readdirSync(dataPath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const dir = path.join(dataPath, entry.name);
-        for (const lock of ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'Singleton']) {
-          const lockPath = path.join(dir, lock);
-          try {
-            if (fs.existsSync(lockPath)) fs.rmSync(lockPath, { force: true });
-          } catch {
-            // Best effort — file may already be gone
-          }
-        }
-      }
-    } catch {
-      // Directory may not exist yet on first run
     }
   }
 }

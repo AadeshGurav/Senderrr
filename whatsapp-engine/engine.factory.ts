@@ -1,5 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { IWhatsAppEngine } from './interfaces/whatsapp-engine.interface';
 import { WhatsAppWebJsAdapter } from './adapters/whatsapp-web-js.adapter';
 import { PluginLoaderService, PluginType, IEnginePlugin, PluginManifest } from '@core/plugins';
@@ -21,6 +23,7 @@ export class EngineFactory implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly pluginLoader: PluginLoaderService,
+    @InjectDataSource('data') private readonly dataSource: DataSource,
   ) {
     this.engineType = this.configService.get<string>('engine.type') ?? 'whatsapp-web.js';
   }
@@ -78,27 +81,35 @@ export class EngineFactory implements OnModuleInit {
       return existing;
     }
 
-    // Try to get engine from plugin system
-    const enginePlugin = this.pluginLoader.getPlugin(this.engineType);
-
-    if (enginePlugin?.instance && this.isEnginePlugin(enginePlugin.instance)) {
-      const engine = enginePlugin.instance.createEngine({
-        sessionId: options.sessionId,
-        proxyUrl: options.proxyUrl,
-        proxyType: options.proxyType,
-      }) as IWhatsAppEngine;
-      this.engines.set(options.sessionId, engine);
-      return engine;
-    }
-
-    // Fallback to direct adapter creation (legacy support)
-    this.logger.warn(`Engine plugin ${this.engineType} not available, using fallback`, {
-      action: 'engine_fallback',
-    });
-
-    const engine = this.createFallbackEngine(options);
+    // Direct adapter creation with DataSource injection.
+    // The plugin system is bypassed here because whatsapp-web.js RemoteAuth
+    // requires a Postgres DataSource which the plugin interface doesn't carry.
+    // The plugin is still used for healthCheck() and getFeatures().
+    const engine = this.createDirectEngine(options);
     this.engines.set(options.sessionId, engine);
     return engine;
+  }
+
+  private createDirectEngine(options: EngineCreateOptions): IWhatsAppEngine {
+    return new WhatsAppWebJsAdapter(
+      {
+        sessionId: options.sessionId,
+        puppeteer: {
+          headless: this.configService.get<boolean>('engine.puppeteer.headless') ?? true,
+          args: this.configService.get<string[]>('engine.puppeteer.args') ?? [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+          ],
+        },
+        proxy: options.proxyUrl
+          ? {
+              url: options.proxyUrl,
+              type: options.proxyType ?? 'http',
+            }
+          : undefined,
+      },
+      this.dataSource,
+    );
   }
 
   private isEnginePlugin(instance: unknown): instance is IEnginePlugin {
@@ -110,24 +121,6 @@ export class EngineFactory implements OnModuleInit {
       'createEngine' in instance &&
       typeof (instance as { createEngine: unknown }).createEngine === 'function'
     );
-  }
-
-  private createFallbackEngine(options: EngineCreateOptions): IWhatsAppEngine {
-    // Legacy direct creation (fallback)
-    return new WhatsAppWebJsAdapter({
-      sessionId: options.sessionId,
-      sessionDataPath: this.configService.get<string>('engine.sessionDataPath') ?? './data/sessions',
-      puppeteer: {
-        headless: this.configService.get<boolean>('engine.puppeteer.headless') ?? true,
-        args: this.configService.get<string[]>('engine.puppeteer.args') ?? ['--no-sandbox', '--disable-setuid-sandbox'],
-      },
-      proxy: options.proxyUrl
-        ? {
-            url: options.proxyUrl,
-            type: options.proxyType ?? 'http',
-          }
-        : undefined,
-    });
   }
 
   // ============================================================================

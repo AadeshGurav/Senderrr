@@ -235,7 +235,7 @@ async function bootstrap() {
   console.log(`\n  🚀 Senderrr is running on: http://localhost:${port}`);
   console.log(`  📚 API docs: http://localhost:${port}/api/docs`);
   console.log(`  👤 Dashboard: http://localhost:${port}/wa/dashboard`);
-  console.log(`  🔧 Admin: http://localhost:${port}/_openwa\n`);
+  console.log(`  🔧 Admin: http://localhost:${port}/_senderrr\n`);
 }
 
 // Global error handlers to prevent Puppeteer/WhatsApp-web.js crashes from killing the process

@@ -1,5 +1,5 @@
 #!/bin/bash
-# OpenWA Smart Orchestration Script
+# Senderrr Smart Orchestration Script
 # Reads .env and activates appropriate Docker profiles
 
 set -e
@@ -103,7 +103,7 @@ validate_engine() {
 
 # Start OpenWA
 cmd_start() {
-    log_info "Starting OpenWA..."
+    log_info "Starting Senderrr..."
     load_env
     validate_engine
 
@@ -117,10 +117,10 @@ cmd_start() {
     docker compose $profiles up -d
 
     echo ""
-    log_success "OpenWA started successfully!"
+    log_success "Senderrr started successfully!"
     echo ""
     log_info "Dashboard: http://localhost:${DASHBOARD_PORT:-2886}"
-    log_info "API: http://localhost:${API_PORT:-2785}"
+    log_info "API: http://localhost:${API_PORT:-10000}"
 }
 
 # Stop OpenWA
@@ -139,7 +139,7 @@ cmd_restart() {
 
 # Show status
 cmd_status() {
-    log_info "OpenWA container status:"
+    log_info "Senderrr container status:"
     echo ""
     cd "$PROJECT_DIR"
     docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
@@ -147,7 +147,7 @@ cmd_status() {
 
 # Show logs
 cmd_logs() {
-    local service="${1:-openwa-api}"
+    local service="${1:-senderrr}"
     local lines="${2:-100}"
     cd "$PROJECT_DIR"
     docker compose logs -f --tail="$lines" "$service"
@@ -155,7 +155,7 @@ cmd_logs() {
 
 # Build images
 cmd_build() {
-    log_info "Building OpenWA images..."
+    log_info "Building Senderrr images..."
     load_env
     local profiles=$(get_profiles)
     cd "$PROJECT_DIR"
@@ -165,7 +165,7 @@ cmd_build() {
 
 # Update (pull + build + restart)
 cmd_update() {
-    log_info "Updating OpenWA..."
+    log_info "Updating Senderrr..."
     cd "$PROJECT_DIR"
     git pull
     cmd_build

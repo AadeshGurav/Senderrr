@@ -8,10 +8,10 @@ services:
     container_name: senderrr
     restart: unless-stopped
     ports:
-      - '127.0.0.1:2785:2785'
+      - '127.0.0.1:10000:10000'
     environment:
       - NODE_ENV=${NODE_ENV:-production}
-      - PORT=2785
+      - PORT=10000
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ENGINE_TYPE=${ENGINE_TYPE:-whatsapp-web.js}
       - SESSION_DATA_PATH=/app/data/sessions
@@ -32,28 +32,26 @@ services:
     volumes:
       - senderrr-data:/app/data
     healthcheck:
-      test: ['CMD', 'node', '-e', "require('http').get('http://localhost:2785/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      test: [ 'CMD', 'node', '-e', "require('http').get('http://localhost:10000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-
   # ngrok tunnel for webhook testing (only starts when NGROK_AUTH_TOKEN is set)
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: senderrr-ngrok
-    profiles:
-      - ngrok
-    ports:
-      - "4040:4040"
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTH_TOKEN:-}
-    command: http senderrr:2785 ${NGROK_URL:+--url=}${NGROK_URL}
-    depends_on:
-      - senderrr
-    restart: unless-stopped
+  # ngrok:
+  #   image: ngrok/ngrok:latest
+  #   container_name: senderrr-ngrok
+  #   profiles:
+  #     - ngrok
+  #   ports:
+  #     - "4040:4040"
+  #   environment:
+  #     NGROK_AUTHTOKEN: ${NGROK_AUTH_TOKEN:-}
+  #   command: http senderrr:10000 ${NGROK_URL:+--url=}${NGROK_URL}
+  #   depends_on:
+  #     - senderrr
+  #   restart: unless-stopped
 
 volumes:
   senderrr-data:
-    external: true
-    name: openwa_openwa-data
+    name: senderrr_senderrr-data

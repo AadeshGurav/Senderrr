@@ -1,17 +1,14 @@
 /**
  * WhatsApp-web.js Engine Plugin
- * Built-in engine plugin that wraps the whatsapp-web.js library
+ * Built-in engine plugin that wraps the whatsapp-web.js library.
+ *
+ * Engine creation is handled by EngineFactory directly (bypassing this plugin)
+ * because RemoteAuth requires a Postgres DataSource which the plugin interface
+ * cannot carry. This plugin is still used for healthCheck() and getFeatures().
  */
 
 import { PluginContext, PluginType, IEnginePlugin } from '@core/plugins';
 import { IWhatsAppEngine } from '@whatsapp-engine/interfaces/whatsapp-engine.interface';
-import { WhatsAppWebJsAdapter } from '@whatsapp-engine/adapters/whatsapp-web-js.adapter';
-
-export interface WhatsAppWebJsConfig {
-  sessionDataPath?: string;
-  headless?: boolean;
-  puppeteerArgs?: string[];
-}
 
 export class WhatsAppWebJsPlugin implements IEnginePlugin {
   type = PluginType.ENGINE as const;
@@ -33,32 +30,12 @@ export class WhatsAppWebJsPlugin implements IEnginePlugin {
     return Promise.resolve();
   }
 
-  createEngine(config: Record<string, unknown>): IWhatsAppEngine {
-    const sessionId = config.sessionId as string;
-    const sessionDataPath = (this.context?.config.sessionDataPath as string) ?? './data/sessions';
-    const headless = (this.context?.config.headless as boolean) ?? true;
-    const puppeteerArgs = (this.context?.config.puppeteerArgs as string[]) ?? [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-    ];
-
-    const proxyUrl = config.proxyUrl as string | undefined;
-    const proxyType = config.proxyType as 'http' | 'https' | 'socks4' | 'socks5' | undefined;
-
-    return new WhatsAppWebJsAdapter({
-      sessionId,
-      sessionDataPath,
-      puppeteer: {
-        headless,
-        args: puppeteerArgs,
-      },
-      proxy: proxyUrl
-        ? {
-            url: proxyUrl,
-            type: proxyType ?? 'http',
-          }
-        : undefined,
-    });
+  createEngine(_config: Record<string, unknown>): IWhatsAppEngine {
+    // Engine creation is delegated to EngineFactory which injects the DataSource
+    // required by RemoteAuth. This method exists only to satisfy IEnginePlugin.
+    throw new Error(
+      'Engine creation is handled by EngineFactory — do not call createEngine directly',
+    );
   }
 
   getFeatures(): string[] {

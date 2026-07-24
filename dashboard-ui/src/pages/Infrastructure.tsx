@@ -135,7 +135,7 @@ export function Infrastructure() {
   const [previousProfiles, setPreviousProfiles] = useState<string[]>([]);
 
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
-    port: '2785',
+    port: '10000',
     nodeEnv: 'development',
     domain: 'localhost',
     dashboardPort: '2886',
@@ -758,7 +758,7 @@ export function Infrastructure() {
                     </button>
                     <button
                       className="btn-outline"
-                      onClick={() => window.open('http://localhost:2785/api/admin/queues', '_blank')}
+                      onClick={() => window.open(`http://localhost:${serverConfig.port}/api/admin/queues`, '_blank')}
                     >
                       <ExternalLink size={16} />
                       {t('infrastructure.redis.viewBullMq')}

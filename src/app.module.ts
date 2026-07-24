@@ -89,7 +89,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
             port: configService.get<number>('dataDatabase.port'),
             username: configService.get<string>('dataDatabase.username'),
             password: configService.get<string>('dataDatabase.password'),
-            database: 'openwa',
+            database: 'senderrr',
             // Never auto-sync Postgres in production; rely on migrations.
             synchronize: configService.get<boolean>('dataDatabase.synchronize', false),
             migrationsRun: true,
@@ -107,7 +107,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
         return {
           ...baseConfig,
           type: 'sqlite' as const,
-          database: configService.get<string>('dataDatabase.database', './data/openwa.sqlite'),
+          database: configService.get<string>('dataDatabase.database', './data/senderrr.sqlite'),
           synchronize: configService.get<boolean>('dataDatabase.synchronize', true),
           migrationsRun: !configService.get<boolean>('dataDatabase.synchronize', true),
         };

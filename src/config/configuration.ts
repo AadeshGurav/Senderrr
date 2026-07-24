@@ -30,7 +30,7 @@ export default () => ({
   dataDatabase: {
     type: process.env.DATABASE_TYPE || 'sqlite',
     // SQLite path (used when type is sqlite)
-    database: process.env.DATABASE_NAME || './data/openwa.sqlite',
+    database: process.env.DATABASE_NAME || './data/senderrr.sqlite',
     // PostgreSQL/MySQL connection (used when type is postgres/mysql)
     host: process.env.DATABASE_HOST || 'localhost',
     port: parseInt(process.env.DATABASE_PORT || '5432', 10),
@@ -52,7 +52,9 @@ export default () => ({
       headless: process.env.PUPPETEER_HEADLESS !== 'false',
       args: (process.env.PUPPETEER_ARGS || '--no-sandbox,--disable-setuid-sandbox').split(','),
     },
-    sessionDataPath: process.env.SESSION_DATA_PATH || './data/sessions',
+    // sessionDataPath removed — RemoteAuth stores WhatsApp sessions in Postgres via
+    // PostgresRemoteAuthStore. Keep SESSION_DATA_PATH env var for disk-based cleanup
+    // (Chrome lock files) which operates on the process level via pkill.
   },
 
   // Webhook configuration

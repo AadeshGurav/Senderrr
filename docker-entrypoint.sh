@@ -12,4 +12,4 @@ rm -f /app/data/sessions/.com.google.Chrome.* 2>/dev/null || true
 pkill -f "chrome.*--disable-setuid-sandbox" 2>/dev/null || true
 
 # Start the application
-exec node /app/dist/main
+exec node /app/dist/src/main

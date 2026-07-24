@@ -91,7 +91,7 @@ function WaApp() {
   );
 }
 
-// ─── OpenWA Admin App (at /_openwa/*) ────────────────────────────
+// ─── Senderrr Admin App (at /_senderrr/*) ──────────────────────────
 
 function OpenwaAppContent() {
   const savedKey = sessionStorage.getItem('openwa_api_key');
@@ -164,7 +164,7 @@ function OpenwaAppContent() {
 
 function OpenwaApp() {
   return (
-    <BrowserRouter basename="/_openwa">
+    <BrowserRouter basename="/_senderrr">
       <QueryClientProvider client={queryClient}>
         <RoleProvider>
           <OpenwaAppContent />
@@ -180,7 +180,7 @@ function AppContent() {
   const path = window.location.pathname;
 
   // WA Automation is the default app
-  if (path.startsWith('/_openwa')) {
+  if (path.startsWith('/_senderrr')) {
     return <OpenwaApp />;
   }
   // Everything else (including / and /wa/*) goes to WA_Automation

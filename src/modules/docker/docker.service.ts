@@ -105,7 +105,7 @@ export class DockerService implements OnModuleInit {
         .filter(c => {
           // Filter by OpenWA labels or name prefix
           const labels = c.Labels || {};
-          return labels['com.openwa.service'] || c.Names?.some(n => n.startsWith('/openwa-'));
+          return labels['com.senderrr.service'] || c.Names?.some(n => n.startsWith('/senderrr-'));
         })
         .map(c => ({
           id: c.Id.substring(0, 12),
@@ -132,7 +132,7 @@ export class DockerService implements OnModuleInit {
       const containers = await this.docker.listContainers({
         all: true,
         filters: {
-          label: [`com.openwa.service=${service}`],
+          label: [`com.senderrr.service=${service}`],
         },
       });
 
@@ -142,7 +142,7 @@ export class DockerService implements OnModuleInit {
 
       // Fallback: try by name
       const allContainers = await this.docker.listContainers({ all: true });
-      const match = allContainers.find(c => c.Names?.some(n => n.includes(`openwa-${service}`) || n.includes(service)));
+      const match = allContainers.find(c => c.Names?.some(n => n.includes(`senderrr-${service}`) || n.includes(service)));
 
       if (match) {
         return this.docker.getContainer(match.Id);
@@ -173,10 +173,10 @@ export class DockerService implements OnModuleInit {
     const specs: Record<string, ReturnType<typeof this.getContainerSpec>> = {
       redis: {
         image: 'redis:7-alpine',
-        name: 'openwa-redis',
+        name: 'senderrr-redis',
         alias: 'redis', // DNS alias for resolution
         cmd: ['redis-server', '--appendonly', 'yes'],
-        volumes: [{ name: 'openwa_redis-data', path: '/data' }],
+        volumes: [{ name: 'senderrr_redis-data', path: '/data' }],
         healthcheck: {
           test: ['CMD', 'redis-cli', 'ping'],
           interval: 5000000000, // 5s in nanoseconds
@@ -184,38 +184,38 @@ export class DockerService implements OnModuleInit {
           retries: 5,
         },
         labels: {
-          'com.openwa.service': 'cache',
-          'com.openwa.builtin': 'true',
+          'com.senderrr.service': 'cache',
+          'com.senderrr.builtin': 'true',
         },
       },
       postgres: {
         image: 'postgres:16-alpine',
-        name: 'openwa-postgres',
+        name: 'senderrr-postgres',
         alias: 'postgres',
         // Use hardcoded defaults for built-in container (don't inherit SQLite paths)
-        env: ['POSTGRES_USER=openwa', 'POSTGRES_PASSWORD=openwa', 'POSTGRES_DB=openwa'],
-        volumes: [{ name: 'openwa_postgres-data', path: '/var/lib/postgresql/data' }],
+        env: ['POSTGRES_USER=senderrr', 'POSTGRES_PASSWORD=senderrr', 'POSTGRES_DB=senderrr'],
+        volumes: [{ name: 'senderrr_postgres-data', path: '/var/lib/postgresql/data' }],
         healthcheck: {
-          test: ['CMD-SHELL', 'pg_isready -U openwa'],
+          test: ['CMD-SHELL', 'pg_isready -U senderrr'],
           interval: 5000000000,
           timeout: 3000000000,
           retries: 5,
         },
         labels: {
-          'com.openwa.service': 'database',
-          'com.openwa.builtin': 'true',
+          'com.senderrr.service': 'database',
+          'com.senderrr.builtin': 'true',
         },
       },
       minio: {
         image: 'minio/minio',
-        name: 'openwa-minio',
+        name: 'senderrr-minio',
         alias: 'minio',
         cmd: ['server', '/data', '--console-address', ':9001'],
         env: [
           `MINIO_ROOT_USER=${process.env.S3_ACCESS_KEY || 'minioadmin'}`,
           `MINIO_ROOT_PASSWORD=${process.env.S3_SECRET_KEY || 'minioadmin'}`,
         ],
-        volumes: [{ name: 'openwa_minio-data', path: '/data' }],
+        volumes: [{ name: 'senderrr_minio-data', path: '/data' }],
         ports: [
           { container: 9000, host: 9000 },
           { container: 9001, host: 9001 },
@@ -227,8 +227,8 @@ export class DockerService implements OnModuleInit {
           retries: 3,
         },
         labels: {
-          'com.openwa.service': 'storage',
-          'com.openwa.builtin': 'true',
+          'com.senderrr.service': 'storage',
+          'com.senderrr.builtin': 'true',
         },
       },
     };
@@ -299,7 +299,7 @@ export class DockerService implements OnModuleInit {
         Env: spec.env,
         Labels: spec.labels,
         HostConfig: {
-          NetworkMode: 'openwa-network',
+          NetworkMode: 'senderrr-network',
           RestartPolicy: { Name: 'unless-stopped' },
           Binds: spec.volumes?.map(v => `${v.name}:${v.path}`),
           PortBindings: spec.ports?.reduce<Record<string, { HostIp: string; HostPort: string }[]>>((acc, p) => {
@@ -317,7 +317,7 @@ export class DockerService implements OnModuleInit {
           : undefined,
         NetworkingConfig: {
           EndpointsConfig: {
-            'openwa-network': {
+            'senderrr-network': {
               Aliases: [spec.alias, profile], // Add DNS aliases for network resolution
             },
           },

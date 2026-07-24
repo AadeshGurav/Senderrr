@@ -231,9 +231,9 @@ export class InfraController {
             // Built-in PostgreSQL - use container name as host
             envLines.push('DATABASE_HOST=postgres');
             envLines.push('DATABASE_PORT=5432');
-            envLines.push('DATABASE_USERNAME=openwa');
-            envLines.push('DATABASE_PASSWORD=openwa');
-            envLines.push('DATABASE_NAME=openwa');
+            envLines.push('DATABASE_USERNAME=senderrr');
+            envLines.push('DATABASE_PASSWORD=senderrr');
+            envLines.push('DATABASE_NAME=senderrr');
             profiles.push('postgres');
           } else {
             // External PostgreSQL
@@ -241,7 +241,7 @@ export class InfraController {
             envLines.push(`DATABASE_PORT=${config.database.port || '5432'}`);
             envLines.push(`DATABASE_USERNAME=${config.database.username || 'postgres'}`);
             envLines.push(`DATABASE_PASSWORD=${config.database.password || ''}`);
-            envLines.push(`DATABASE_NAME=${config.database.database || 'openwa'}`);
+            envLines.push(`DATABASE_NAME=${config.database.database || 'senderrr'}`);
           }
           envLines.push(`DATABASE_POOL_SIZE=${config.database.poolSize || 10}`);
           envLines.push(`DATABASE_SSL=${config.database.sslEnabled ? 'true' : 'false'}`);
@@ -284,7 +284,7 @@ export class InfraController {
             envLines.push('S3_ENDPOINT=http://minio:9000');
             envLines.push('S3_ACCESS_KEY=minioadmin');
             envLines.push('S3_SECRET_KEY=minioadmin');
-            envLines.push('S3_BUCKET=openwa');
+            envLines.push('S3_BUCKET=senderrr');
             envLines.push('S3_REGION=us-east-1');
             profiles.push('minio');
           } else {

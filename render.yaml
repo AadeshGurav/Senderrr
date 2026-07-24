@@ -1,0 +1,98 @@
+# Render Blueprint — Senderrr on free web service tier
+#
+# Prerequisites:
+#   1. Create a free Render PostgreSQL database first (Render Dashboard → New → PostgreSQL).
+#      Copy the Internal Connection String (not the external one).
+#   2. Push this file to your GitHub repo, then connect the repo in Render Dashboard → Blueprints.
+#   3. Set the required secrets in Render (WA_JWT_SECRET, API_KEY) — they are not committed here.
+#
+# Notes on free tier constraints:
+#   - Ephemeral filesystem: no local disk persists across restarts.
+#   - 15-minute idle spin-down: keep-alive ping required (see Task 1 in senderrr-render-deployment-tasks.md).
+#   - Postgres free plan expires 30 days after creation — set a reminder.
+#   - RemoteAuth backupSyncIntervalMs has a 5-minute floor — changes within 5 min of restart may be lost.
+
+services:
+  - name: senderrr
+    github:
+      repo: AadeshGurav/Senderrr
+      branch: main
+      automaticDeploy: true
+    plan: free
+    regions:
+      - oregon
+    envVars:
+      # Application
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: 0.0.0.0
+
+      # Database — connect to Render Postgres (created manually before deploy)
+      - key: DATABASE_TYPE
+        value: postgres
+      - key: DATABASE_NAME
+        value: senderrr
+      # DATABASE_URL is set manually in Render dashboard using the Postgres internal connection string
+      # (Render prompts for it when connecting the blueprint via fromDatabase below)
+      - fromDatabase:
+          name: senderrr-db
+          property: host
+        sync: false
+      - fromDatabase:
+          name: senderrr-db
+          property: port
+        sync: false
+      - fromDatabase:
+          name: senderrr-db
+          property: user
+        sync: false
+      - fromDatabase:
+          name: senderrr-db
+          property: password
+        sync: false
+      - fromDatabase:
+          name: senderrr-db
+          property: database
+        sync: false
+
+      # Security secrets — generate unique values in Render dashboard
+      - key: WA_JWT_SECRET
+        generateValue: true
+      - key: API_KEY
+        generateValue: true
+
+      # Puppeteer — use system Chromium installed in Dockerfile
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/chromium
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "true"
+      - key: PUPPETEER_ARGS
+        value: --no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+      - key: PUPPETEER_HEADLESS
+        value: "true"
+
+      # Keep-alive — internal timer is NOT enough to prevent Render spin-down
+      # (Render spin-down is based on external HTTP requests, not internal process activity).
+      # A cron-job.org ping to the public URL is also required. See Task 1 in senderrr-render-deployment-tasks.md.
+      - key: KEEP_ALIVE_ENABLED
+        value: "true"
+      - key: KEEP_ALIVE_INTERVAL_MS
+        value: "420000"
+
+      # Storage — local disk is wiped on restart (media not persisted on free tier)
+      - key: STORAGE_TYPE
+        value: local
+      - key: STORAGE_LOCAL_PATH
+        value: /app/data/media
+
+      # Queue — disabled on free tier (Redis not available)
+      - key: QUEUE_ENABLED
+        value: "false"
+      - key: CACHE_ENABLED
+        value: "false"
+
+    healthCheckPath: /api/health/live
+    dockerfilePath: ./Dockerfile

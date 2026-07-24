@@ -46,10 +46,10 @@ COPY --from=builder /app/dashboard-ui/dist ./dashboard-ui/dist
 # Create data directories
 RUN mkdir -p ./data/sessions ./data/media
 
-EXPOSE 2785
+EXPOSE 10000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:2785/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+    CMD node -e "require('http').get('http://localhost:10000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
 
 # Startup script cleans Chrome locks then starts app
 COPY docker-entrypoint.sh /docker-entrypoint.sh

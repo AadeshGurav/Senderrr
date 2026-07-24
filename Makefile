@@ -27,10 +27,10 @@ setup: _check-deps build _start  ## Full setup - build & start everything
 	@echo "   All set! Everything is running."
 	@echo "  ================================================="
 	@echo ""
-	@echo "   Senderrr Server:  http://localhost:2785"
-	@echo "   Dashboard:        http://localhost:2785/ (or /wa/dashboard)"
-	@echo "   API Docs:         http://localhost:2785/api/docs"
-	@echo "   Queue UI:         http://localhost:2785/api/admin/queues"
+	@echo "   Senderrr Server:  http://localhost:10000"
+	@echo "   Dashboard:        http://localhost:10000/ (or /wa/dashboard)"
+	@echo "   API Docs:         http://localhost:10000/api/docs"
+	@echo "   Queue UI:         http://localhost:10000/api/admin/queues"
 	$(if $(_ngrok), @echo "   Ngrok Tunnel:    http://localhost:4040 (dashboard)",)
 	@echo ""
 	$(if $(_ngrok), @echo "   🌐  Ngrok tunnel active — webhooks reachable via ngrok URL",)
@@ -68,19 +68,19 @@ doctor:  ## Diagnose & auto-repair
 		echo "  OK  Container running"; \
 	fi
 	@echo "  [3/3] Senderrr health ..."
-	@if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
+	@if curl -sf http://localhost:10000/api/health >/dev/null 2>&1; then \
 		echo "  OK  Senderrr healthy"; \
 	else \
 		echo "  FIX  Senderrr not responding — restarting ..."; \
 		docker compose $(_ngrok) restart; \
 		for i in $$(seq 1 30); do \
-			if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
+			if curl -sf http://localhost:10000/api/health >/dev/null 2>&1; then \
 				echo "  OK  Senderrr recovered"; break; \
 			fi; sleep 2; \
 		done; \
 	fi
-	@echo ""; echo "  Senderrr Server:  http://localhost:2785"
-	@echo "   Dashboard:       http://localhost:2785/"
+	@echo ""; echo "  Senderrr Server:  http://localhost:10000"
+	@echo "   Dashboard:       http://localhost:10000/"
 	@echo "   Login: admin / admin"
 
 # ─── Internal helpers ──────────────────────────────────────────────
@@ -98,7 +98,7 @@ _start:
 	fi
 	@echo "  Waiting for Senderrr ..."
 	@for i in $$(seq 1 60); do \
-		if curl -sf http://localhost:2785/api/health >/dev/null 2>&1; then \
+		if curl -sf http://localhost:10000/api/health >/dev/null 2>&1; then \
 			echo "  OK  Senderrr ready"; \
 			break; \
 		fi; \
