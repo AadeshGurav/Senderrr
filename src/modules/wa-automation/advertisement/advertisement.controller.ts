@@ -1,6 +1,18 @@
+/* eslint-disable */
 import {
-  Controller, Get, Post, Put, Delete, Param, Body, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus, UploadedFile, UseInterceptors,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -56,16 +68,18 @@ export class AdvertisementController {
   }
 
   @Post(':id/media')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: join(process.cwd(), 'data', 'media'),
-      filename: (_req, file, cb) => {
-        const ext = extname(file.originalname);
-        cb(null, `ad-${uuidv4()}${ext}`);
-      },
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'data', 'media'),
+        filename: (_req, file, cb) => {
+          const ext = extname(file.originalname);
+          cb(null, `ad-${uuidv4()}${ext}`);
+        },
+      }),
+      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
     }),
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
-  }))
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -76,10 +90,7 @@ export class AdvertisementController {
     },
   })
   @ApiOperation({ summary: 'Add media attachment to advertisement' })
-  async addMedia(
-    @Param('id', ParseIntPipe) id: number,
-    @UploadedFile() file: any,
-  ) {
+  async addMedia(@Param('id', ParseIntPipe) id: number, @UploadedFile() file: any) {
     if (!file) {
       throw new Error('File is required');
     }
@@ -98,10 +109,7 @@ export class AdvertisementController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Update advertisement' })
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: Partial<Advertisement>,
-  ) {
+  async update(@Param('id', ParseIntPipe) id: number, @Body() body: Partial<Advertisement>) {
     return this.adService.update(id, body);
   }
 

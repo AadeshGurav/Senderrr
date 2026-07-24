@@ -12,11 +12,10 @@ import { CampaignModule } from '../campaign/campaign.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      AdvertisementEntity, MediaAttachment,
-      WhatsAppGroup, WhatsAppCommunity,
-      BroadcastEvent, MessageTask,
-    ], 'data'),
+    TypeOrmModule.forFeature(
+      [AdvertisementEntity, MediaAttachment, WhatsAppGroup, WhatsAppCommunity, BroadcastEvent, MessageTask],
+      'data',
+    ),
     CampaignModule,
   ],
   controllers: [AdvertisementController],

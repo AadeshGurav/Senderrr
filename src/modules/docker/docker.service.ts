@@ -142,7 +142,9 @@ export class DockerService implements OnModuleInit {
 
       // Fallback: try by name
       const allContainers = await this.docker.listContainers({ all: true });
-      const match = allContainers.find(c => c.Names?.some(n => n.includes(`senderrr-${service}`) || n.includes(service)));
+      const match = allContainers.find(c =>
+        c.Names?.some(n => n.includes(`senderrr-${service}`) || n.includes(service)),
+      );
 
       if (match) {
         return this.docker.getContainer(match.Id);

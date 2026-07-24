@@ -52,27 +52,36 @@ export class TemplateRendererService {
     const now = new Date();
 
     return text
-      .replace(/\{\{current_date\}\}/g, now.toLocaleDateString('en-IN', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }))
-      .replace(/\{\{current_time\}\}/g, now.toLocaleTimeString('en-IN', {
-        timeZone: tz,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      }))
-      .replace(/\{\{current_datetime\}\}/g, now.toLocaleString('en-IN', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      }))
+      .replace(
+        /\{\{current_date\}\}/g,
+        now.toLocaleDateString('en-IN', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }),
+      )
+      .replace(
+        /\{\{current_time\}\}/g,
+        now.toLocaleTimeString('en-IN', {
+          timeZone: tz,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
+      )
+      .replace(
+        /\{\{current_datetime\}\}/g,
+        now.toLocaleString('en-IN', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
+      )
       .replace(/\{\{current_timestamp\}\}/g, now.getTime().toString());
   }
 }

@@ -12,17 +12,13 @@ const HASH_DIGEST = 'sha512';
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(SALT_LENGTH).toString('hex');
-  const hash = crypto
-    .pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST)
-    .toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST).toString('hex');
   return `${salt}:${hash}`;
 }
 
 function verifyPassword(password: string, stored: string): boolean {
   const [salt, hash] = stored.split(':');
-  const verify = crypto
-    .pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST)
-    .toString('hex');
+  const verify = crypto.pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST).toString('hex');
   return verify === hash;
 }
 
@@ -47,7 +43,10 @@ export class WaAuthService implements OnModuleInit {
     }
   }
 
-  async login(username: string, password: string): Promise<{ token: string; user: { id: number; username: string; role: string } }> {
+  async login(
+    username: string,
+    password: string,
+  ): Promise<{ token: string; user: { id: number; username: string; role: string } }> {
     const user = await this.userRepo.findOne({ where: { username } });
     if (!user || !verifyPassword(password, user.passwordHash)) {
       throw new UnauthorizedException('Invalid credentials');

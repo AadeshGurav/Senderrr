@@ -26,7 +26,7 @@ export class AttemptTrackerService {
     await this.taskRepo.save(task);
 
     const attempt = this.attemptRepo.create({
-      messageTask: { id: taskId } as any,
+      messageTask: { id: taskId },
       attemptNumber: task.attemptCount,
       status: 'in_progress',
     });

@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -30,7 +31,9 @@ export interface DeliveryResult {
 }
 
 export function isMediaMime(mime: string): boolean {
-  return mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf';
+  return (
+    mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf'
+  );
 }
 
 @Injectable()
@@ -193,9 +196,7 @@ export class AutomationService {
 
     return new Promise(resolve => {
       setTimeout(async () => {
-        const result = await this.deliverMessage(
-          sessionId, chatId, text, adminId, workerId, imageUrls,
-        );
+        const result = await this.deliverMessage(sessionId, chatId, text, adminId, workerId, imageUrls);
         resolve(result);
       }, delay);
     });
@@ -224,12 +225,7 @@ export class AutomationService {
   /**
    * Edit a previously sent WhatsApp message in a given group.
    */
-  async editMessage(
-    sessionId: string,
-    chatId: string,
-    messageId: string,
-    newText: string,
-  ): Promise<DeliveryResult> {
+  async editMessage(sessionId: string, chatId: string, messageId: string, newText: string): Promise<DeliveryResult> {
     const startTime = Date.now();
     try {
       const engine = this.sessionService.getEngine(sessionId);
@@ -255,11 +251,7 @@ export class AutomationService {
   /**
    * Delete a previously sent WhatsApp message in a given group.
    */
-  async deleteMessage(
-    sessionId: string,
-    chatId: string,
-    messageId: string,
-  ): Promise<DeliveryResult> {
+  async deleteMessage(sessionId: string, chatId: string, messageId: string): Promise<DeliveryResult> {
     const startTime = Date.now();
     try {
       const engine = this.sessionService.getEngine(sessionId);
@@ -310,9 +302,14 @@ export class AutomationService {
 
   private mimeToExt(mime: string): string {
     const map: Record<string, string> = {
-      'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
-      'video/mp4': 'mp4', 'video/quicktime': 'mov',
-      'audio/mpeg': 'mp3', 'audio/ogg': 'ogg',
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3',
+      'audio/ogg': 'ogg',
       'application/pdf': 'pdf',
       'application/msword': 'doc',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',

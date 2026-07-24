@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 

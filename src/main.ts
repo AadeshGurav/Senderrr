@@ -79,13 +79,10 @@ function cleanChromeLocks(sessionDataPath: string): void {
     }
     // Also kill any orphaned Chrome processes from a previous run
     try {
-      try {
-        require('child_process').execSync('pkill -f "chrome.*--disable-setuid-sandbox" 2>/dev/null || true');
-      } catch {
-        // pkill not available — ignore
-      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      execSync('pkill -f "chrome.*--disable-setuid-sandbox" 2>/dev/null || true');
     } catch {
-      // pkill not available on all systems, ignore
+      // pkill not available — ignore
     }
   } catch {
     // Directory might not be accessible yet
@@ -110,7 +107,9 @@ async function bootstrap() {
     // shutdown hook sees isInitialized=false and skips destroy() gracefully.
     for (const token of ['mainDataSource', 'dataDataSource']) {
       try {
-        const ds = app.get(token);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const ds = app.get<any>(token);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         if (ds?.isInitialized) await ds.destroy();
       } catch {
         // DataSource wasn't available — nothing to clean up.
@@ -219,16 +218,18 @@ async function bootstrap() {
   const port = process.env.PORT || 2785;
 
   // Kill any previous process on the port to avoid EADDRINUSE
-  const { execSync } = require('child_process');
   try {
-    const pid = execSync(`lsof -ti:${port}`, { encoding: 'utf8', timeout: 3000 }).trim();
+    const pidBuf = execSync(`lsof -ti:${port}`, { timeout: 3000 });
+    const pid = pidBuf ? pidBuf.toString().trim() : '';
     if (pid) {
       process.kill(parseInt(pid, 10), 'SIGKILL');
       console.log(`[Bootstrap] Killed previous process ${pid} on port ${port}`);
       // Give the OS a moment to release the port
       await new Promise(r => setTimeout(r, 500));
     }
-  } catch { /* no process on port — good */ }
+  } catch {
+    /* no process on port — good */
+  }
 
   await app.listen(port);
 
@@ -239,10 +240,10 @@ async function bootstrap() {
 }
 
 // Global error handlers to prevent Puppeteer/WhatsApp-web.js crashes from killing the process
-process.on('unhandledRejection', (reason) => {
+process.on('unhandledRejection', reason => {
   console.error('[UnhandledRejection]', reason instanceof Error ? reason.message : reason);
 });
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', error => {
   console.error('[UncaughtException]', error.message);
   // Don't exit — let the process continue running
 });

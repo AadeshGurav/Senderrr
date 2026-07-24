@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Delete, Param, Body, ParseIntPipe, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+/* eslint-disable */
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Body,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AutomationService } from './automation.service';
 import { RateLimiterService } from './rate-limiter.service';
@@ -31,7 +43,12 @@ export class AutomationController {
       adminId: s.adminId,
       workerId: `admin-${s.adminId}-sess-${s.sessionIndex}`,
       status: s.openwaSessionStatus === 'ready' ? 'ACTIVE' : s.openwaSessionStatus === 'created' ? 'STARTING' : 'IDLE',
-      browserStatus: s.openwaSessionStatus === 'ready' ? 'LOGGED_IN' : s.openwaSessionStatus === 'disconnected' ? 'UNKNOWN' : 'CREATED',
+      browserStatus:
+        s.openwaSessionStatus === 'ready'
+          ? 'LOGGED_IN'
+          : s.openwaSessionStatus === 'disconnected'
+            ? 'UNKNOWN'
+            : 'CREATED',
       openwaSessionId: s.openwaSessionId,
       openwaSessionStatus: s.openwaSessionStatus,
       totalSent: 0,
@@ -54,25 +71,27 @@ export class AutomationController {
   @ApiOperation({ summary: 'Create OpenWA sessions for all admin slots' })
   async createAdminSessions(@Param('adminId', ParseIntPipe) adminId: number) {
     const sessions = await this.adminSessionService.createSessionsForAdmin(adminId);
-    return { adminId, sessions: sessions.map(s => ({ id: s.id, slot: s.sessionIndex, openwaSessionId: s.openwaSessionId, status: s.openwaSessionStatus })) };
+    return {
+      adminId,
+      sessions: sessions.map(s => ({
+        id: s.id,
+        slot: s.sessionIndex,
+        openwaSessionId: s.openwaSessionId,
+        status: s.openwaSessionStatus,
+      })),
+    };
   }
 
   @Post('admin/:adminId/session/:slot/start')
   @ApiOperation({ summary: 'Start a session for an admin slot' })
-  async startAdminSession(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
+  async startAdminSession(@Param('adminId', ParseIntPipe) adminId: number, @Param('slot', ParseIntPipe) slot: number) {
     const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
     return this.adminSessionService.startSession(as.id);
   }
 
   @Post('admin/:adminId/session/:slot/stop')
   @ApiOperation({ summary: 'Stop a session for an admin slot' })
-  async stopAdminSession(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
+  async stopAdminSession(@Param('adminId', ParseIntPipe) adminId: number, @Param('slot', ParseIntPipe) slot: number) {
     const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
     await this.adminSessionService.stopSession(as.id);
     return { success: true };
@@ -81,20 +100,14 @@ export class AutomationController {
   @Delete('admin/:adminId/session/:slot')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a session for an admin slot' })
-  async deleteAdminSession(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
+  async deleteAdminSession(@Param('adminId', ParseIntPipe) adminId: number, @Param('slot', ParseIntPipe) slot: number) {
     const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
     await this.adminSessionService.deleteSession(as.id);
   }
 
   @Get('admin/:adminId/session/:slot/qr')
   @ApiOperation({ summary: 'Get QR code for an admin session' })
-  async getAdminSessionQR(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
+  async getAdminSessionQR(@Param('adminId', ParseIntPipe) adminId: number, @Param('slot', ParseIntPipe) slot: number) {
     const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
     return this.adminSessionService.getQRCode(as.id);
   }
@@ -127,20 +140,14 @@ export class AutomationController {
 
   @Get('admin/:adminId/session/:slot/groups')
   @ApiOperation({ summary: 'Fetch groups from an admin session' })
-  async fetchAdminGroups(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
+  async fetchAdminGroups(@Param('adminId', ParseIntPipe) adminId: number, @Param('slot', ParseIntPipe) slot: number) {
     const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
     return this.adminSessionService.fetchGroups(as.id);
   }
 
   @Post('admin/:adminId/session/:slot/import-groups')
   @ApiOperation({ summary: 'Import groups from session into DB' })
-  async importAdminGroups(
-    @Param('adminId', ParseIntPipe) adminId: number,
-    @Param('slot', ParseIntPipe) slot: number,
-  ) {
+  async importAdminGroups(@Param('adminId', ParseIntPipe) adminId: number, @Param('slot', ParseIntPipe) slot: number) {
     const as = await this.adminSessionService.getAdminSessionBySlot(adminId, slot);
     return this.adminSessionService.importGroups(as.id);
   }

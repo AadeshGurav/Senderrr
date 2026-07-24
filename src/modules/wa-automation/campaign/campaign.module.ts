@@ -19,11 +19,18 @@ import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      AdminAccount, WhatsAppGroup, WhatsAppCommunity,
-      BroadcastEvent, MessageTask, MessageAttempt,
-      WhatsAppGroupMember,
-    ], 'data'),
+    TypeOrmModule.forFeature(
+      [
+        AdminAccount,
+        WhatsAppGroup,
+        WhatsAppCommunity,
+        BroadcastEvent,
+        MessageTask,
+        MessageAttempt,
+        WhatsAppGroupMember,
+      ],
+      'data',
+    ),
     TemplateModule,
     AutomationModule,
     SettingsModule,
