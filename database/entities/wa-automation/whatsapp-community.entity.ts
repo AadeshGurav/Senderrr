@@ -23,7 +23,7 @@ export class WhatsAppCommunity {
   @Column({ default: 0 })
   totalFailed: number;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   lastSentAt: Date | null;
 
   @CreateDateColumn()

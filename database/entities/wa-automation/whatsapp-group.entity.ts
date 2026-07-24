@@ -42,10 +42,10 @@ export class WhatsAppGroup {
   @Column({ default: true })
   isHealthy: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   lastSentAt: Date | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   lastFailureAt: Date | null;
 
   @CreateDateColumn()

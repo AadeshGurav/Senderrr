@@ -41,10 +41,10 @@ export class BroadcastEvent {
   @Column({ default: 0 })
   failedCount: number;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   startedAt: Date | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   completedAt: Date | null;
 
   @CreateDateColumn()

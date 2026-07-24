@@ -17,7 +17,7 @@ export class AdminAccount {
   @Column({ default: 1 })
   sessionsPerAdmin: number;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   warmUpStartedAt: Date | null;
 
   @Column({ default: false })
@@ -32,7 +32,7 @@ export class AdminAccount {
   @Column({ default: 0 })
   totalFailed: number;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   lastSentAt: Date | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
