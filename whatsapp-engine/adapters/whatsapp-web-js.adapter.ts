@@ -340,7 +340,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       // Setup console forwarding if not already setup (to avoid duplicate listeners per call)
       if (!(this.client.pupPage as any)._hasConsoleListener) {
         this.client.pupPage.on('console', msg => {
-          this.logger.debug(`[Browser Console] ${msg.text()}`);
+          this.logger.log(`[Browser Console] ${msg.text()}`);
         });
         (this.client.pupPage as any)._hasConsoleListener = true;
       }
