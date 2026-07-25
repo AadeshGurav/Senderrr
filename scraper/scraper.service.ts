@@ -44,8 +44,15 @@ export class ScraperService {
     const response = await this.fetcher(url, {
       signal: AbortSignal.timeout(timeout),
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
       },
     });
     if (!response.ok) {
@@ -82,10 +89,14 @@ export class ScraperService {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await this.fetchPageContent(url);
-      } catch (err) {
+      } catch (err: any) {
         if (attempt === maxRetries) throw err;
         const delay = Math.pow(2, attempt) * 1000;
-        this.logger.warn(`Retry ${attempt}/${maxRetries} for ${url} in ${delay}ms: ${(err as Error).message}`);
+        
+        // Extract cause if it's a fetch error (like ECONNRESET)
+        const causeMsg = err.cause ? ` (Cause: ${err.cause.message || err.cause.code || err.cause})` : '';
+        this.logger.warn(`Retry ${attempt}/${maxRetries} for ${url} in ${delay}ms: ${err.message}${causeMsg}`);
+        
         await new Promise(r => setTimeout(r, delay));
       }
     }
