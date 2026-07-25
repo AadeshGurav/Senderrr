@@ -51,7 +51,7 @@ export default function WaLogin({ onLogin }: WaLoginProps) {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[var(--color-primary)] shadow-xl shadow-[var(--color-primary)]/25 mb-4">
             <MessageCircle size={32} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-[var(--color-text)]">OpenWA</h1>
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">Senderrr</h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">
             Sign in to your automation dashboard
           </p>
@@ -139,7 +139,7 @@ export default function WaLogin({ onLogin }: WaLoginProps) {
         </form>
 
         <p className="text-center text-xs text-[var(--color-text-muted)] mt-6">
-          OpenWA — WhatsApp API Gateway
+          Senderrr — WhatsApp API Gateway
         </p>
       </div>
     </div>
