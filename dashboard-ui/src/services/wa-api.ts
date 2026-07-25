@@ -256,26 +256,43 @@ async function uploadFile<T>(endpoint: string, file: File, fieldName = 'file'): 
   const formData = new FormData();
   formData.append(fieldName, file);
 
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}${endpoint}`, true);
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    method: 'POST',
-    headers,
-    body: formData,
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        redirectToLogin();
+        return reject(new Error('Please sign in again. Your session has expired.'));
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response as T);
+        } catch (e) {
+          resolve({} as T);
+        }
+      } else {
+        let message = `HTTP ${xhr.status}`;
+        try {
+          const body = JSON.parse(xhr.responseText);
+          if (body.message) message = body.message;
+        } catch (e) {
+          // ignore
+        }
+        reject(new Error(message));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    
+    xhr.send(formData);
   });
-
-  if (response.status === 401) {
-    redirectToLogin();
-    throw new Error('Please sign in again. Your session has expired.');
-  }
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.message || `HTTP ${response.status}`);
-  }
-
-  return response.json();
 }
 
 export const adApi = {
