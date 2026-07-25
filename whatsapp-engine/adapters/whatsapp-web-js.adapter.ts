@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { Client, RemoteAuth, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Client, RemoteAuth, LocalAuth, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import { DataSource } from 'typeorm';
 import * as qrcode from 'qrcode';
 import {
@@ -92,12 +92,26 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         );
       }
 
-      this.client = new Client({
-        authStrategy: new RemoteAuth({
+      // Auth strategy configuration
+      // 'local' (default): sessions live on the persistent disk, immediate writes, no external DB round-trip. Requires SESSION_DATA_PATH to point at a mounted persistent disk.
+      // 'remote': sessions sync to Postgres every 5 minutes via RemoteAuth. Use only when there's no persistent disk available. Has up to a 5-minute data-loss window on crash since it doesn't write instantly.
+      const authType = (process.env.WA_AUTH_TYPE || 'local').toLowerCase();
+      let authStrategy;
+      if (authType === 'remote') {
+        authStrategy = new RemoteAuth({
           clientId: this.config.sessionId,
           store: new PostgresRemoteAuthStore(this.dataSource),
           backupSyncIntervalMs: 300000, // 5-minute minimum required by whatsapp-web.js
-        }),
+        });
+      } else {
+        authStrategy = new LocalAuth({
+          clientId: this.config.sessionId,
+          dataPath: process.env.SESSION_DATA_PATH || '/app/data/sessions',
+        });
+      }
+
+      this.client = new Client({
+        authStrategy,
         puppeteer: {
           headless: this.config.puppeteer?.headless ?? true,
           args: puppeteerArgs,
