@@ -332,22 +332,49 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     previewData: {
       title: string;
       description: string;
-      jpegThumbnail?: string;
+      imageUrl?: string;
     },
   ): Promise<void> {
     if (!this.client || !this.client.pupPage) return;
     try {
       await this.client.pupPage.evaluate(
-        (linkUrl: string, preview: { title: string; description: string; jpegThumbnail?: string }) => {
+        async (linkUrl: string, preview: { title: string; description: string; imageUrl?: string }) => {
           const module = (window as any).require('WAWebLinkPreviewChatAction');
           if (!module) return;
 
           const original = module.getLinkPreview.bind(module);
 
+          // Fetch and resize the OG image to a small JPEG thumbnail using the
+          // browser's native Canvas API. WhatsApp expects jpegThumbnail as a
+          // Uint8Array of raw JPEG bytes, max ~5KB (roughly 100x100px).
+          let thumbnailBytes: Uint8Array | undefined;
+          if (preview.imageUrl) {
+            try {
+              const resp = await fetch(preview.imageUrl);
+              const blob = await resp.blob();
+              const bitmap = await createImageBitmap(blob);
+
+              const TARGET = 100;
+              const ratio = Math.min(TARGET / bitmap.width, TARGET / bitmap.height);
+              const w = Math.round(bitmap.width * ratio);
+              const h = Math.round(bitmap.height * ratio);
+
+              const canvas = new OffscreenCanvas(w, h);
+              const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+              ctx.drawImage(bitmap, 0, 0, w, h);
+
+              // quality 0.7 keeps JPEG under ~5KB for 100x100
+              const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
+              const arrBuf = await outBlob.arrayBuffer();
+              thumbnailBytes = new Uint8Array(arrBuf);
+            } catch {
+              thumbnailBytes = undefined;
+            }
+          }
+
           module.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
             if (href && href.includes(new URL(linkUrl).hostname)) {
-              // Restore original for future calls
               module.getLinkPreview = original;
               return Promise.resolve({
                 data: {
@@ -355,7 +382,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   matchedText: linkUrl,
                   title: preview.title || '',
                   description: preview.description || '',
-                  jpegThumbnail: preview.jpegThumbnail || undefined,
+                  jpegThumbnail: thumbnailBytes,
                   preview: true,
                   subtype: 'url',
                 },
@@ -371,6 +398,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       // Best-effort: if patching fails, sendMessage falls back to linkPreview:true
     }
   }
+
 
   async sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     return this.sendMediaMessage(chatId, media);

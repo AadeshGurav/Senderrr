@@ -234,23 +234,17 @@ export class AutomationService {
         $('meta[name="description"]').attr('content') ||
         '';
 
-      let jpegThumbnail: string | undefined;
+      let absImageUrl: string | undefined;
       const imageUrl =
         $('meta[property="og:image"]').attr('content') ||
         $('meta[name="twitter:image"]').attr('content');
       if (imageUrl) {
-        try {
-          const absImageUrl = imageUrl.startsWith('http')
-            ? imageUrl
-            : new URL(imageUrl, url).toString();
-          const buf = await BrowserFetchUtil.fetchArrayBufferWithFallback(absImageUrl, 10000);
-          jpegThumbnail = Buffer.from(buf).toString('base64');
-        } catch {
-          // Thumbnail failure is non-fatal — text preview still shows
-        }
+        absImageUrl = imageUrl.startsWith('http')
+          ? imageUrl
+          : new URL(imageUrl, url).toString();
       }
 
-      await engine.warmUpLinkPreview(url, { title, description, jpegThumbnail });
+      await engine.warmUpLinkPreview(url, { title, description, imageUrl: absImageUrl });
       this.logger.log(`Link preview injected for: ${url} | title: "${title.slice(0, 60)}"`);
     } catch (err) {
       this.logger.warn(`preWarmLinkPreview failed for ${url}: ${(err as Error).message}`);
