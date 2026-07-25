@@ -304,6 +304,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     this.ensureReady();
     const msg = await this.client!.sendMessage(chatId, text, {
       linkPreview: true,
+      waitUntilMsgSent: true,
     });
     return {
       id: msg?.id?._serialized || `unknown_${Date.now()}`,
@@ -373,7 +374,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       })
     );
 
-    const options: any = {};
+    const options: any = {
+      waitUntilMsgSent: true,
+    };
     if (caption) {
       options.caption = caption;
     }
@@ -418,6 +421,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
     const msg = await this.client!.sendMessage(chatId, messageMedia, {
       caption: media.caption,
+      waitUntilMsgSent: true,
     });
 
     return {
