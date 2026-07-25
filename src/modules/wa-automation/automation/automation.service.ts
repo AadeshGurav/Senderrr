@@ -1,5 +1,6 @@
 /* eslint-disable */
 import { Injectable, Logger } from '@nestjs/common';
+import * as cheerio from 'cheerio';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EngineFactory } from '@whatsapp-engine/engine.factory';
@@ -40,6 +41,8 @@ export function isMediaMime(mime: string): boolean {
 export class AutomationService {
   private readonly logger = new Logger('AutomationService');
   private readonly maxRetries: number;
+  private readonly FAILED_RETRY_TTL_MS = 3_600_000;
+  private readonly linkPreviewCache = new Map<string, any>();
   private readonly rateLimitRetryDelay: number;
 
   constructor(
@@ -149,9 +152,13 @@ export class AutomationService {
         }
       } else {
         // Article broadcasts: send as plain text to trigger WhatsApp's native link preview.
-        // When a URL is present, WhatsApp Web automatically renders a rich preview
-        // (thumbnail, title, description) from the article's OG meta tags.
-        result = await engine.sendTextMessage(chatId, text);
+        // We inject the cached OG metadata to bypass broken native WWebJS crawler / WA server WAF blocks.
+        let previewData;
+        const urlMatch = text.match(/https?:\/\/[^\s]+/);
+        if (urlMatch && this.linkPreviewCache.has(urlMatch[0])) {
+           previewData = this.linkPreviewCache.get(urlMatch[0]);
+        }
+        result = await engine.sendTextMessage(chatId, text, { previewData });
       }
 
       // 4. Increment rate limit counters and admin stats on success
@@ -205,18 +212,27 @@ export class AutomationService {
   /**
    * Pre-warm WhatsApp's server-side link preview cache for a URL in a given session.
    * Call this once per admin queue / unique URL to make sendMessage link previews
-   * consistent across groups. For multi-device accounts, previews are generated
-   * server-side on first request and cached for subsequent calls.
+   * consistent across groups.
    */
   async preWarmLinkPreview(sessionId: string, text: string): Promise<void> {
     try {
       const urlMatch = text.match(/https?:\/\/[^\s]+/);
       if (!urlMatch) return;
+      const url = urlMatch[0];
 
-      const engine = this.sessionService.getEngine(sessionId);
-      if (!engine || !engine.warmUpLinkPreview) return;
+      if (this.linkPreviewCache.has(url)) return;
 
-      await engine.warmUpLinkPreview(urlMatch[1]);
+      const res = await fetch(url, {
+          headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          }
+      });
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      const title = $('meta[property="og:title"]').attr('content') || $('title').text();
+      const description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+      
+      this.linkPreviewCache.set(url, { title, description, canonicalUrl: url, matchedText: url });
     } catch {
       // Pre-warm is best-effort
     }

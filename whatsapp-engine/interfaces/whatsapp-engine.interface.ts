@@ -224,7 +224,7 @@ export interface IWhatsAppEngine {
   getPushName(): string | null;
 
   // Messaging - Basic
-  sendTextMessage(chatId: string, text: string): Promise<MessageResult>;
+  sendTextMessage(chatId: string, text: string, options?: { previewData?: any }): Promise<MessageResult>;
   sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
   sendAlbumMessage(chatId: string, mediaArray: MediaInput[], caption?: string): Promise<MessageResult>;
   sendVideoMessage(chatId: string, media: MediaInput): Promise<MessageResult>;

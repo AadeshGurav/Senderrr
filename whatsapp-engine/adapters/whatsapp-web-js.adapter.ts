@@ -300,16 +300,24 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     return this.pushName;
   }
 
-  async sendTextMessage(chatId: string, text: string): Promise<MessageResult> {
+  async sendTextMessage(chatId: string, text: string, options?: { previewData?: any }): Promise<MessageResult> {
     this.ensureReady();
-    const msg = await this.client!.sendMessage(chatId, text, {
-      linkPreview: true,
+    
+    const sendOptions: any = {
+      linkPreview: options?.previewData ? false : true,
       waitUntilMsgSent: true,
-    });
-    return {
-      id: msg?.id?._serialized || `unknown_${Date.now()}`,
-      timestamp: msg?.timestamp || Math.floor(Date.now() / 1000),
     };
+    
+    if (options?.previewData) {
+      sendOptions.extra = {
+        preview: true,
+        subtype: 'url',
+        ...options.previewData
+      };
+    }
+    
+    const msg = await this.client!.sendMessage(chatId, text, sendOptions);
+    return { id: msg?.id?._serialized || '', timestamp: msg.timestamp };
   }
 
   /**
