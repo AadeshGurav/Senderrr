@@ -117,6 +117,10 @@ async function bootstrap() {
     await app.close();
   });
 
+  const server = app.getHttpServer();
+  server.keepAliveTimeout = 61000;
+  server.headersTimeout = 65000;
+
   // Enhanced Security Headers
   app.use(
     helmet({
@@ -125,7 +129,7 @@ async function bootstrap() {
           defaultSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
           scriptSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:', 'https:'],
+          imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
           connectSrc: ["'self'"],
           fontSrc: ["'self'"],
           objectSrc: ["'none'"],

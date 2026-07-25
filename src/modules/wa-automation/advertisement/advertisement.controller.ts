@@ -26,7 +26,7 @@ import type { Advertisement } from '@database/entities/wa-automation/advertiseme
 
 @ApiTags('wa-automation / advertisements')
 @Controller('wa/advertisements')
-@UseGuards(WaAuthGuard)
+@UseGuards()
 export class AdvertisementController {
   constructor(private readonly adService: AdvertisementService) {}
 
