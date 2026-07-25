@@ -317,7 +317,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     }
     
     const msg = await this.client!.sendMessage(chatId, text, sendOptions);
-    return { id: msg?.id?._serialized || '', timestamp: msg.timestamp };
+    return { 
+      id: msg?.id?._serialized || '', 
+      timestamp: msg?.timestamp || Math.floor(Date.now() / 1000) 
+    };
   }
 
   /**
