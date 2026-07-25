@@ -461,15 +461,61 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     
     let chats: any[] = [];
     let attempts = 0;
+    let usedFallback = false;
+    let fallbackGroups: Group[] = [];
+
     while (attempts < 3) {
       try {
         chats = await this.client!.getChats();
         break; // Success
       } catch (err) {
         attempts++;
-        this.logger.warn(`Failed to get chats (attempt ${attempts}/3)`, String(err));
+        this.logger.warn(`Failed to get chats via wwebjs (attempt ${attempts}/3)`, String(err));
+        
         if (attempts >= 3) {
-          // Fail gracefully after 3 attempts instead of crashing the process
+          this.logger.log('Attempting raw pupPage.evaluate fallback for groups...');
+          try {
+            // Direct robust fallback if whatsapp-web.js getChats() is broken (e.g. 'r: r' error)
+            const page = (this.client as any).pupPage;
+            if (page) {
+              fallbackGroups = await page.evaluate(() => {
+                // @ts-ignore
+                if (!window.Store || !window.Store.Chat) return [];
+                // @ts-ignore
+                const allChats = window.Store.Chat.getModelsArray();
+                return allChats
+                  .filter((c: any) => c.isGroup || (c.id && c.id._serialized && c.id._serialized.endsWith('@g.us')))
+                  .map((c: any) => {
+                    const pCount = c.groupMetadata && c.groupMetadata.participants ? c.groupMetadata.participants.length : undefined;
+                    let isAdmin = false;
+                    // @ts-ignore
+                    if (c.groupMetadata && c.groupMetadata.participants && window.Store.Contact && window.Store.Contact.models) {
+                      // @ts-ignore
+                      const me = window.Store.Contact.models.find((x: any) => x.isMe);
+                      if (me && me.id) {
+                        const meId = me.id._serialized || me.id;
+                        const myParticipant = c.groupMetadata.participants.find((p: any) => 
+                          p.id === meId || (p.id && p.id._serialized === meId)
+                        );
+                        if (myParticipant && (myParticipant.isAdmin || myParticipant.isSuperAdmin)) {
+                          isAdmin = true;
+                        }
+                      }
+                    }
+                    return {
+                      id: c.id && c.id._serialized ? c.id._serialized : c.id,
+                      name: c.name || c.title || (c.id ? c.id._serialized : 'Unknown'),
+                      participantsCount: pCount,
+                      isAdmin: isAdmin
+                    };
+                  });
+              });
+              usedFallback = true;
+              break;
+            }
+          } catch (fallbackErr) {
+            this.logger.error('Fallback getGroups evaluation also failed', String(fallbackErr));
+          }
           return [];
         }
         // Wait 2 seconds before retrying
@@ -477,17 +523,21 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       }
     }
 
+    if (usedFallback) {
+      return fallbackGroups;
+    }
+
     // Filter only group chats (use fallback check for @g.us if isGroup is missing)
     const groups = chats.filter(chat => chat.isGroup || chat.id?._serialized?.endsWith('@g.us'));
 
     return groups.map(g => {
-      const groupChat = g as unknown as GroupChat;
+      const groupChat = g as unknown as any;
       return {
         id: g.id._serialized,
         name: g.name || g.id._serialized, // Fallback name to avoid DB null constraint errors
         participantsCount: groupChat.participants?.length,
         isAdmin: groupChat.participants?.some(
-          p => p.isAdmin && p.id._serialized === this.client?.info?.wid?._serialized,
+          (p: any) => p.isAdmin && p.id._serialized === this.client?.info?.wid?._serialized,
         ),
       };
     });
