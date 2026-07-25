@@ -242,7 +242,7 @@ export class AutomationService {
         const absImageUrl = imageUrl.startsWith('http')
           ? imageUrl
           : new URL(imageUrl, url).toString();
-        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 100);
+        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 400);
       }
 
       await engine.warmUpLinkPreview(url, { title, description, jpegThumbnailBase64 });
