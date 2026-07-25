@@ -26,6 +26,12 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
+// Ensure media directory exists to prevent Multer ENOENT errors which manifest as "multipart: unexpected end of form" or 500s
+const mediaDir = path.resolve(process.cwd(), 'data', 'media');
+if (!fs.existsSync(mediaDir)) {
+  fs.mkdirSync(mediaDir, { recursive: true });
+}
+
 // 2. User-managed .env (does not override real process env)
 if (fs.existsSync(userEnvPath)) {
   console.log('[Bootstrap] Loading .env from:', userEnvPath);

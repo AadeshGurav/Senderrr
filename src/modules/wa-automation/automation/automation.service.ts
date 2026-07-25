@@ -232,7 +232,22 @@ export class AutomationService {
       const title = $('meta[property="og:title"]').attr('content') || $('title').text();
       const description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
       
-      this.linkPreviewCache.set(url, { title, description, canonicalUrl: url, matchedText: url });
+      let jpegThumbnail: string | undefined;
+      const imageUrl = $('meta[property="og:image"]').attr('content');
+      if (imageUrl) {
+        try {
+          const imgUrlToFetch = imageUrl.startsWith('http') ? imageUrl : new URL(imageUrl, url).toString();
+          const imgRes = await fetch(imgUrlToFetch);
+          if (imgRes.ok) {
+            const buffer = await imgRes.arrayBuffer();
+            jpegThumbnail = Buffer.from(buffer).toString('base64');
+          }
+        } catch (e) {
+          this.logger.warn(`Failed to fetch thumbnail for ${url}: ${(e as Error).message}`);
+        }
+      }
+      
+      this.linkPreviewCache.set(url, { title, description, canonicalUrl: url, matchedText: url, jpegThumbnail });
     } catch {
       // Pre-warm is best-effort
     }
