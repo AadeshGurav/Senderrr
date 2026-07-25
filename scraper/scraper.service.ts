@@ -9,6 +9,7 @@ import { ParserRegistryService } from './parsers/parser-registry.service';
 import { GenericParser } from './parsers/built-in/generic.parser';
 import { ChangeDetectorService } from './change-detector.service';
 import { IArticleParser, ParsedArticle } from './parsers/parser.interface';
+import * as puppeteer from 'puppeteer';
 
 @Injectable()
 export class ScraperService {
@@ -41,24 +42,77 @@ export class ScraperService {
   }
 
   async fetchPageContent(url: string, timeout = 30_000): Promise<string> {
-    const response = await this.fetcher(url, {
-      signal: AbortSignal.timeout(timeout),
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    try {
+      const response = await this.fetcher(url, {
+        signal: AbortSignal.timeout(timeout),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Connection': 'close',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+        },
+      });
+      if (!response.ok) {
+        if (response.status === 403 || response.status === 503 || response.status === 406) {
+          this.logger.warn(`HTTP ${response.status} from ${url}, attempting browser fallback...`);
+          return this.fetchPageContentViaBrowser(url, timeout);
+        }
+        throw new Error(`HTTP ${response.status} fetching ${url}`);
+      }
+      return response.text();
+    } catch (err: any) {
+      if (err.name === 'TimeoutError' || err.code === 'ECONNRESET' || (err.message && err.message.includes('fetch failed'))) {
+        this.logger.warn(`Network error fetching ${url}, attempting browser fallback... (${err.message})`);
+        return this.fetchPageContentViaBrowser(url, timeout);
+      }
+      throw err;
+    }
+  }
+
+  async fetchPageContentViaBrowser(url: string, timeout = 45_000): Promise<string> {
+    this.logger.log(`Fetching via browser (Hostinger WAF bypass): ${url}`);
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+        ],
+      });
+      const page = await browser.newPage();
+      
+      // Mimic a real browser strongly
+      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await page.setExtraHTTPHeaders({
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
-        'Connection': 'close',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} fetching ${url}`);
+      });
+      
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+      
+      // Optional: wait a moment for CF/WAF challenge to clear if any
+      await new Promise(r => setTimeout(r, 2000));
+      
+      const content = await page.content();
+      return content;
+    } catch (err) {
+      throw new Error(`Browser fetch failed for ${url}: ${(err as Error).message}`);
+    } finally {
+      if (browser) {
+        await browser.close().catch(() => {});
+      }
     }
-    return response.text();
   }
 
   async detectAndStoreChange(url: string): Promise<ScrapedArticle | null> {
