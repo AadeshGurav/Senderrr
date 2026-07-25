@@ -348,7 +348,17 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       await this.client.pupPage.evaluate(
         async (linkUrl: string, preview: { title: string; description: string; jpegThumbnailBase64?: string }) => {
           const module = (window as any).require('WAWebLinkPreviewChatAction');
-          if (!module) return;
+          console.log('[LinkPreview Patch] window.require result for WAWebLinkPreviewChatAction:', module ? 'FOUND' : 'UNDEFINED/NULL');
+          if (!module) {
+            console.log('[LinkPreview Patch] Module not found — bailing out early. Listing available webpack module names containing "LinkPreview" for debugging:');
+            try {
+              const allModules = (window as any).webpackChunkwhatsapp_web_client || (window as any).webpackChunkbuild;
+              console.log('[LinkPreview Patch] webpack chunk global exists:', !!allModules);
+            } catch (e) {
+              console.log('[LinkPreview Patch] Could not inspect webpack internals:', (e as Error).message);
+            }
+            return;
+          }
 
           const original = module.getLinkPreview.bind(module);
 
@@ -399,7 +409,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         previewData,
       );
     } catch (e) {
-      this.logger.error('Failed to inject link preview patch', String(e));
+      this.logger.warn('Failed to inject link preview patch', String(e));
     }
   }
 
