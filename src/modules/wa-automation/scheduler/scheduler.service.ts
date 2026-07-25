@@ -16,6 +16,8 @@ import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automatio
 import { GenericParser } from '@scraper/parsers/built-in/generic.parser';
 import { ConfigService } from '@nestjs/config';
 
+import { AdminSessionService } from '../automation/admin-session.service';
+
 @Injectable()
 export class SchedulerService {
   private readonly logger = new Logger('SchedulerService');
@@ -30,6 +32,7 @@ export class SchedulerService {
     private readonly workerTracker: WorkerTrackerService,
     private readonly groupSyncService: GroupSyncService,
     private readonly settingsService: SettingsService,
+    private readonly adminSessionService: AdminSessionService,
     @InjectRepository(BroadcastEvent, 'data')
     private readonly broadcastRepo: Repository<BroadcastEvent>,
     private readonly configService: ConfigService,
@@ -106,6 +109,20 @@ export class SchedulerService {
       } catch (err) {
         this.logger.error(`Broadcast failed for article ${article.id}: ${(err as Error).message}`);
       }
+    }
+  }
+
+  // ─── Auto-Reconnect: every 2 minutes ───
+
+  @Cron('0 */2 * * * *')
+  async autoReconnectSessions(): Promise<void> {
+    try {
+      const { reconnected, failed } = await this.adminSessionService.autoReconnectSessions();
+      if (reconnected.length > 0 || failed.length > 0) {
+        this.logger.log(`Auto-reconnect cycle: ${reconnected.length} reconnected, ${failed.length} pending/failed`);
+      }
+    } catch (err) {
+      this.logger.warn(`Auto-reconnect cycle failed: ${(err as Error).message}`);
     }
   }
 

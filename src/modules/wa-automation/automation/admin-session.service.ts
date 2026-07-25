@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { SessionService } from '../../session/session.service';
@@ -9,8 +9,21 @@ import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.e
 import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
 
 @Injectable()
-export class AdminSessionService {
+export class AdminSessionService implements OnModuleInit {
   private readonly logger = new Logger('AdminSessionService');
+
+  async onModuleInit() {
+    // Wait for the application to fully boot and for SessionService to reset statuses to DISCONNECTED
+    setTimeout(async () => {
+      this.logger.log('[Bootstrap] Triggering automatic session reconnect...');
+      try {
+        const result = await this.autoReconnectSessions();
+        this.logger.log(`[Bootstrap] Auto-reconnect triggered: ${result.reconnected.length} reconnected, ${result.failed.length} failed/pending`);
+      } catch (err) {
+        this.logger.warn(`[Bootstrap] Auto-reconnect failed: ${(err as Error).message}`);
+      }
+    }, 5000);
+  }
 
   private get adminRepo(): Repository<AdminAccount> {
     return this.dataSource.getRepository(AdminAccount);
