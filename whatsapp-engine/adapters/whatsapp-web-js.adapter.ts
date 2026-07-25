@@ -306,8 +306,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       linkPreview: true,
     });
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: msg?.id?._serialized || `unknown_${Date.now()}`,
+      timestamp: msg?.timestamp || Math.floor(Date.now() / 1000),
     };
   }
 
@@ -381,8 +381,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     const msg = await (this.client as any).sendMessage(chatId, messageMediaArray, options);
 
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: msg?.id?._serialized || `unknown_${Date.now()}`,
+      timestamp: msg?.timestamp || Math.floor(Date.now() / 1000),
     };
   }
 
@@ -421,8 +421,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     });
 
     return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
+      id: msg?.id?._serialized || `unknown_${Date.now()}`,
+      timestamp: msg?.timestamp || Math.floor(Date.now() / 1000),
     };
   }
 
