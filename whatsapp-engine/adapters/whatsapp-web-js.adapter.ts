@@ -198,7 +198,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               };
             }
           } catch (error) {
-            this.logger.error('Error downloading media', String(error));
+            this.logger.debug('Skipping media download due to wwebjs internal error', String(error));
           }
         }
 
@@ -484,9 +484,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         break; // Success
       } catch (err) {
         attempts++;
-        this.logger.warn(`Failed to get chats via wwebjs (attempt ${attempts}/3)`, String(err));
         
         if (attempts >= 3) {
+          this.logger.debug('wwebjs native getChats() failed (this is expected on newer WhatsApp versions). Proceeding to raw fallback...', String(err));
           this.logger.log('Attempting raw pupPage.evaluate fallback for groups...');
           try {
             // Direct robust fallback if whatsapp-web.js getChats() is broken (e.g. 'r: r' error)

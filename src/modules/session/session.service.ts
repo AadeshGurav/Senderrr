@@ -189,12 +189,15 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
       await manager.remove(session);
     });
     
+    const queryRunner = this.dataSource.createQueryRunner();
     try {
       // Purge the RemoteAuth zip from the wa_sessions table so that if a session with the
       // same name is created, it doesn't try to load the old corrupted auth data.
-      await this.dataSource.query('DELETE FROM wa_sessions WHERE session_name = $1', [session.name]);
+      await queryRunner.query('DELETE FROM wa_sessions WHERE session_name = $1', [session.name]);
     } catch {
       // Table might not exist or error, ignore
+    } finally {
+      await queryRunner.release();
     }
 
     this.logger.log(`Session deleted: ${session.name}`, {

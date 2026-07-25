@@ -19,11 +19,16 @@ export class PostgresRemoteAuthStore {
   constructor(private readonly dataSource: DataSource) {}
 
   async sessionExists({ session }: { session: string }): Promise<boolean> {
-    const result = await this.dataSource.query(
-      'SELECT 1 FROM wa_sessions WHERE session_name = $1 LIMIT 1',
-      [session],
-    );
-    return result.length > 0;
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      const result = await queryRunner.query(
+        'SELECT 1 FROM wa_sessions WHERE session_name = $1 LIMIT 1',
+        [session],
+      );
+      return result.length > 0;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async save({ session }: { session: string }): Promise<void> {
@@ -31,20 +36,31 @@ export class PostgresRemoteAuthStore {
     const zipPath = path.join(process.cwd(), '.wwebjs_auth', `${session}.zip`);
     const data = fs.readFileSync(zipPath);
 
-    await this.dataSource.query(
-      `INSERT INTO wa_sessions (session_name, data, updated_at)
-       VALUES ($1, $2, now())
-       ON CONFLICT (session_name)
-       DO UPDATE SET data = $2, updated_at = now()`,
-      [session, data],
-    );
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.query(
+        `INSERT INTO wa_sessions (session_name, data, updated_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (session_name)
+         DO UPDATE SET data = $2, updated_at = now()`,
+        [session, data],
+      );
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async extract({ session, path: destPath }: { session: string; path: string }): Promise<void> {
-    const result = await this.dataSource.query(
-      'SELECT data FROM wa_sessions WHERE session_name = $1',
-      [session],
-    );
+    const queryRunner = this.dataSource.createQueryRunner();
+    let result;
+    try {
+      result = await queryRunner.query(
+        'SELECT data FROM wa_sessions WHERE session_name = $1',
+        [session],
+      );
+    } finally {
+      await queryRunner.release();
+    }
 
     if (result.length === 0) {
       throw new Error(`Session ${session} not found in wa_sessions`);
@@ -59,8 +75,13 @@ export class PostgresRemoteAuthStore {
   }
 
   async delete({ session }: { session: string }): Promise<void> {
-    await this.dataSource.query('DELETE FROM wa_sessions WHERE session_name = $1', [
-      session,
-    ]);
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.query('DELETE FROM wa_sessions WHERE session_name = $1', [
+        session,
+      ]);
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
