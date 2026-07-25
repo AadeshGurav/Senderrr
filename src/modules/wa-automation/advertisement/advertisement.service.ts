@@ -82,6 +82,10 @@ export class AdvertisementService {
   }
 
   async delete(id: number): Promise<boolean> {
+    const ad = await this.findOne(id);
+    if (ad && ad.mediaAttachments?.length) {
+      await this.deleteMediaFilesOnDisk(ad.mediaAttachments);
+    }
     await this.mediaRepo.delete({ advertisement: { id } });
     await this.broadcastRepo.update({ advertisementId: id }, { advertisementId: null });
     const result = await this.adRepo.delete(id);
@@ -108,12 +112,17 @@ export class AdvertisementService {
     try {
       const expired = await this.adRepo
         .createQueryBuilder('ad')
+        .leftJoinAndSelect('ad.mediaAttachments', 'media')
         .where('ad.status = :active', { active: AdvertisementStatus.ACTIVE })
         .andWhere('ad.daysUsed >= ad.packageDays')
         .getMany();
       for (const ad of expired) {
         ad.status = AdvertisementStatus.COMPLETED;
         await this.adRepo.save(ad);
+        if (ad.mediaAttachments && ad.mediaAttachments.length > 0) {
+          await this.deleteMediaFilesOnDisk(ad.mediaAttachments);
+          await this.mediaRepo.remove(ad.mediaAttachments);
+        }
         this.logger.log(`Ad #${ad.id}: auto-transitioned to COMPLETED (${ad.daysUsed}/${ad.packageDays} days used)`);
       }
     } catch (err) {
@@ -368,8 +377,25 @@ export class AdvertisementService {
   }
 
   async removeMedia(id: number): Promise<boolean> {
+    const media = await this.mediaRepo.findOne({ where: { id } });
+    if (media) {
+      await this.deleteMediaFilesOnDisk([media]);
+    }
     const result = await this.mediaRepo.delete(id);
     return (result.affected ?? 0) > 0;
+  }
+
+  private async deleteMediaFilesOnDisk(mediaAttachments: MediaAttachment[]): Promise<void> {
+    for (const media of mediaAttachments) {
+      try {
+        await fs.unlink(media.filePath);
+        this.logger.log(`Deleted media file from disk: ${media.filePath}`);
+      } catch (err: any) {
+        if (err.code !== 'ENOENT') {
+          this.logger.error(`Failed to delete media file ${media.filePath}: ${err.message}`);
+        }
+      }
+    }
   }
 
   private detectMediaType(filename: string): string {
@@ -424,6 +450,11 @@ export class AdvertisementService {
       // Only auto-complete if daysUsed exceeds packageDays AND it's a new day
       if (ad.daysUsed >= ad.packageDays) {
         ad.status = AdvertisementStatus.COMPLETED;
+        const adWithMedia = await this.findOne(id);
+        if (adWithMedia?.mediaAttachments?.length) {
+          await this.deleteMediaFilesOnDisk(adWithMedia.mediaAttachments);
+          await this.mediaRepo.remove(adWithMedia.mediaAttachments);
+        }
       }
       await this.adRepo.save(ad);
       this.logger.log(`Ad #${id}: daysUsed=${ad.daysUsed}/${ad.packageDays} (new day)`);

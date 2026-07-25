@@ -90,6 +90,10 @@ export class BroadcastDispatcherService {
     }
   }
 
+  isDispatching(broadcastId: number): boolean {
+    return this.dispatchingBroadcasts.has(broadcastId);
+  }
+
   private async dispatchBroadcastInner(
     broadcastId: number,
     messageText: string,
@@ -227,6 +231,16 @@ export class BroadcastDispatcherService {
     const warmUpMultiplier = 1.0;
 
     for (let i = 0; i < tasks.length; i++) {
+      // Atomically claim the task to prevent concurrent dispatch loops from sending duplicates
+      const claimResult = await this.taskRepo.update(
+        { id: tasks[i].id, status: MessageTaskStatus.PENDING },
+        { status: MessageTaskStatus.IN_PROGRESS }
+      );
+      if (claimResult.affected === 0) {
+        this.logger.debug(`Task #${tasks[i].id} already claimed or no longer pending, skipping`);
+        continue;
+      }
+
       // Human-like per-message delay
       const delayMs = this.MIN_DELAY_MS + Math.random() * (this.MAX_DELAY_MS - this.MIN_DELAY_MS);
       await this.sleep(delayMs);

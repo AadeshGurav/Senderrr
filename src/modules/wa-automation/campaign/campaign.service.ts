@@ -219,6 +219,11 @@ export class CampaignService {
   // ─── Retry ────────────────────────────────────────────────────
 
   async retryBroadcastTasks(broadcastId: number): Promise<number> {
+    if (this.dispatcher.isDispatching(broadcastId)) {
+      this.logger.warn(`Cannot retry broadcast #${broadcastId} as a dispatch is already in progress.`);
+      return 0;
+    }
+
     const broadcast = await this.broadcastRepo.findOne({
       where: { id: broadcastId },
       relations: ['article'],
