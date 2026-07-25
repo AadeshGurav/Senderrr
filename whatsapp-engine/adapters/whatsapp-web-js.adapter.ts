@@ -304,16 +304,13 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     this.ensureReady();
     
     const sendOptions: any = {
-      linkPreview: options?.previewData ? false : true,
       waitUntilMsgSent: true,
     };
     
     if (options?.previewData) {
-      sendOptions.extra = {
-        preview: true,
-        subtype: 'url',
-        ...options.previewData
-      };
+      sendOptions.linkPreview = options.previewData;
+    } else {
+      sendOptions.linkPreview = true;
     }
     
     const msg = await this.client!.sendMessage(chatId, text, sendOptions);
