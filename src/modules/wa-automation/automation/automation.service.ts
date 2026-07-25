@@ -1,6 +1,5 @@
 /* eslint-disable */
 import { Injectable, Logger } from '@nestjs/common';
-import * as cheerio from 'cheerio';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EngineFactory } from '@whatsapp-engine/engine.factory';
@@ -10,7 +9,6 @@ import { QuietHoursService } from './anti-ban/quiet-hours.service';
 import { WorkerTrackerService } from './worker-tracker.service';
 import { ConfigService } from '@nestjs/config';
 import { SessionService } from '../../session/session.service';
-import { BrowserFetchUtil } from '@common/utils/browser-fetch.util';
 import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
 
 export enum ErrorCategory {
@@ -43,7 +41,6 @@ export class AutomationService {
   private readonly logger = new Logger('AutomationService');
   private readonly maxRetries: number;
   private readonly FAILED_RETRY_TTL_MS = 3_600_000;
-  private readonly linkPreviewCache = new Map<string, any>();
   private readonly rateLimitRetryDelay: number;
 
   constructor(
@@ -152,14 +149,11 @@ export class AutomationService {
           await new Promise(r => setTimeout(r, 1500));
         }
       } else {
-        // Article broadcasts: send as plain text to trigger WhatsApp's native link preview.
-        // We inject the cached OG metadata to bypass broken native WWebJS crawler / WA server WAF blocks.
-        let previewData;
-        const urlMatch = text.match(/https?:\/\/[^\s]+/);
-        if (urlMatch && this.linkPreviewCache.has(urlMatch[0])) {
-           previewData = this.linkPreviewCache.get(urlMatch[0]);
-        }
-        result = await engine.sendTextMessage(chatId, text, { previewData });
+        // Article broadcasts: send as plain text. WhatsApp's native link preview
+        // is guaranteed by preWarmLinkPreview() having already called the engine's
+        // warmUpLinkPreview(), which primes WA's server-side crawl cache so that
+        // linkPreview:true resolves instantly for every subsequent sendMessage call.
+        result = await engine.sendTextMessage(chatId, text);
       }
 
       // 4. Increment rate limit counters and admin stats on success
@@ -212,39 +206,26 @@ export class AutomationService {
 
   /**
    * Pre-warm WhatsApp's server-side link preview cache for a URL in a given session.
-   * Call this once per admin queue / unique URL to make sendMessage link previews
-   * consistent across groups.
+   *
+   * Delegates to the engine adapter's warmUpLinkPreview(), which runs
+   * WAWebLinkPreviewChatAction.getLinkPreview() inside the Puppeteer page,
+   * polling until Meta's crawler completes and caches the result server-side.
+   * After this resolves, every subsequent sendMessage(..., { linkPreview: true })
+   * call in the same browser session will show a rich preview instantly.
    */
   async preWarmLinkPreview(sessionId: string, text: string): Promise<void> {
+    const urlMatch = text.match(/https?:\/\/[^\s]+/);
+    if (!urlMatch) return;
+    const url = urlMatch[0];
+
+    const engine = this.sessionService.getEngine(sessionId);
+    if (!engine || !engine.warmUpLinkPreview) return;
+
     try {
-      const urlMatch = text.match(/https?:\/\/[^\s]+/);
-      if (!urlMatch) return;
-      const url = urlMatch[0];
-
-      if (this.linkPreviewCache.has(url)) return;
-
-      // 1) Fetch HTML using BrowserFetchUtil
-      const html = await BrowserFetchUtil.fetchWithFallback(url, 15000);
-      const $ = cheerio.load(html);
-      const title = $('meta[property="og:title"]').attr('content') || $('title').text();
-      const description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-      
-      let jpegThumbnail: string | undefined;
-      const imageUrl = $('meta[property="og:image"]').attr('content');
-      if (imageUrl) {
-        try {
-          const imgUrlToFetch = imageUrl.startsWith('http') ? imageUrl : new URL(imageUrl, url).toString();
-          // 3) Fetch thumbnail using BrowserFetchUtil
-          const arrayBuffer = await BrowserFetchUtil.fetchArrayBufferWithFallback(imgUrlToFetch, 10000);
-          jpegThumbnail = Buffer.from(arrayBuffer).toString('base64');
-        } catch (e) {
-          this.logger.warn(`Failed to fetch thumbnail for ${url}: ${(e as Error).message}`);
-        }
-      }
-      
-      this.linkPreviewCache.set(url, { title, description, canonicalUrl: url, matchedText: url, jpegThumbnail });
+      await engine.warmUpLinkPreview(url);
+      this.logger.log(`Link preview warmed for: ${url}`);
     } catch {
-      // Pre-warm is best-effort
+      // Best-effort: dispatch continues without preview guarantee
     }
   }
 

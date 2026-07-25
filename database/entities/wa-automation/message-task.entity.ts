@@ -14,6 +14,8 @@ export enum MessageTaskStatus {
 }
 
 @Entity({ name: 'message_tasks' })
+@Index('UQ_task_broadcast_group', ['broadcast', 'group'], { unique: true })
+
 export class MessageTask {
   @PrimaryGeneratedColumn()
   id: number;

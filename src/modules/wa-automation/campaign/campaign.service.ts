@@ -186,8 +186,13 @@ export class CampaignService {
     });
     const saved = await this.broadcastRepo.save(broadcast);
 
-    // Create tasks with best admin assignment
+    // Create tasks with best admin assignment — skip if already exists
     for (const group of groups) {
+      const existing = await this.taskRepo.findOne({
+        where: { broadcast: { id: saved.id }, group: { id: group.id } },
+      });
+      if (existing) continue;
+
       const admin = await this.adminAssigner.selectAdminForGroup(group.id);
       if (!admin) continue;
 
@@ -571,6 +576,11 @@ export class CampaignService {
 
     let created = 0;
     for (const group of groups) {
+      const existing = await this.taskRepo.findOne({
+        where: { broadcast: { id: broadcast.id }, group: { id: group.id } },
+      });
+      if (existing) continue;
+
       const admin = await this.adminAssigner.selectAdminForGroup(group.id);
       if (!admin) continue;
       const task = this.taskRepo.create({

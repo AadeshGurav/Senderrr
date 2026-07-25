@@ -338,19 +338,21 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         const link = findLink(linkUrl);
         if (!link) return null;
 
-        for (let attempt = 0; attempt < 20; attempt++) {
+        for (let attempt = 0; attempt < 15; attempt++) {
           try {
             const result = await window
               .require('WAWebLinkPreviewChatAction')
               .getLinkPreview(link);
 
-            if (result && result.data) {
-              return result.data;
+            // Accept any truthy result — WA may return preview data directly
+            // or nested under result.data depending on the WA Web version.
+            if (result) {
+              return result.data || result;
             }
           } catch {
-            // Retry
+            // Module not yet loaded or crawler still running — retry
           }
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 2000));
         }
         return null;
       }, url);
