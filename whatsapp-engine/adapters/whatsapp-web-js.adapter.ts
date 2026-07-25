@@ -406,32 +406,31 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           console.log(`[LinkPreview Patch] Successfully monkey-patched module.getLinkPreview for ${linkUrl}`);
 
           // --- DIAGNOSTIC: Test a real link preview to see its exact shape ---
-          original('https://github.com').then((res: any) => {
-            if (res && res.data) {
-              const keys = Object.keys(res.data).join(', ');
-              console.log(`[LinkPreview Patch] REAL github preview keys: ${keys}`);
-              if (res.data.jpegThumbnail !== undefined) {
-                const thumb = res.data.jpegThumbnail;
-                console.log(`[LinkPreview Patch] REAL github jpegThumbnail type: ${typeof thumb}, isUint8Array: ${thumb instanceof Uint8Array}, isString: ${typeof thumb === 'string'}`);
-                if (thumb) {
-                  console.log(`[LinkPreview Patch] REAL github jpegThumbnail length: ${thumb.length || thumb.byteLength}`);
-                  if (typeof thumb === 'string') {
-                    console.log(`[LinkPreview Patch] REAL github jpegThumbnail snippet: ${thumb.substring(0, 50)}`);
-                  }
+          const testUrls = [
+            'https://www.youtube.com',
+            { href: 'https://www.youtube.com', url: 'https://www.youtube.com' }
+          ];
+
+          for (const testUrl of testUrls) {
+            original(testUrl).then((res: any) => {
+              if (res && res.data) {
+                const keys = Object.keys(res.data).join(', ');
+                console.log(`[LinkPreview Patch] REAL preview keys for ${JSON.stringify(testUrl)}: ${keys}`);
+                if (res.data.jpegThumbnail !== undefined) {
+                  const thumb = res.data.jpegThumbnail;
+                  console.log(`[LinkPreview Patch] REAL preview jpegThumbnail type: ${typeof thumb}, isUint8Array: ${thumb instanceof Uint8Array}, isString: ${typeof thumb === 'string'}`);
                 }
+                if (res.data.thumbnail !== undefined) {
+                  const thumb = res.data.thumbnail;
+                  console.log(`[LinkPreview Patch] REAL preview thumbnail type: ${typeof thumb}, isUint8Array: ${thumb instanceof Uint8Array}, isString: ${typeof thumb === 'string'}`);
+                }
+              } else {
+                console.log(`[LinkPreview Patch] REAL preview for ${JSON.stringify(testUrl)} returned null or no data`);
               }
-              if (res.data.thumbnail !== undefined) {
-                console.log(`[LinkPreview Patch] REAL github thumbnail exists, type: ${typeof res.data.thumbnail}`);
-              }
-              if (res.data.thumbnailDirectPath !== undefined) {
-                 console.log(`[LinkPreview Patch] REAL github thumbnailDirectPath exists: ${res.data.thumbnailDirectPath}`);
-              }
-            } else {
-              console.log(`[LinkPreview Patch] REAL github preview returned null or no data`);
-            }
-          }).catch((err: any) => {
-            console.log(`[LinkPreview Patch] REAL github preview failed: ${err}`);
-          });
+            }).catch((err: any) => {
+              console.log(`[LinkPreview Patch] REAL preview for ${JSON.stringify(testUrl)} failed: ${err}`);
+            });
+          }
         },
         url,
         previewData,
