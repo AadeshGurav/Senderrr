@@ -348,44 +348,13 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       await this.client.pupPage.evaluate(
         async (linkUrl: string, preview: { title: string; description: string; jpegThumbnailBase64?: string }) => {
           const module = (window as any).require('WAWebLinkPreviewChatAction');
-          console.log('[LinkPreview Patch] window.require result for WAWebLinkPreviewChatAction:', module ? 'FOUND' : 'UNDEFINED/NULL');
-          if (!module) {
-            console.log('[LinkPreview Patch] Module not found — bailing out early. Listing available webpack module names containing "LinkPreview" for debugging:');
-            try {
-              const allModules = (window as any).webpackChunkwhatsapp_web_client || (window as any).webpackChunkbuild;
-              console.log('[LinkPreview Patch] webpack chunk global exists:', !!allModules);
-            } catch (e) {
-              console.log('[LinkPreview Patch] Could not inspect webpack internals:', (e as Error).message);
-            }
-            return;
-          }
+          if (!module) return;
 
           const original = module.getLinkPreview.bind(module);
 
-          // Convert base64 thumbnail to Uint8Array inside the browser context.
-          // WhatsApp's internal protocol requires jpegThumbnail as raw binary bytes.
-          let thumbnailBytes: Uint8Array | undefined;
-          if (preview.jpegThumbnailBase64) {
-            try {
-              const binary = atob(preview.jpegThumbnailBase64);
-              thumbnailBytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) {
-                thumbnailBytes[i] = binary.charCodeAt(i);
-              }
-              console.log(`[LinkPreview Patch] Generated thumbnailBytes of length: ${thumbnailBytes.length}`);
-            } catch {
-              console.log(`[LinkPreview Patch] Failed to convert base64 to Uint8Array`);
-              thumbnailBytes = undefined;
-            }
-          } else {
-            console.log(`[LinkPreview Patch] No jpegThumbnailBase64 provided by Node`);
-          }
-
           module.getLinkPreview = (link: any) => {
-            console.log(`[LinkPreview Patch] getLinkPreview CALLED by WA logic with link:`, link);
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
             if (href && href.includes(new URL(linkUrl).hostname)) {
-              console.log(`[LinkPreview Patch] URL matches target! Returning custom payload. thumbnailBytes length:`, thumbnailBytes ? thumbnailBytes.length : 'undefined');
               // We intentionally DO NOT restore the original function here.
               // This ensures the patch persists for all subsequent groups in the broadcast.
               return Promise.resolve({
@@ -394,43 +363,17 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   matchedText: linkUrl,
                   title: preview.title || '',
                   description: preview.description || '',
-                  jpegThumbnail: thumbnailBytes,
+                  // Based on direct native observation, WhatsApp Web expects a Base64 string under the 'thumbnail' key.
+                  thumbnail: preview.jpegThumbnailBase64,
+                  // Also include jpegThumbnail for backwards compatibility with older WA Web versions.
+                  jpegThumbnail: preview.jpegThumbnailBase64,
                   preview: true,
                   subtype: 'url',
                 },
               });
             }
-            console.log(`[LinkPreview Patch] URL does NOT match target (${href}), falling back to original`);
             return original(link);
           };
-          console.log(`[LinkPreview Patch] Successfully monkey-patched module.getLinkPreview for ${linkUrl}`);
-
-          // --- DIAGNOSTIC: Test a real link preview to see its exact shape ---
-          const testUrls = [
-            'https://www.youtube.com',
-            { href: 'https://www.youtube.com', url: 'https://www.youtube.com' }
-          ];
-
-          for (const testUrl of testUrls) {
-            original(testUrl).then((res: any) => {
-              if (res && res.data) {
-                const keys = Object.keys(res.data).join(', ');
-                console.log(`[LinkPreview Patch] REAL preview keys for ${JSON.stringify(testUrl)}: ${keys}`);
-                if (res.data.jpegThumbnail !== undefined) {
-                  const thumb = res.data.jpegThumbnail;
-                  console.log(`[LinkPreview Patch] REAL preview jpegThumbnail type: ${typeof thumb}, isUint8Array: ${thumb instanceof Uint8Array}, isString: ${typeof thumb === 'string'}`);
-                }
-                if (res.data.thumbnail !== undefined) {
-                  const thumb = res.data.thumbnail;
-                  console.log(`[LinkPreview Patch] REAL preview thumbnail type: ${typeof thumb}, isUint8Array: ${thumb instanceof Uint8Array}, isString: ${typeof thumb === 'string'}`);
-                }
-              } else {
-                console.log(`[LinkPreview Patch] REAL preview for ${JSON.stringify(testUrl)} returned null or no data`);
-              }
-            }).catch((err: any) => {
-              console.log(`[LinkPreview Patch] REAL preview for ${JSON.stringify(testUrl)} failed: ${err}`);
-            });
-          }
         },
         url,
         previewData,
