@@ -337,6 +337,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   ): Promise<void> {
     if (!this.client || !this.client.pupPage) return;
     try {
+      // Setup console forwarding if not already setup (to avoid duplicate listeners per call)
+      if (!(this.client.pupPage as any)._hasConsoleListener) {
+        this.client.pupPage.on('console', msg => {
+          this.logger.debug(`[Browser Console] ${msg.text()}`);
+        });
+        (this.client.pupPage as any)._hasConsoleListener = true;
+      }
+
       await this.client.pupPage.evaluate(
         async (linkUrl: string, preview: { title: string; description: string; jpegThumbnailBase64?: string }) => {
           const module = (window as any).require('WAWebLinkPreviewChatAction');
@@ -354,14 +362,20 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               for (let i = 0; i < binary.length; i++) {
                 thumbnailBytes[i] = binary.charCodeAt(i);
               }
+              console.log(`[LinkPreview Patch] Generated thumbnailBytes of length: ${thumbnailBytes.length}`);
             } catch {
+              console.log(`[LinkPreview Patch] Failed to convert base64 to Uint8Array`);
               thumbnailBytes = undefined;
             }
+          } else {
+            console.log(`[LinkPreview Patch] No jpegThumbnailBase64 provided by Node`);
           }
 
           module.getLinkPreview = (link: any) => {
+            console.log(`[LinkPreview Patch] getLinkPreview CALLED by WA logic with link:`, link);
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
             if (href && href.includes(new URL(linkUrl).hostname)) {
+              console.log(`[LinkPreview Patch] URL matches target! Returning custom payload. thumbnailBytes length:`, thumbnailBytes ? thumbnailBytes.length : 'undefined');
               // We intentionally DO NOT restore the original function here.
               // This ensures the patch persists for all subsequent groups in the broadcast.
               return Promise.resolve({
@@ -376,14 +390,16 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 },
               });
             }
+            console.log(`[LinkPreview Patch] URL does NOT match target (${href}), falling back to original`);
             return original(link);
           };
+          console.log(`[LinkPreview Patch] Successfully monkey-patched module.getLinkPreview for ${linkUrl}`);
         },
         url,
         previewData,
       );
-    } catch {
-      // Best-effort: if patching fails, sendMessage falls back to linkPreview:true
+    } catch (e) {
+      this.logger.error('Failed to inject link preview patch', String(e));
     }
   }
 
