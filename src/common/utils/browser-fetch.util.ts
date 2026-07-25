@@ -18,6 +18,7 @@ export class BrowserFetchUtil {
           '--no-first-run',
           '--no-zygote',
           '--disable-gpu',
+          '--disable-web-security',
         ],
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       });
