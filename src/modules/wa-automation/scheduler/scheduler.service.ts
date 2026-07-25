@@ -19,10 +19,6 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class SchedulerService {
   private readonly logger = new Logger('SchedulerService');
-  private readonly targetUrls: string[];
-  private readonly activeHourStart: number;
-  private readonly activeHourEnd: number;
-  private readonly activeWeekdays: number[];
   private readonly DOWNTIME_THRESHOLD_MS = 3_600_000; // 1 hour
 
   constructor(
@@ -36,24 +32,25 @@ export class SchedulerService {
     private readonly settingsService: SettingsService,
     @InjectRepository(BroadcastEvent, 'data')
     private readonly broadcastRepo: Repository<BroadcastEvent>,
-    configService: ConfigService,
-  ) {
-    this.targetUrls = configService
-      .get<string>('scraper.targetUrls', '')
-      .split(',')
-      .map(u => u.trim())
-      .filter(Boolean);
-    this.activeHourStart = configService.get<number>('scraper.activeHourStart', 0);
-    this.activeHourEnd = configService.get<number>('scraper.activeHourEnd', 23);
-    const days = configService.get<string>('scraper.activeWeekdays', '0,1,2,3,4,5,6');
-    this.activeWeekdays = days.split(',').map(Number);
-  }
+    private readonly configService: ConfigService,
+  ) {}
 
   // ─── Scraper: every 5 minutes ───
 
   @Cron(CronExpression.EVERY_MINUTE)
   async checkForNewArticles(): Promise<void> {
     if (!(await this.isScraperActive())) return;
+
+    const rawUrls = await this.settingsService.get(
+      'SCRAPER_TARGET_URLS', 
+      this.configService.get<string>('scraper.targetUrls', '')
+    );
+    const targetUrls = rawUrls.split(',').map(u => u.trim()).filter(Boolean);
+
+    if (targetUrls.length === 0) {
+      this.logger.log('Scraper cycle skipped: no target URLs configured');
+      return;
+    }
 
     this.logger.log('Running scraper cycle...');
     const parser = new GenericParser();
@@ -70,7 +67,7 @@ export class SchedulerService {
       this.logger.warn(`Retry cycle error: ${(err as Error).message}`);
     }
 
-    for (const url of this.targetUrls) {
+    for (const url of targetUrls) {
       try {
         const articles = await this.scraperService.detectFromListing(url, parser);
         allNew.push(...articles);
@@ -212,14 +209,21 @@ export class SchedulerService {
 
   private async isScraperActive(): Promise<boolean> {
     const tz = await this.settingsService.get('TIMEZONE', 'UTC');
+    
+    const activeHourStart = await this.settingsService.getInt('SCRAPER_ACTIVE_HOUR_START', this.configService.get<number>('scraper.activeHourStart', 0));
+    const activeHourEnd = await this.settingsService.getInt('SCRAPER_ACTIVE_HOUR_END', this.configService.get<number>('scraper.activeHourEnd', 23));
+    
+    const rawDays = await this.settingsService.get('SCRAPER_ACTIVE_WEEKDAYS', this.configService.get<string>('scraper.activeWeekdays', '0,1,2,3,4,5,6'));
+    const activeWeekdays = rawDays.split(',').map(Number);
+    
     const now = new Date();
     const hour = this.getHourInTimezone(now, tz);
     const day = now.getDay();
-    if (!this.activeWeekdays.includes(day)) return false;
-    if (this.activeHourStart <= this.activeHourEnd) {
-      return hour >= this.activeHourStart && hour < this.activeHourEnd;
+    if (!activeWeekdays.includes(day)) return false;
+    if (activeHourStart <= activeHourEnd) {
+      return hour >= activeHourStart && hour < activeHourEnd;
     }
-    return hour >= this.activeHourStart || hour < this.activeHourEnd;
+    return hour >= activeHourStart || hour < activeHourEnd;
   }
 
   private getHourInTimezone(date: Date, timezone: string): number {
