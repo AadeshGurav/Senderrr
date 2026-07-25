@@ -234,17 +234,18 @@ export class AutomationService {
         $('meta[name="description"]').attr('content') ||
         '';
 
-      let absImageUrl: string | undefined;
+      let jpegThumbnailBase64: string | undefined;
       const imageUrl =
         $('meta[property="og:image"]').attr('content') ||
         $('meta[name="twitter:image"]').attr('content');
       if (imageUrl) {
-        absImageUrl = imageUrl.startsWith('http')
+        const absImageUrl = imageUrl.startsWith('http')
           ? imageUrl
           : new URL(imageUrl, url).toString();
+        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 100);
       }
 
-      await engine.warmUpLinkPreview(url, { title, description, imageUrl: absImageUrl });
+      await engine.warmUpLinkPreview(url, { title, description, jpegThumbnailBase64 });
       this.logger.log(`Link preview injected for: ${url} | title: "${title.slice(0, 60)}"`);
     } catch (err) {
       this.logger.warn(`preWarmLinkPreview failed for ${url}: ${(err as Error).message}`);

@@ -332,41 +332,28 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     previewData: {
       title: string;
       description: string;
-      imageUrl?: string;
+      jpegThumbnailBase64?: string;
     },
   ): Promise<void> {
     if (!this.client || !this.client.pupPage) return;
     try {
       await this.client.pupPage.evaluate(
-        async (linkUrl: string, preview: { title: string; description: string; imageUrl?: string }) => {
+        async (linkUrl: string, preview: { title: string; description: string; jpegThumbnailBase64?: string }) => {
           const module = (window as any).require('WAWebLinkPreviewChatAction');
           if (!module) return;
 
           const original = module.getLinkPreview.bind(module);
 
-          // Fetch and resize the OG image to a small JPEG thumbnail using the
-          // browser's native Canvas API. WhatsApp expects jpegThumbnail as a
-          // Uint8Array of raw JPEG bytes, max ~5KB (roughly 100x100px).
+          // Convert base64 thumbnail to Uint8Array inside the browser context.
+          // WhatsApp's internal protocol requires jpegThumbnail as raw binary bytes.
           let thumbnailBytes: Uint8Array | undefined;
-          if (preview.imageUrl) {
+          if (preview.jpegThumbnailBase64) {
             try {
-              const resp = await fetch(preview.imageUrl);
-              const blob = await resp.blob();
-              const bitmap = await createImageBitmap(blob);
-
-              const TARGET = 100;
-              const ratio = Math.min(TARGET / bitmap.width, TARGET / bitmap.height);
-              const w = Math.round(bitmap.width * ratio);
-              const h = Math.round(bitmap.height * ratio);
-
-              const canvas = new OffscreenCanvas(w, h);
-              const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
-              ctx.drawImage(bitmap, 0, 0, w, h);
-
-              // quality 0.7 keeps JPEG under ~5KB for 100x100
-              const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
-              const arrBuf = await outBlob.arrayBuffer();
-              thumbnailBytes = new Uint8Array(arrBuf);
+              const binary = atob(preview.jpegThumbnailBase64);
+              thumbnailBytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) {
+                thumbnailBytes[i] = binary.charCodeAt(i);
+              }
             } catch {
               thumbnailBytes = undefined;
             }
@@ -375,7 +362,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           module.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
             if (href && href.includes(new URL(linkUrl).hostname)) {
-              module.getLinkPreview = original;
+              // We intentionally DO NOT restore the original function here.
+              // This ensures the patch persists for all subsequent groups in the broadcast.
               return Promise.resolve({
                 data: {
                   canonicalUrl: linkUrl,

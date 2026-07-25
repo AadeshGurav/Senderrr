@@ -150,4 +150,56 @@ export class BrowserFetchUtil {
       }
     }
   }
+
+  /**
+   * Fetches an image via a blank Puppeteer page (bypassing CSP/CORS constraints),
+   * resizes it to a max boundary (default 100x100) using Canvas, and returns
+   * a highly compressed JPEG as a base64 string. WhatsApp requires the thumbnail
+   * to be under ~5KB.
+   */
+  static async fetchAndResizeImageBase64(imageUrl: string, maxSize = 100): Promise<string | undefined> {
+    this.logger.log(`Fetching and resizing thumbnail via browser: ${imageUrl}`);
+    const browser = await this.getBrowser();
+    let page: puppeteer.Page | null = null;
+    try {
+      page = await browser.newPage();
+      
+      const base64 = await page.evaluate(async (url: string, size: number) => {
+        try {
+          const resp = await fetch(url, { mode: 'no-cors' });
+          const blob = await resp.blob();
+          const bitmap = await createImageBitmap(blob);
+
+          const ratio = Math.min(size / bitmap.width, size / bitmap.height);
+          const w = Math.round(bitmap.width * ratio);
+          const h = Math.round(bitmap.height * ratio);
+
+          const canvas = new OffscreenCanvas(w, h);
+          const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+          ctx.drawImage(bitmap, 0, 0, w, h);
+
+          const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
+          const arrBuf = await outBlob.arrayBuffer();
+          const bytes = new Uint8Array(arrBuf);
+          
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return btoa(binary);
+        } catch (e) {
+          return undefined;
+        }
+      }, imageUrl, maxSize);
+      
+      return base64;
+    } catch (err) {
+      this.logger.warn(`Thumbnail resize failed for ${imageUrl}: ${(err as Error).message}`);
+      return undefined;
+    } finally {
+      if (page) {
+        await page.close().catch(() => {});
+      }
+    }
+  }
 }
