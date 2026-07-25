@@ -31,15 +31,24 @@ export class WaAuthService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const count = await this.userRepo.count();
-    if (count === 0) {
+    const defaultPassword = 'c8F#k9M!p2L$v7N@';
+    const adminUser = await this.userRepo.findOne({ where: { username: 'admin' } });
+
+    if (!adminUser) {
       const user = this.userRepo.create({
         username: 'admin',
-        passwordHash: hashPassword('admin'),
+        passwordHash: hashPassword(defaultPassword),
         role: WaUserRole.ADMIN,
       });
       await this.userRepo.save(user);
-      console.log('[WaAuth] Default admin user created (admin/admin)');
+      console.log('[WaAuth] Default admin user created with secure password');
+    } else {
+      // Secure existing installations still using 'admin'
+      if (verifyPassword('admin', adminUser.passwordHash)) {
+        adminUser.passwordHash = hashPassword(defaultPassword);
+        await this.userRepo.save(adminUser);
+        console.log('[WaAuth] Default admin password secured');
+      }
     }
   }
 
