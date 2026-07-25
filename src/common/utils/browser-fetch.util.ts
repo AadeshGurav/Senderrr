@@ -164,19 +164,28 @@ export class BrowserFetchUtil {
     try {
       page = await browser.newPage();
       
-      const base64 = await page.evaluate(async (url: string, size: number) => {
+      // Navigate directly to the image URL. The browser will natively render it
+      // as an <img> tag, bypassing all CORS and CSP fetch restrictions.
+      const response = await page.goto(imageUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+      if (!response || !response.ok()) {
+        throw new Error(`Failed to load image page: ${response?.statusText()}`);
+      }
+      
+      const base64 = await page.evaluate(async (size: number) => {
         try {
-          const resp = await fetch(url, { mode: 'no-cors' });
-          const blob = await resp.blob();
-          const bitmap = await createImageBitmap(blob);
+          const img = document.querySelector('img');
+          if (!img) return undefined;
 
-          const ratio = Math.min(size / bitmap.width, size / bitmap.height);
-          const w = Math.round(bitmap.width * ratio);
-          const h = Math.round(bitmap.height * ratio);
+          // Wait for the image to be fully decoded by the browser
+          await img.decode();
+
+          const ratio = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+          const w = Math.round(img.naturalWidth * ratio);
+          const h = Math.round(img.naturalHeight * ratio);
 
           const canvas = new OffscreenCanvas(w, h);
           const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
-          ctx.drawImage(bitmap, 0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
 
           const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
           const arrBuf = await outBlob.arrayBuffer();
@@ -190,7 +199,7 @@ export class BrowserFetchUtil {
         } catch (e) {
           return undefined;
         }
-      }, imageUrl, maxSize);
+      }, maxSize);
       
       return base64;
     } catch (err) {
