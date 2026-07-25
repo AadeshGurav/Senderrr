@@ -10,6 +10,7 @@ import { QuietHoursService } from './anti-ban/quiet-hours.service';
 import { WorkerTrackerService } from './worker-tracker.service';
 import { ConfigService } from '@nestjs/config';
 import { SessionService } from '../../session/session.service';
+import { BrowserFetchUtil } from '@common/utils/browser-fetch.util';
 import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
 
 export enum ErrorCategory {
@@ -222,12 +223,8 @@ export class AutomationService {
 
       if (this.linkPreviewCache.has(url)) return;
 
-      const res = await fetch(url, {
-          headers: {
-              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          }
-      });
-      const html = await res.text();
+      // 1) Fetch HTML using BrowserFetchUtil
+      const html = await BrowserFetchUtil.fetchWithFallback(url, 15000);
       const $ = cheerio.load(html);
       const title = $('meta[property="og:title"]').attr('content') || $('title').text();
       const description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
@@ -237,11 +234,9 @@ export class AutomationService {
       if (imageUrl) {
         try {
           const imgUrlToFetch = imageUrl.startsWith('http') ? imageUrl : new URL(imageUrl, url).toString();
-          const imgRes = await fetch(imgUrlToFetch);
-          if (imgRes.ok) {
-            const buffer = await imgRes.arrayBuffer();
-            jpegThumbnail = Buffer.from(buffer).toString('base64');
-          }
+          // 3) Fetch thumbnail using BrowserFetchUtil
+          const arrayBuffer = await BrowserFetchUtil.fetchArrayBufferWithFallback(imgUrlToFetch, 10000);
+          jpegThumbnail = Buffer.from(arrayBuffer).toString('base64');
         } catch (e) {
           this.logger.warn(`Failed to fetch thumbnail for ${url}: ${(e as Error).message}`);
         }
