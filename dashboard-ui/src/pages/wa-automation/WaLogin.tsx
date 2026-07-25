@@ -7,8 +7,8 @@ interface WaLoginProps {
 }
 
 export default function WaLogin({ onLogin }: WaLoginProps) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
