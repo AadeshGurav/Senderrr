@@ -300,64 +300,75 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     return this.pushName;
   }
 
-  async sendTextMessage(chatId: string, text: string, options?: { previewData?: any }): Promise<MessageResult> {
+  async sendTextMessage(chatId: string, text: string, options?: { linkPreview?: boolean }): Promise<MessageResult> {
     this.ensureReady();
-    
-    const sendOptions: any = {
+
+    const msg = await this.client!.sendMessage(chatId, text, {
+      linkPreview: options?.linkPreview !== false,
       waitUntilMsgSent: true,
-    };
-    
-    if (options?.previewData) {
-      sendOptions.linkPreview = options.previewData;
-    } else {
-      sendOptions.linkPreview = true;
-    }
-    
-    const msg = await this.client!.sendMessage(chatId, text, sendOptions);
-    return { 
-      id: msg?.id?._serialized || '', 
-      timestamp: msg?.timestamp || Math.floor(Date.now() / 1000) 
+    });
+    return {
+      id: msg?.id?._serialized || '',
+      timestamp: msg?.timestamp || Math.floor(Date.now() / 1000),
     };
   }
 
   /**
-   * Poll WhatsApp's internal getLinkPreview API until Meta's server-side crawl
-   * completes and returns valid preview data. Once the browser's page context
-   * has a successful preview, ALL subsequent sendMessage calls in the same
-   * browser session resolve the preview from Meta's cached result instantly.
+   * Injects pre-fetched link preview data into the WhatsApp Web page context
+   * by monkey-patching WAWebLinkPreviewChatAction.getLinkPreview.
    *
-   * Pre-warming before the first send eliminates the root cause of inconsistent
-   * previews: Meta's first crawl returns null (still in progress), so groups
-   * sent early miss the preview. Later groups hit the cached result.
+   * WWebJS's sendMessage calls getLinkPreview internally when linkPreview:true
+   * is set. In headless Puppeteer on Render, the target site's WAF blocks this
+   * crawl, so getLinkPreview returns null and no preview is attached.
+   *
+   * By patching the function BEFORE sendMessage is called, we ensure our own
+   * pre-fetched OG data is returned in exactly the format WWebJS expects:
+   *   { data: { canonicalUrl, matchedText, title, description, jpegThumbnail, preview, subtype } }
+   *
+   * The patch is URL-specific and self-cleaning (restored after first call).
    */
-  async warmUpLinkPreview(url: string): Promise<any> {
-    if (!this.client || !this.client.pupPage) return null;
+  async warmUpLinkPreview(
+    url: string,
+    previewData: {
+      title: string;
+      description: string;
+      jpegThumbnail?: string;
+    },
+  ): Promise<void> {
+    if (!this.client || !this.client.pupPage) return;
     try {
-      return await this.client.pupPage.evaluate(async (linkUrl: string) => {
-        const { findLink } = window.require('WALinkify');
-        const link = findLink(linkUrl);
-        if (!link) return null;
+      await this.client.pupPage.evaluate(
+        (linkUrl: string, preview: { title: string; description: string; jpegThumbnail?: string }) => {
+          const module = (window as any).require('WAWebLinkPreviewChatAction');
+          if (!module) return;
 
-        for (let attempt = 0; attempt < 15; attempt++) {
-          try {
-            const result = await window
-              .require('WAWebLinkPreviewChatAction')
-              .getLinkPreview(link);
+          const original = module.getLinkPreview.bind(module);
 
-            // Accept any truthy result — WA may return preview data directly
-            // or nested under result.data depending on the WA Web version.
-            if (result) {
-              return result.data || result;
+          module.getLinkPreview = (link: any) => {
+            const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
+            if (href && href.includes(new URL(linkUrl).hostname)) {
+              // Restore original for future calls
+              module.getLinkPreview = original;
+              return Promise.resolve({
+                data: {
+                  canonicalUrl: linkUrl,
+                  matchedText: linkUrl,
+                  title: preview.title || '',
+                  description: preview.description || '',
+                  jpegThumbnail: preview.jpegThumbnail || undefined,
+                  preview: true,
+                  subtype: 'url',
+                },
+              });
             }
-          } catch {
-            // Module not yet loaded or crawler still running — retry
-          }
-          await new Promise(r => setTimeout(r, 2000));
-        }
-        return null;
-      }, url);
+            return original(link);
+          };
+        },
+        url,
+        previewData,
+      );
     } catch {
-      return null;
+      // Best-effort: if patching fails, sendMessage falls back to linkPreview:true
     }
   }
 

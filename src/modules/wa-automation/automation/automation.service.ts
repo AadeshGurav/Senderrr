@@ -1,5 +1,6 @@
 /* eslint-disable */
 import { Injectable, Logger } from '@nestjs/common';
+import * as cheerio from 'cheerio';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EngineFactory } from '@whatsapp-engine/engine.factory';
@@ -9,6 +10,7 @@ import { QuietHoursService } from './anti-ban/quiet-hours.service';
 import { WorkerTrackerService } from './worker-tracker.service';
 import { ConfigService } from '@nestjs/config';
 import { SessionService } from '../../session/session.service';
+import { BrowserFetchUtil } from '@common/utils/browser-fetch.util';
 import { AdminAccount } from '@database/entities/wa-automation/admin-account.entity';
 
 export enum ErrorCategory {
@@ -149,11 +151,7 @@ export class AutomationService {
           await new Promise(r => setTimeout(r, 1500));
         }
       } else {
-        // Article broadcasts: send as plain text. WhatsApp's native link preview
-        // is guaranteed by preWarmLinkPreview() having already called the engine's
-        // warmUpLinkPreview(), which primes WA's server-side crawl cache so that
-        // linkPreview:true resolves instantly for every subsequent sendMessage call.
-        result = await engine.sendTextMessage(chatId, text);
+        result = await engine.sendTextMessage(chatId, text, { linkPreview: true });
       }
 
       // 4. Increment rate limit counters and admin stats on success
@@ -205,13 +203,15 @@ export class AutomationService {
   }
 
   /**
-   * Pre-warm WhatsApp's server-side link preview cache for a URL in a given session.
+   * Fetch OG metadata for the URL in `text`, then inject it into the WA page
+   * context by monkey-patching WAWebLinkPreviewChatAction.getLinkPreview.
    *
-   * Delegates to the engine adapter's warmUpLinkPreview(), which runs
-   * WAWebLinkPreviewChatAction.getLinkPreview() inside the Puppeteer page,
-   * polling until Meta's crawler completes and caches the result server-side.
-   * After this resolves, every subsequent sendMessage(..., { linkPreview: true })
-   * call in the same browser session will show a rich preview instantly.
+   * Why: In headless Puppeteer on Render, getLinkPreview fails to crawl the
+   * target URL (WAF/bot-detection blocks the headless request), so it returns
+   * null and no preview is attached. We bypass this by fetching OG metadata
+   * ourselves (via BrowserFetchUtil which already has a WAF bypass) and then
+   * patching getLinkPreview to return our data in the exact format WWebJS
+   * expects: { data: { canonicalUrl, matchedText, title, description, jpegThumbnail } }.
    */
   async preWarmLinkPreview(sessionId: string, text: string): Promise<void> {
     const urlMatch = text.match(/https?:\/\/[^\s]+/);
@@ -222,12 +222,41 @@ export class AutomationService {
     if (!engine || !engine.warmUpLinkPreview) return;
 
     try {
-      await engine.warmUpLinkPreview(url);
-      this.logger.log(`Link preview warmed for: ${url}`);
-    } catch {
-      // Best-effort: dispatch continues without preview guarantee
+      const html = await BrowserFetchUtil.fetchWithFallback(url, 20000);
+      const $ = cheerio.load(html);
+      const title =
+        $('meta[property="og:title"]').attr('content') ||
+        $('meta[name="twitter:title"]').attr('content') ||
+        $('title').first().text().trim() ||
+        '';
+      const description =
+        $('meta[property="og:description"]').attr('content') ||
+        $('meta[name="description"]').attr('content') ||
+        '';
+
+      let jpegThumbnail: string | undefined;
+      const imageUrl =
+        $('meta[property="og:image"]').attr('content') ||
+        $('meta[name="twitter:image"]').attr('content');
+      if (imageUrl) {
+        try {
+          const absImageUrl = imageUrl.startsWith('http')
+            ? imageUrl
+            : new URL(imageUrl, url).toString();
+          const buf = await BrowserFetchUtil.fetchArrayBufferWithFallback(absImageUrl, 10000);
+          jpegThumbnail = Buffer.from(buf).toString('base64');
+        } catch {
+          // Thumbnail failure is non-fatal — text preview still shows
+        }
+      }
+
+      await engine.warmUpLinkPreview(url, { title, description, jpegThumbnail });
+      this.logger.log(`Link preview injected for: ${url} | title: "${title.slice(0, 60)}"`);
+    } catch (err) {
+      this.logger.warn(`preWarmLinkPreview failed for ${url}: ${(err as Error).message}`);
     }
   }
+
 
   /**
    * Edit a previously sent WhatsApp message in a given group.

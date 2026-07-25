@@ -224,7 +224,7 @@ export interface IWhatsAppEngine {
   getPushName(): string | null;
 
   // Messaging - Basic
-  sendTextMessage(chatId: string, text: string, options?: { previewData?: any }): Promise<MessageResult>;
+  sendTextMessage(chatId: string, text: string, options?: { linkPreview?: boolean }): Promise<MessageResult>;
   sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
   sendAlbumMessage(chatId: string, mediaArray: MediaInput[], caption?: string): Promise<MessageResult>;
   sendVideoMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
@@ -304,6 +304,7 @@ export interface IWhatsAppEngine {
   sendProduct(chatId: string, productId: string, body?: string): Promise<MessageResult>;
   sendCatalog(chatId: string, body?: string): Promise<MessageResult>;
 
-  // Link Preview (pre-warm WhatsApp's server-side cache before dispatching)
-  warmUpLinkPreview?(url: string): Promise<void>;
+  // Link Preview — injects pre-fetched OG metadata into the WA page context
+  // so that WWebJS's internal sendMessage getLinkPreview call returns our data.
+  warmUpLinkPreview?(url: string, previewData: { title: string; description: string; jpegThumbnail?: string }): Promise<void>;
 }
