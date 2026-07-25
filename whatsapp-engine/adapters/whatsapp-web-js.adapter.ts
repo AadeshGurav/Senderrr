@@ -480,31 +480,44 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             if (page) {
               fallbackGroups = await page.evaluate(() => {
                 // @ts-ignore
-                if (!window.Store || !window.Store.Chat) return [];
-                // @ts-ignore
-                const allChats = window.Store.Chat.getModelsArray();
+                if (!window.require) return [];
+                let ChatCollection;
+                try {
+                  // @ts-ignore
+                  ChatCollection = window.require('WAWebCollections').Chat;
+                } catch (e) {
+                  return [];
+                }
+                
+                const allChats = ChatCollection.getModelsArray();
                 return allChats
                   .filter((c: any) => c.isGroup || (c.id && c.id._serialized && c.id._serialized.endsWith('@g.us')))
                   .map((c: any) => {
-                    const pCount = c.groupMetadata && c.groupMetadata.participants ? c.groupMetadata.participants.length : undefined;
+                    let pCount = undefined;
                     let isAdmin = false;
-                    // @ts-ignore
-                    if (c.groupMetadata && c.groupMetadata.participants && window.Store.Contact && window.Store.Contact.models) {
-                      // @ts-ignore
-                      const me = window.Store.Contact.models.find((x: any) => x.isMe);
-                      if (me && me.id) {
-                        const meId = me.id._serialized || me.id;
-                        const myParticipant = c.groupMetadata.participants.find((p: any) => 
-                          p.id === meId || (p.id && p.id._serialized === meId)
-                        );
-                        if (myParticipant && (myParticipant.isAdmin || myParticipant.isSuperAdmin)) {
-                          isAdmin = true;
-                        }
+
+                    try {
+                      if (c.groupMetadata) {
+                         pCount = c.groupMetadata.participants ? c.groupMetadata.participants.length : undefined;
+                         
+                         // @ts-ignore
+                         const Contact = window.require('WAWebCollections').Contact;
+                         const me = Contact.getModelsArray().find((x: any) => x.isMe);
+                         if (me && me.id) {
+                            const meId = me.id._serialized || me.id;
+                            const myParticipant = c.groupMetadata.participants.find((p: any) => 
+                              p.id === meId || (p.id && p.id._serialized === meId)
+                            );
+                            if (myParticipant && (myParticipant.isAdmin || myParticipant.isSuperAdmin)) {
+                              isAdmin = true;
+                            }
+                         }
                       }
-                    }
+                    } catch (ignore) {}
+
                     return {
                       id: c.id && c.id._serialized ? c.id._serialized : c.id,
-                      name: c.name || c.title || (c.id ? c.id._serialized : 'Unknown'),
+                      name: c.name || c.title || c.formattedTitle || (c.id ? c.id._serialized : 'Unknown'),
                       participantsCount: pCount,
                       isAdmin: isAdmin
                     };
