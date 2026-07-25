@@ -163,20 +163,17 @@ export class BrowserFetchUtil {
     let page: puppeteer.Page | null = null;
     try {
       page = await browser.newPage();
-      
-      // Navigate directly to the image URL. The browser will natively render it
-      // as an <img> tag, bypassing all CORS and CSP fetch restrictions.
-      const response = await page.goto(imageUrl, { waitUntil: 'networkidle2', timeout: 20000 });
-      if (!response || !response.ok()) {
-        throw new Error(`Failed to load image page: ${response?.statusText()}`);
-      }
-      
+      await page.goto('about:blank');
+      await page.setContent(
+        `<img id="thumb" crossorigin="anonymous" src="${imageUrl}">`,
+        { waitUntil: 'load', timeout: 20000 }
+      );
+
       const base64 = await page.evaluate(async (size: number) => {
         try {
-          const img = document.querySelector('img');
+          const img = document.getElementById('thumb') as HTMLImageElement;
           if (!img) return undefined;
 
-          // Wait for the image to be fully decoded by the browser
           await img.decode();
 
           const ratio = Math.min(size / img.naturalWidth, size / img.naturalHeight);
@@ -190,7 +187,7 @@ export class BrowserFetchUtil {
           const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
           const arrBuf = await outBlob.arrayBuffer();
           const bytes = new Uint8Array(arrBuf);
-          
+
           let binary = '';
           for (let i = 0; i < bytes.byteLength; i++) {
             binary += String.fromCharCode(bytes[i]);
@@ -200,7 +197,7 @@ export class BrowserFetchUtil {
           return undefined;
         }
       }, maxSize);
-      
+
       return base64;
     } catch (err) {
       this.logger.warn(`Thumbnail resize failed for ${imageUrl}: ${(err as Error).message}`);
