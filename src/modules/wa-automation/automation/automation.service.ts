@@ -242,7 +242,9 @@ export class AutomationService {
         const absImageUrl = imageUrl.startsWith('http')
           ? imageUrl
           : new URL(imageUrl, url).toString();
-        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 400);
+        // Test hypothesis: bump thumbnail to 1000px to see if size triggers banner layout
+        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 1000);
+        this.logger.log(`Generated thumbnail (max 1000px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
       }
 
       await engine.warmUpLinkPreview(url, { title, description, jpegThumbnailBase64 });
