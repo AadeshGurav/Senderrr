@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Square, Pause, PlayIcon, Edit3, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
+import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Edit3, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -16,6 +16,7 @@ import {
   useWaGroupsQuery,
   useWaCommunitiesQuery,
   useUpdateAdMutation,
+  useAdLogsQuery,
 } from '../../hooks/wa-queries';
 import { adApi } from '../../services/wa-api';
 import type { ApiAd } from '../../services/wa-api';
@@ -37,6 +38,7 @@ interface Telemetry {
   totalSent: number;
   totalFailed: number;
   todaySent: number;
+  firedToday: boolean;
   daysRemaining: number;
   perGroup: PerGroupStat[];
 }
@@ -68,7 +70,6 @@ const statusVariant = (status: string) => {
 
 const TARGET_OPTIONS = [
   { value: 'all_groups', label: 'All Groups', icon: Globe, desc: 'All targeted, healthy groups' },
-  { value: 'all_communities', label: 'All Communities', icon: Users, desc: 'Groups within active communities' },
   { value: 'specific', label: 'Specific Targets', icon: Target, desc: 'Pick groups & communities' },
 ];
 
@@ -99,6 +100,7 @@ export default function WaAdvertisements() {
   const waKeys = { advertisements: ['wa', 'advertisements'] as const };
 
   const [showForm, setShowForm] = useState(false);
+  const [packageDaysInput, setPackageDaysInput] = useState('1');
   const [editingAd, setEditingAd] = useState<ApiAdFull | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [expandedAd, setExpandedAd] = useState<number | null>(null);
@@ -147,39 +149,6 @@ export default function WaAdvertisements() {
     }
   };
 
-  const handleToggleStatus = async (ad: ApiAdFull) => {
-    setTogglingStatus(ad.id);
-    try {
-      if (ad.status === 'active') {
-        await adApi.update(ad.id, { status: 'paused' });
-        success('Campaign paused', `"${ad.title}" was paused`);
-      } else if (ad.status === 'paused') {
-        await adApi.update(ad.id, { status: 'active' });
-        success('Campaign resumed', `"${ad.title}" will continue sending`);
-      } else if (ad.status === 'cancelled') {
-        showError('Cannot resume a cancelled campaign');
-      }
-      queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
-    } catch (e: unknown) {
-      showError('Failed to update campaign', e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setTogglingStatus(null);
-    }
-  };
-
-  const handleCancel = async (ad: ApiAdFull) => {
-    setTogglingStatus(ad.id);
-    try {
-      await adApi.update(ad.id, { status: 'cancelled' });
-      success('Campaign stopped', `"${ad.title}" was cancelled`);
-      queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
-    } catch (e: unknown) {
-      showError('Failed to stop campaign', e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setTogglingStatus(null);
-    }
-  };
-
   const handleFilesSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const newFiles: File[] = [];
@@ -214,6 +183,7 @@ export default function WaAdvertisements() {
       selectedCommunities: (ad.targetCommunities as Community[] | undefined) ?? [],
       packageDays: ad.packageDays || 1,
     });
+    setPackageDaysInput(String(ad.packageDays || 1));
     setMediaFiles([]);
     setMediaPreviews([]);
     setRemovedMediaIds([]);
@@ -285,6 +255,7 @@ export default function WaAdvertisements() {
       setShowForm(false);
       setEditingAd(null);
       setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 });
+      setPackageDaysInput('1');
       setMediaFiles([]);
       setMediaPreviews([]);
       setRemovedMediaIds([]);
@@ -318,7 +289,7 @@ export default function WaAdvertisements() {
           <h1 className="text-2xl font-bold text-[var(--color-text)]">Advertisements</h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">Manage promotional ad campaigns</p>
         </div>
-        <Button icon={Plus} onClick={() => { setEditingAd(null); setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 }); setMediaFiles([]); setMediaPreviews([]); setShowForm(true); }}>New Campaign</Button>
+        <Button icon={Plus} onClick={() => { setEditingAd(null); setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 }); setPackageDaysInput('1'); setMediaFiles([]); setMediaPreviews([]); setShowForm(true); }}>New Campaign</Button>
       </div>
 
       {/* ─── Empty / Grid ───────────────────────────────────── */}
@@ -345,8 +316,6 @@ export default function WaAdvertisements() {
               setExpandedAd={setExpandedAd}
               onEdit={openEditModal}
               onDelete={setDeleteTarget}
-              onToggleStatus={handleToggleStatus}
-              onCancel={handleCancel}
               onManualSend={handleManualSend}
               togglingStatus={togglingStatus}
             />
@@ -593,8 +562,15 @@ export default function WaAdvertisements() {
                     type="number"
                     min="1"
                     max="30"
-                    value={formData.packageDays}
-                    onChange={(e) => setFormData({ ...formData, packageDays: parseInt(e.target.value) || 1 })}
+                    value={packageDaysInput}
+                    onChange={(e) => setPackageDaysInput(e.target.value)}
+                    onBlur={() => {
+                      let parsed = parseInt(packageDaysInput, 10);
+                      if (isNaN(parsed) || parsed < 1) parsed = 1;
+                      if (parsed > 30) parsed = 30;
+                      setPackageDaysInput(String(parsed));
+                      setFormData(prev => ({ ...prev, packageDays: parsed }));
+                    }}
                   />
                   <p className="text-[11px] text-[var(--color-text-muted)] mt-1">How many days this campaign runs</p>
                 </div>
@@ -634,8 +610,6 @@ function AdCard({
   setExpandedAd,
   onEdit,
   onDelete,
-  onToggleStatus,
-  onCancel,
   onManualSend,
   togglingStatus,
 }: {
@@ -644,11 +618,12 @@ function AdCard({
   setExpandedAd: (id: number | null) => void;
   onEdit: (ad: ApiAdFull) => void;
   onDelete: (target: { id: number; title: string }) => void;
-  onToggleStatus: (ad: ApiAdFull) => void;
-  onCancel: (ad: ApiAdFull) => void;
   onManualSend: (ad: ApiAdFull) => void;
   togglingStatus: number | null;
 }) {
+  const [showLogs, setShowLogs] = useState(false);
+  const { data: logs, isLoading: loadingLogs } = useAdLogsQuery(ad.id, showLogs);
+
   const { data: rawTelemetry } = useAdTelemetryQuery(ad.id);
   const telemetry = rawTelemetry ? (rawTelemetry as unknown as Telemetry) : null;
   const isExpanded = expandedAd === ad.id;
@@ -658,7 +633,7 @@ function AdCard({
   const daysRemaining = telemetry?.daysRemaining ?? Math.max(0, (ad.packageDays || 1) - (ad.daysUsed || 0));
 
   return (
-    <Card hover>
+    <Card hover className={telemetry?.firedToday ? 'ring-1 ring-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10 border-l-4 border-l-emerald-500' : ''}>
       <CardBody>
         {/* ── Header ──────────────────────── */}
         <div className="flex items-start justify-between mb-3">
@@ -731,6 +706,44 @@ function AdCard({
               )}
             </div>
           )}
+
+          {/* ── Per-fire Logs ──────── */}
+          <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
+            <button
+              type="button"
+              onClick={() => setShowLogs(!showLogs)}
+              className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+            >
+              {showLogs ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <Calendar size={12} />
+              View Send Logs
+            </button>
+            {showLogs && (
+              <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                {loadingLogs ? (
+                  <div className="text-[11px] text-[var(--color-text-muted)] text-center py-2">Loading logs...</div>
+                ) : logs && logs.length > 0 ? (
+                  logs.map((log: { groupName: string; status: string; timestamp: string }, i: number) => (
+                    <div key={i} className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-[var(--color-bg-secondary)]">
+                      <span className="text-[var(--color-text-secondary)] truncate mr-2">{log.groupName}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={log.status === 'sent' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+                          {log.status === 'sent' ? 'Sent' : 'Failed'}
+                        </span>
+                        <span className="text-[var(--color-text-muted)]">
+                          {new Date(log.timestamp).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-[var(--color-text-muted)] text-center py-2">No logs found.</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </CardBody>
 
@@ -773,29 +786,6 @@ function AdCard({
               </Button>
             )}
 
-            {(ad.status === 'active' || ad.status === 'paused') && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={ad.status === 'active' ? Pause : PlayIcon}
-                onClick={() => onToggleStatus(ad)}
-                loading={togglingStatus === ad.id}
-              >
-                {ad.status === 'active' ? 'Pause' : 'Resume'}
-              </Button>
-            )}
-
-            {ad.status === 'active' && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={Square}
-                onClick={() => onCancel(ad)}
-                loading={togglingStatus === ad.id}
-              >
-                Stop
-              </Button>
-            )}
 
             {(ad.status === 'draft' || ad.status === 'paused') && (
               <Button

@@ -13,6 +13,8 @@ import {
   HttpStatus,
   UploadedFile,
   UseInterceptors,
+  Query,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -52,6 +54,16 @@ export class AdvertisementController {
   @ApiOperation({ summary: 'Get detailed advertisement telemetry with per-group breakdown' })
   async getTelemetry(@Param('id', ParseIntPipe) id: number) {
     return this.adService.getTelemetry(id);
+  }
+
+  @Get(':id/logs')
+  @ApiOperation({ summary: 'Get advertisement logs' })
+  async getLogs(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.adService.getLogs(id, page, limit);
   }
 
   @Post()

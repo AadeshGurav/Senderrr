@@ -300,6 +300,7 @@ export const adApi = {
   get: (id: number) => request<ApiAd>(`/advertisements/${id}`),
   getStatistics: (id: number) => request<Record<string, unknown>>(`/advertisements/${id}/statistics`),
   getTelemetry: (id: number) => request<Record<string, unknown> & { status?: string }>(`/advertisements/${id}/telemetry`),
+  getLogs: (id: number, page = 1) => request<{ groupName: string; status: string; timestamp: string }[]>(`/advertisements/${id}/logs?page=${page}`),
   create: (data: Record<string, unknown>) => request<ApiAd>('/advertisements', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Record<string, unknown>) => request<ApiAd>(`/advertisements/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   send: (id: number) => request<ApiAd>(`/advertisements/${id}/send`, { method: 'POST' }),

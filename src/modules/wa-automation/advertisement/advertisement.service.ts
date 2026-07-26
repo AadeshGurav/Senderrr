@@ -182,6 +182,7 @@ export class AdvertisementService {
         packageDays: ad.packageDays,
         daysUsed: ad.daysUsed,
         status: ad.status,
+        firedToday: false,
       };
     }
 
@@ -245,7 +246,40 @@ export class AdvertisementService {
       packageDays: ad.packageDays,
       daysUsed: ad.daysUsed,
       status: ad.status,
+      firedToday: todaySent > 0,
     };
+  }
+
+  /**
+   * Get paginated individual send logs for an advertisement.
+   */
+  async getLogs(id: number, page: number = 1, limit: number = 50) {
+    const broadcasts = await this.broadcastRepo.find({
+      where: { advertisementId: id },
+    });
+    const broadcastIds = broadcasts.map(b => b.id);
+
+    if (broadcastIds.length === 0) {
+      return [];
+    }
+
+    const qb = this.taskRepo.createQueryBuilder('task')
+      .select('g.name', 'groupName')
+      .addSelect('task.status', 'status')
+      .addSelect('task.lastAttemptAt', 'timestamp')
+      .leftJoin('task.group', 'g')
+      .where('task.broadcastId IN (:...broadcastIds)', { broadcastIds })
+      .orderBy('task.lastAttemptAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const rawLogs = await qb.getRawMany();
+
+    return rawLogs.map((r: any) => ({
+      groupName: r.groupName || 'Unknown',
+      status: r.status,
+      timestamp: r.timestamp,
+    }));
   }
 
   /**

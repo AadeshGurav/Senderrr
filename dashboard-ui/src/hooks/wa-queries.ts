@@ -261,6 +261,14 @@ export function useAdTelemetryQuery(id: number) {
   });
 }
 
+export function useAdLogsQuery(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: [...waKeys.advertisements, 'logs', id],
+    queryFn: () => adApi.getLogs(id),
+    enabled: !!id && enabled,
+  });
+}
+
 export function useDeleteAdMutation() {
   const qc = useQueryClient();
   return useMutation({
