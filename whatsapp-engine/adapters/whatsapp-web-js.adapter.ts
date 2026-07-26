@@ -358,24 +358,19 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               // We intentionally DO NOT restore the original function here.
               // This ensures the patch persists for all subsequent groups in the broadcast.
               return Promise.resolve({
+                url: linkUrl,
                 data: {
-                  canonicalUrl: linkUrl,
                   matchedText: linkUrl,
                   title: preview.title || '',
-                  description: preview.description || '',
-                  // Based on direct native observation, WhatsApp Web expects a Base64 string under the 'thumbnail' key.
+                  richPreviewType: 0,
+                  doNotPlayInline: false,
+                  isLoading: false,
                   thumbnail: preview.jpegThumbnailBase64,
-                  // Also include jpegThumbnail for backwards compatibility with older WA Web versions.
-                  jpegThumbnail: preview.jpegThumbnailBase64,
-                  preview: true,
-                  subtype: 'url',
+                  psp: null,
                 },
               });
             }
-            return original(link).then((result: any) => {
-              console.log('[NativePreviewCapture] Original result:', JSON.stringify(result));
-              return result;
-            });
+            return original(link);
           };
         },
         url,
