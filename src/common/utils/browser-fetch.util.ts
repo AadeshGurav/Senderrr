@@ -163,13 +163,18 @@ export class BrowserFetchUtil {
     const browser = await this.getBrowser();
     let page: puppeteer.Page | null = null;
     try {
+      // First, fetch the image reliably using our existing WAF-bypass fallback
+      const buffer = await this.fetchArrayBufferWithFallback(imageUrl);
+      const b64 = Buffer.from(buffer).toString('base64');
+      const dataUri = `data:image/jpeg;base64,${b64}`;
+
       page = await browser.newPage();
       page.on('console', msg => {
         this.logger.debug(`[Browser Console] ${msg.text()}`);
       });
       await page.goto('about:blank');
       await page.setContent(
-        `<img id="thumb" crossorigin="anonymous" src="${imageUrl}">`,
+        `<img id="thumb" src="${dataUri}">`,
         { waitUntil: 'load', timeout: 20000 }
       );
 
