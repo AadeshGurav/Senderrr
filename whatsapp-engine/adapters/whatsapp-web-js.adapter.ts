@@ -106,7 +106,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       } else {
         authStrategy = new LocalAuth({
           clientId: this.config.sessionId,
-          dataPath: process.env.SESSION_DATA_PATH || '/app/data/sessions',
+          dataPath: process.env.SESSION_DATA_PATH || '.wwebjs_auth',
         });
       }
 
@@ -372,7 +372,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 },
               });
             }
-            return original(link);
+            return original(link).then((result: any) => {
+              console.log('[NativePreviewCapture] Original result:', JSON.stringify(result));
+              return result;
+            });
           };
         },
         url,
