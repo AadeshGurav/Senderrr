@@ -144,6 +144,7 @@ export class AdvertisementService {
     packageDays: number;
     daysUsed: number;
     status: string;
+    firedToday: boolean;
   }> {
     const ad = await this.findOne(id);
     if (!ad) {
@@ -158,6 +159,7 @@ export class AdvertisementService {
         packageDays: 0,
         daysUsed: 0,
         status: 'unknown',
+        firedToday: false,
       };
     }
 
