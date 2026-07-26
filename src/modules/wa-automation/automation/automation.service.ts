@@ -242,8 +242,8 @@ export class AutomationService {
         const absImageUrl = imageUrl.startsWith('http')
           ? imageUrl
           : new URL(imageUrl, url).toString();
-        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 400);
-        this.logger.log(`Generated thumbnail (max 400px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
+        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 700);
+        this.logger.log(`Generated thumbnail (max 700px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
       }
 
       await engine.warmUpLinkPreview(url, { title, description, jpegThumbnailBase64 });
