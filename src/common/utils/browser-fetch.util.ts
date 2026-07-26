@@ -164,6 +164,9 @@ export class BrowserFetchUtil {
     let page: puppeteer.Page | null = null;
     try {
       page = await browser.newPage();
+      page.on('console', msg => {
+        this.logger.debug(`[Browser Console] ${msg.text()}`);
+      });
       await page.goto('about:blank');
       await page.setContent(
         `<img id="thumb" crossorigin="anonymous" src="${imageUrl}">`,
@@ -173,13 +176,19 @@ export class BrowserFetchUtil {
       const base64 = await page.evaluate(async (size: number) => {
         try {
           const img = document.getElementById('thumb') as HTMLImageElement;
-          if (!img) return undefined;
+          if (!img) {
+            console.log('[ThumbnailDebug] Image element not found');
+            return undefined;
+          }
 
+          console.log('[ThumbnailDebug] Before decode - naturalWidth:', img.naturalWidth, 'naturalHeight:', img.naturalHeight, 'complete:', img.complete);
           await img.decode();
+          console.log('[ThumbnailDebug] After decode - naturalWidth:', img.naturalWidth, 'naturalHeight:', img.naturalHeight, 'complete:', img.complete);
 
           const ratio = Math.min(size / img.naturalWidth, size / img.naturalHeight);
           const w = Math.round(img.naturalWidth * ratio);
           const h = Math.round(img.naturalHeight * ratio);
+          console.log('[ThumbnailDebug] computed canvas size:', w, 'x', h);
 
           const canvas = new OffscreenCanvas(w, h);
           const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
@@ -194,7 +203,8 @@ export class BrowserFetchUtil {
             binary += String.fromCharCode(bytes[i]);
           }
           return btoa(binary);
-        } catch (e) {
+        } catch (e: any) {
+          console.log('[ThumbnailDebug] Error in evaluate:', e.message || String(e));
           return undefined;
         }
       }, maxSize);
