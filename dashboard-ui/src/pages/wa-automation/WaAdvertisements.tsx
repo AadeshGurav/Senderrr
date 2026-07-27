@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Edit3, ChevronDown, ChevronRight, BarChart3, Search, CheckCircle, Layers } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
@@ -94,18 +94,9 @@ interface Community {
 }
 
 export default function WaAdvertisements() {
-  const { data: ads = [], isLoading } = useWaAdvertisementsQuery(statusFilter, searchTerm);
-  const { data: groups = [] } = useWaGroupsQuery();
-  const { data: communities = [] } = useWaCommunitiesQuery();
-  const deleteMutate = useDeleteAdMutation();
-  const updateAd = useUpdateAdMutation();
-  const { data: existingTemplates = [] } = useAdTemplatesQuery(editingAd?.id ?? 0);
-  const createTemplateMut = useCreateAdTemplateMutation();
-  const activateTemplateMut = useActivateAdTemplateMutation();
-  const deleteTemplateMut = useDeleteAdTemplateMutation();
-  const { success, error: showError } = useToast();
   const queryClient = useQueryClient();
   const waKeys = { advertisements: ['wa', 'advertisements'] as const };
+  const { success, error: showError } = useToast();
 
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -114,7 +105,6 @@ export default function WaAdvertisements() {
   const [editingAd, setEditingAd] = useState<ApiAdFull | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [expandedAd, setExpandedAd] = useState<number | null>(null);
-
   const [formData, setFormData] = useState({
     title: '',
     targetType: 'all_groups' as string,
@@ -128,6 +118,16 @@ export default function WaAdvertisements() {
   const [newTplPreview, setNewTplPreview] = useState('');
   const [creating, setCreating] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
+
+  const { data: ads = [], isLoading } = useWaAdvertisementsQuery(statusFilter, searchTerm);
+  const { data: groups = [] } = useWaGroupsQuery();
+  const { data: communities = [] } = useWaCommunitiesQuery();
+  const deleteMutate = useDeleteAdMutation();
+  const updateAd = useUpdateAdMutation();
+  const { data: existingTemplates = [] } = useAdTemplatesQuery(editingAd?.id ?? 0);
+  const createTemplateMut = useCreateAdTemplateMutation();
+  const activateTemplateMut = useActivateAdTemplateMutation();
+  const deleteTemplateMut = useDeleteAdTemplateMutation();
 
   const selectableGroups = groups.filter(
     (g: Group) => g.isTargeted && g.isActive !== false && g.isHealthy !== false,

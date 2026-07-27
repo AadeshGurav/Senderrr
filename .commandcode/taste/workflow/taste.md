@@ -22,3 +22,4 @@
 - When upgrading library versions, test whether native functionality works before removing custom workarounds — verify first, then remove. Confidence: 0.80
 - Before version upgrades or migrations that could invalidate stateful data (sessions, persistent storage), explicitly back up that data first — check where state is actually stored (disk vs database) and protect accordingly. Confidence: 0.85
 - Before committing, exclude temporary/staging files (e.g., test-*.js, .commandcode/, fix-*.js) from the commit using `git reset HEAD <files>` — keep commits focused on real changes only. Confidence: 0.85
+- Use conventional commit format (`type: description`) with a detailed multi-line body for commit messages. Verify staged files with `git diff --cached --stat` before committing. Confidence: 0.70
