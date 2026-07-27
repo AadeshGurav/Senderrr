@@ -385,22 +385,21 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               console.log(`[LinkPreview] Patching preview for: ${href}`);
               
               // Build preview data structure matching WhatsApp's expected format
-              // Using jpegThumbnail (not thumbnail) which is the correct field for link previews
+              // NOTE: The field MUST be `thumbnail` (not jpegThumbnail) - that's what
+              // WhatsApp's internal getLinkPreview code reads for the image data.
               const previewData: any = {
                 matchedText: linkUrl,
                 title: preview.title || '',
                 description: preview.description || '',
                 canonicalUrl: linkUrl,
-                // previewType: NONE (2) seems to enable the large banner format
-                previewType: 2,
+                richPreviewType: 0,
                 doNotPlayInline: false,
                 isLoading: false,
-                // jpegThumbnail is the correct field name for the base64 thumbnail
-                jpegThumbnail: preview.jpegThumbnailBase64,
+                thumbnail: preview.jpegThumbnailBase64,
                 psp: null,
               };
               
-              // Add dimensions for the large image display
+              // Add dimensions if available
               if (preview.thumbnailWidth) {
                 previewData.thumbnailWidth = preview.thumbnailWidth;
               }
