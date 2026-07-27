@@ -259,6 +259,7 @@ export class AutomationService {
       await engine.warmUpLinkPreview(url, { 
         title, 
         description, 
+        pageHtml: html,
         jpegThumbnailBase64,
         thumbnailWidth: parseInt(imageWidth, 10) || 800,
         thumbnailHeight: parseInt(imageHeight, 10) || 400

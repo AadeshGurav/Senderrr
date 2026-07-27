@@ -374,20 +374,95 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   /**
-   * Injects pre-fetched link preview data into the WhatsApp Web page context
-   * by monkey-patching WAWebLinkPreviewChatAction.getLinkPreview.
+   * Makes WA's native link preview work for WAF-blocked URLs by intercepting
+   * the page URL request at Puppeteer level and serving our pre-fetched HTML.
    *
-   * WWebJS's sendMessage calls getLinkPreview internally when linkPreview:true
-   * is set. In headless Puppeteer on Render, the target site's WAF blocks this
-   * crawl, so getLinkPreview returns null and no preview is attached.
+   * How it works:
+   * 1. We register a Puppeteer request interception via page.route() for the
+   *    exact article URL.
+   * 2. When WA's internal getLinkPreview calls fetch()/XHR for that URL,
+   *    Puppeteer intercepts and returns our pre-fetched HTML.
+   * 3. WA's native pipeline runs completely: it parses the OG tags from our
+   *    HTML, downloads the og:image via its own mechanism (which may succeed
+   *    on a different CDN endpoint), uploads the image to WA's media CDN,
+   *    and returns a proper banner preview with thumbnailDirectPath etc.
    *
-   * By patching the function BEFORE sendMessage is called, we ensure our own
-   * pre-fetched OG data is returned in exactly the format WWebJS expects:
-   *   { data: { canonicalUrl, matchedText, title, description, jpegThumbnail, preview, subtype } }
-   *
-   * The patch is URL-specific and self-cleaning (restored after first call).
+   * No monkey-patching needed — WA does everything natively.
+   * The route is automatically removed after first match (one-shot).
    */
   async warmUpLinkPreview(
+    url: string,
+    previewData: {
+      title: string;
+      description: string;
+      pageHtml?: string;
+      jpegThumbnailBase64?: string;
+      thumbnailWidth?: number;
+      thumbnailHeight?: number;
+    },
+  ): Promise<void> {
+    if (!this.client || !this.client.pupPage) {
+      this.logger.warn('[LinkPreview] skipped: client or pupPage not available');
+      return;
+    }
+
+    if (!previewData.pageHtml) {
+      this.logger.warn('[LinkPreview] No pageHtml — falling back to monkey-patch');
+      await this._startLegacyPatch(url, previewData);
+      return;
+    }
+
+    this.logger.log(`[LinkPreview] Request interception for: ${url}`);
+
+    const page = this.client.pupPage;
+
+    // Override window.fetch inside the page to intercept the article URL request.
+    // WA's native getLinkPreview code calls fetch() to get the page HTML.
+    // By serving our pre-fetched HTML, the native pipeline runs completely:
+    // parses OG tags, downloads og:image, uploads to WA CDN → banner preview.
+    try {
+      await page.evaluate(
+        async (opts: { targetUrl: string; html: string }) => {
+          const originalFetch = window.fetch.bind(window);
+          let intercepted = false;
+
+          window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            const reqUrl = typeof input === 'string' ? input :
+              input instanceof Request ? input.url : input.toString();
+
+            // One-shot intercept: if request matches our article URL
+            if (!intercepted) {
+              const normalizedReq = reqUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+              const normalizedTarget = opts.targetUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+              if (normalizedReq === normalizedTarget || normalizedReq.startsWith(normalizedTarget)) {
+                intercepted = true;
+                console.log('[LinkPreview] Intercepted fetch, serving pre-fetched HTML');
+                return new Response(opts.html, {
+                  status: 200,
+                  headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                });
+              }
+            }
+
+            return originalFetch(input, init);
+          };
+
+          console.log('[LinkPreview] fetch override installed for:', opts.targetUrl.slice(0, 80));
+        },
+        { targetUrl: url, html: previewData.pageHtml }
+      );
+      this.logger.log(`[LinkPreview] fetch override active for ${url}`);
+    } catch (e) {
+      this.logger.warn('[LinkPreview] fetch override failed, falling back to legacy patch:', String(e));
+      await this._startLegacyPatch(url, previewData);
+    }
+  }
+
+  /**
+   * Legacy monkey-patch fallback — kept as insurance in case the Puppeteer
+   * request interception approach doesn't work for some page.
+   */
+  private async _startLegacyPatch(
     url: string,
     previewData: {
       title: string;
@@ -397,23 +472,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       thumbnailHeight?: number;
     },
   ): Promise<void> {
-    if (!this.client || !this.client.pupPage) {
-      this.logger.warn('warmUpLinkPreview skipped: client or pupPage not available');
-      return;
-    }
-    
-    this.logger.log(`Attempting to inject link preview for: ${url}`);
-    
+    if (!this.client || !this.client.pupPage) return;
     try {
-      // Setup console forwarding if not already setup (to avoid duplicate listeners per call)
-      if (!(this.client.pupPage as any)._hasConsoleListener) {
-        this.client.pupPage.on('console', msg => {
-          this.logger.debug(`[Browser Console] ${msg.text()}`);
-        });
-        (this.client.pupPage as any)._hasConsoleListener = true;
-      }
-
-      const result = await this.client.pupPage.evaluate(
+      const page = this.client.pupPage;
+      await page.evaluate(
         async (linkUrl: string, preview: { 
           title: string; 
           description: string; 
@@ -421,32 +483,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           thumbnailWidth?: number;
           thumbnailHeight?: number;
         }) => {
-          const moduleName = 'WAWebLinkPreviewChatAction';
-          const module = (window as any).require(moduleName);
-          
-          if (!module) {
-            console.warn(`[LinkPreview] Module ${moduleName} not found - link preview will use default behavior`);
-            return { success: false, error: 'module_not_found' };
-          }
-          
-          if (!module.getLinkPreview) {
-            console.warn(`[LinkPreview] getLinkPreview method not found on ${moduleName}`);
-            return { success: false, error: 'method_not_found' };
-          }
-
-          const original = module.getLinkPreview.bind(module);
+          const mod = (window as any).require('WAWebLinkPreviewChatAction');
+          if (!mod) return;
+          const original = mod.getLinkPreview.bind(mod);
           const targetHostname = new URL(linkUrl).hostname;
 
-          module.getLinkPreview = (link: any) => {
+          mod.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
             if (href && href.includes(targetHostname)) {
-              // We intentionally DO NOT restore the original function here.
-              // This ensures the patch persists for all subsequent groups in the broadcast.
-              console.log(`[LinkPreview] Patching preview for: ${href}`);
-              
-              // Build preview data structure matching WhatsApp's expected format
-              // NOTE: The field MUST be `thumbnail` (not jpegThumbnail) - that's what
-              // WhatsApp's internal getLinkPreview code reads for the image data.
               const previewData: any = {
                 matchedText: linkUrl,
                 title: preview.title || '',
@@ -458,49 +502,29 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 thumbnail: preview.jpegThumbnailBase64,
                 psp: null,
               };
-              
-              // Add dimensions if available
-              if (preview.thumbnailWidth) {
-                previewData.thumbnailWidth = preview.thumbnailWidth;
-              }
-              if (preview.thumbnailHeight) {
-                previewData.thumbnailHeight = preview.thumbnailHeight;
-              }
-              
-              return Promise.resolve({
-                url: linkUrl,
-                data: previewData,
-              });
+              if (preview.thumbnailWidth) previewData.thumbnailWidth = preview.thumbnailWidth;
+              if (preview.thumbnailHeight) previewData.thumbnailHeight = preview.thumbnailHeight;
+              return Promise.resolve({ url: linkUrl, data: previewData });
             }
-            // [NativePreviewCapture] Log the native response for non-targeted URLs to study real preview format
+            // [NativePreviewCapture]
             const nativeResult = original(link);
             nativeResult.then((native: any) => {
               if (native && native.data) {
                 console.log('[NativePreviewCapture] URL:', href, '| keys:', Object.keys(native.data).join(','));
-                console.log('[NativePreviewCapture] full:', JSON.stringify(native, (key, val) => {
-                  if (key === 'thumbnail' && typeof val === 'string') return `<base64:${val.length}chars>`;
-                  return val;
+                console.log('[NativePreviewCapture] full:', JSON.stringify(native, (k, v) => {
+                  if (k === 'thumbnail' && typeof v === 'string') return `<base64:${v.length}chars>`;
+                  return v;
                 }));
               }
             }).catch(() => {});
             return nativeResult;
           };
-          
-          console.log(`[LinkPreview] Successfully patched getLinkPreview for ${targetHostname}`);
-          return { success: true, hostname: targetHostname };
         },
         url,
         previewData,
       );
-      
-      if (result?.success) {
-        this.logger.log(`Link preview injection succeeded for: ${result.hostname}`);
-      } else {
-        this.logger.warn(`Link preview injection failed: ${result?.error || 'unknown'}. Will use default behavior.`);
-      }
     } catch (e) {
-      // Log but don't fail - link preview is an optional enhancement
-      this.logger.warn('Link preview injection failed (using default behavior):', String(e));
+      this.logger.warn('[LinkPreview] Legacy patch failed:', String(e));
     }
   }
 

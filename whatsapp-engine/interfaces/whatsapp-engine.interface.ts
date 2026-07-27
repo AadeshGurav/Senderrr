@@ -309,6 +309,7 @@ export interface IWhatsAppEngine {
   warmUpLinkPreview?(url: string, previewData: { 
     title: string; 
     description: string; 
+    pageHtml?: string;
     jpegThumbnailBase64?: string;
     thumbnailWidth?: number;
     thumbnailHeight?: number;
