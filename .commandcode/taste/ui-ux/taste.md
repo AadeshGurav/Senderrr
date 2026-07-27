@@ -3,7 +3,8 @@
 - Entity action buttons should be visibility-gated by status: cancelled/completed states hide destructive or state-changing actions (edit, send) but keep read-only actions (view logs, delete) visible. Confidence: 0.85
 - Prefer soft-state transitions (cancel → cancelled status) over hard-delete for user-facing workflows, keeping the entity viewable in filtered states. Confidence: 0.80
 - Keep dashboards lean and focused — remove unused or irrelevant stat cards instead of hiding them or keeping them as clutter. Confidence: 0.85
-- Ensure the UI is responsive and functional on mobile screens; modals should go fullscreen from bottom on small viewports, tables/tables should scroll horizontally, and layouts should stack vertically. Confidence: 0.75
+- Dashboard stat labels and values should reflect the semantic purpose of the feature (e.g., show "Targeted Groups" for campaign-selected groups) rather than just displaying technically available data. Confidence: 0.80
+- Ensure the UI is responsive and functional on mobile screens; modals should go fullscreen from bottom on small viewports, tables should scroll horizontally, layouts should stack vertically, and action buttons should be compact icon-only on small screens rather than wide text labels to prevent overflow. Confidence: 0.85
 - Apply the 60/30/10 rule for color distribution (Neutral/Surface/Accent) strictly using semantic tokens (e.g., `bg-default`, `accent-primary`). Confidence: 0.90
 - Ensure WCAG AA/AAA compliance by never relying on color alone to convey meaning, status, or state. Confidence: 1
 - Adhere strictly to an 8-point spatial system (8px, 16px, 24px) and align all layouts to a baseline grid. Confidence: 0.95

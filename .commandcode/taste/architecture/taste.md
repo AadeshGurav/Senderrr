@@ -15,3 +15,4 @@
 - For Render free tier services: do not configure persistent disks (unsupported on free plan). Confidence: 0.65
 - For Render services with an attached disk: do not set maxShutdownDelaySeconds (not supported). Confidence: 0.65
 - When the production database is missing a table or column (caught via deployment runtime errors), create a proper TypeORM migration file following the project's existing conventions, supporting both Postgres and SQLite — never enable `synchronize: true` or apply manual SQL patches to running containers. Confidence: 0.80
+- When you need a count of records, add a dedicated count endpoint/query (e.g., `COUNT(*)`) rather than fetching all records and calling `.length` in JS — the latter is capped by pagination defaults and doesn't reflect the actual total. Confidence: 0.85
