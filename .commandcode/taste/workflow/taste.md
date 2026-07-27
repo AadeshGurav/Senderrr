@@ -5,6 +5,7 @@
 - Before running git operations (checkout, merge, rebase), first verify that all untracked and modified files are safe — stash, commit, or confirm they won't be lost. Confidence: 0.70
 - Use `caffeinate` (macOS) when starting Docker containers via `docker compose up` to prevent the system from sleeping during the process. Confidence: 0.85
 - Index and analyze the entire relevant codebase to fully understand the problem before attempting to write or suggest a solution. Confidence: 1
+- When presented with cloud deployment/build failure logs (e.g., Render Docker build), autonomously diagnose the errors from the logs, fix the root cause in source code, verify locally (compile check), then commit and push — without waiting for explicit instructions to "fix this." Confidence: 0.85
 - Do not restart the dev server; it's already running and changes are picked up automatically after rebuilding. Confidence: 0.65
 - When building features incrementally, work on a single development instance (avoid separate dev+test environments) — changes are tested on the same live data. Confidence: 0.85
 - For complex debugging/troubleshooting issues, step back and formulate a clear, structured plan with rationale before making any changes — avoid scattered incremental attempts. Confidence: 0.90

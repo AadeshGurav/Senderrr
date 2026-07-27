@@ -14,3 +14,4 @@
 - For ngrok in docker-compose, conditionally include `--url=${NGROK_URL:-}` in the command when NGROK_URL is set in .env. Confidence: 0.65
 - For Render free tier services: do not configure persistent disks (unsupported on free plan). Confidence: 0.65
 - For Render services with an attached disk: do not set maxShutdownDelaySeconds (not supported). Confidence: 0.65
+- When the production database is missing a table or column (caught via deployment runtime errors), create a proper TypeORM migration file following the project's existing conventions, supporting both Postgres and SQLite — never enable `synchronize: true` or apply manual SQL patches to running containers. Confidence: 0.80

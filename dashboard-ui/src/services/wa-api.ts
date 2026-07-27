@@ -324,7 +324,7 @@ export const adApi = {
   send: (id: number) => request<ApiAd>(`/advertisements/${id}/send`, { method: 'POST' }),
   delete: (id: number) => request<void>(`/advertisements/${id}`, { method: 'DELETE' }),
   uploadMedia: (id: number, file: File) =>
-    uploadFile<ApiAd>(`/advertisements/${id}/media`, file, 'file'),
+    uploadFile<{ id: number }>(`/advertisements/${id}/media`, file, 'file'),
   removeMedia: (id: number) => request<void>(`/advertisements/media/${id}`, { method: 'DELETE' }),
 
   // ─── Templates ─────────────────────────────────────────────

@@ -187,15 +187,18 @@ export default function WaAdvertisements() {
     }
 
     try {
+      // Upload media first to get its ID
+      let mediaId: number | undefined;
+      if (newTplFile) {
+        const media = await adApi.uploadMedia(adId, newTplFile);
+        mediaId = media.id;
+      }
+
+      // Then create the template with the mediaId linked directly
       await createTemplateMut.mutateAsync({
         adId,
-        data: { name: newTplName.trim(), body: newTplBody || undefined },
+        data: { name: newTplName.trim(), body: newTplBody || undefined, mediaId },
       });
-
-      // Upload media if provided
-      if (newTplFile) {
-        await adApi.uploadMedia(adId, newTplFile);
-      }
 
       success('Template added', `"${newTplName}" created`);
       setNewTplName('');

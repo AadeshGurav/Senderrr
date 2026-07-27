@@ -34,6 +34,9 @@ See [workflow/taste.md](workflow/taste.md)
 - When using Puppeteer browser for WAF/CORS bypass fallback, the HTTP status trigger list must be comprehensive — include 403, 503, 406 **and 429 (Too Many Requests)**. Hostinger and similar WAFs commonly return 429 on rate-limit, and missing it from the fallback trigger causes the fetch to throw immediately without falling back to the browser. Confidence: 1
 - Gracefully degrade on failure — isolate errors to the individual feature so one component crashing doesn't bring down the entire app. Confidence: 1
 
+# react
+- In React functional components, declare all `useState` variables (and their initializers) physically before any custom hooks or query hooks that reference them — never after. JavaScript's temporal dead zone with block-scoped `const` will cause "used before declaration" errors at build time. Confidence: 0.90
+
 # loading-states
 - Use real component-specific skeletons and spinners for all async operations, not generic/fake loading indicators — e.g., show a skeleton of the QR code with a spinner overlay while session is initializing. Confidence: 1
 
