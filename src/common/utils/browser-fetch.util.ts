@@ -154,9 +154,9 @@ export class BrowserFetchUtil {
 
   /**
    * Fetches an image via a blank Puppeteer page (bypassing CSP/CORS constraints),
-   * resizes it to a max boundary (default 100x100) using Canvas, and returns
-   * a highly compressed JPEG as a base64 string. WhatsApp requires the thumbnail
-   * to be under ~5KB.
+   * resizes it to a max boundary using Canvas, and returns a JPEG as a base64 string.
+   * The image is used for WhatsApp link preview cards — WhatsApp handles its own
+   * compression and re-encoding server-side, so the source quality should be reasonable.
    */
   static async fetchAndResizeImageBase64(imageUrl: string, maxSize = 100): Promise<string | undefined> {
     this.logger.log(`Fetching and resizing thumbnail via browser: ${imageUrl}`);
