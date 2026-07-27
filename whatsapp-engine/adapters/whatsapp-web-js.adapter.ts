@@ -303,6 +303,38 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   async sendTextMessage(chatId: string, text: string, options?: { linkPreview?: boolean }): Promise<MessageResult> {
     this.ensureReady();
 
+    // [NativePreviewCapture] Install a one-time capture on getLinkPreview before any sendMessage call
+    // to log what the native crawler returns for different URL types.
+    if (this.client?.pupPage && options?.linkPreview !== false) {
+      try {
+        await this.client.pupPage.evaluate(() => {
+          const mod = (window as any).require('WAWebLinkPreviewChatAction');
+          if (!mod || (mod as any).__nativePreviewCaptured) return;
+          const orig = mod.getLinkPreview.bind(mod);
+          mod.getLinkPreview = (link: any) => {
+            // Restore original immediately (one-shot capture)
+            mod.getLinkPreview = orig;
+            (mod as any).__nativePreviewCaptured = true;
+            const result = orig(link);
+            result.then((preview: any) => {
+              if (preview && preview.data) {
+                const href = link?.href || link?.url || (typeof link === 'string' ? link : '');
+                const keys = Object.keys(preview.data);
+                console.log('[NativePreviewCapture] URL:', href.slice(0, 120), '| keys:', keys.join(','));
+                console.log('[NativePreviewCapture] full:', JSON.stringify(preview, (k: string, v: any) => {
+                  if (k === 'thumbnail' && typeof v === 'string') return `<base64:${v.length}chars>`;
+                  return v;
+                }));
+              }
+            }).catch(() => {});
+            return result;
+          };
+        });
+      } catch {
+        // Best-effort capture, ignore failures
+      }
+    }
+
     const msg = await this.client!.sendMessage(chatId, text, {
       linkPreview: options?.linkPreview !== false,
       waitUntilMsgSent: true,
