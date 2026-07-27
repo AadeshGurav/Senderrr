@@ -163,58 +163,128 @@ export class BrowserFetchUtil {
     const browser = await this.getBrowser();
     let page: puppeteer.Page | null = null;
     try {
-      // First, fetch the image reliably using our existing WAF-bypass fallback
-      const buffer = await this.fetchArrayBufferWithFallback(imageUrl);
-      const b64 = Buffer.from(buffer).toString('base64');
-      const dataUri = `data:image/jpeg;base64,${b64}`;
+      // Attempt 1: Try to fetch the image bytes server-side (with WAF bypass fallback)
+      try {
+        const buffer = await this.fetchArrayBufferWithFallback(imageUrl);
+        const b64 = Buffer.from(buffer).toString('base64');
+        const dataUri = `data:image/jpeg;base64,${b64}`;
 
-      page = await browser.newPage();
-      page.on('console', msg => {
-        this.logger.debug(`[Browser Console] ${msg.text()}`);
-      });
-      await page.goto('about:blank');
-      await page.setContent(
-        `<img id="thumb" src="${dataUri}">`,
-        { waitUntil: 'load', timeout: 20000 }
-      );
+        page = await browser.newPage();
+        page.on('console', msg => {
+          this.logger.debug(`[Browser Console] ${msg.text()}`);
+        });
+        await page.goto('about:blank');
+        await page.setContent(
+          `<img id="thumb" src="${dataUri}">`,
+          { waitUntil: 'load', timeout: 20000 }
+        );
 
-      const base64 = await page.evaluate(async (size: number) => {
-        try {
-          const img = document.getElementById('thumb') as HTMLImageElement;
-          if (!img) {
-            console.log('[ThumbnailDebug] Image element not found');
+        const base64 = await page.evaluate(async (size: number) => {
+          try {
+            const img = document.getElementById('thumb') as HTMLImageElement;
+            if (!img) {
+              console.log('[ThumbnailDebug] Image element not found');
+              return undefined;
+            }
+
+            console.log('[ThumbnailDebug] Before decode - naturalWidth:', img.naturalWidth, 'naturalHeight:', img.naturalHeight, 'complete:', img.complete);
+            await img.decode();
+            console.log('[ThumbnailDebug] After decode - naturalWidth:', img.naturalWidth, 'naturalHeight:', img.naturalHeight, 'complete:', img.complete);
+
+            const ratio = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+            const w = Math.round(img.naturalWidth * ratio);
+            const h = Math.round(img.naturalHeight * ratio);
+            console.log('[ThumbnailDebug] computed canvas size:', w, 'x', h);
+
+            const canvas = new OffscreenCanvas(w, h);
+            const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
+            const arrBuf = await outBlob.arrayBuffer();
+            const bytes = new Uint8Array(arrBuf);
+
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            console.log('[ThumbnailDebug] Canvas JPEG output size:', bytes.length, 'bytes');
+            return btoa(binary);
+          } catch (e: any) {
+            console.log('[ThumbnailDebug] Error in evaluate:', e.message || String(e));
             return undefined;
           }
+        }, maxSize);
 
-          console.log('[ThumbnailDebug] Before decode - naturalWidth:', img.naturalWidth, 'naturalHeight:', img.naturalHeight, 'complete:', img.complete);
-          await img.decode();
-          console.log('[ThumbnailDebug] After decode - naturalWidth:', img.naturalWidth, 'naturalHeight:', img.naturalHeight, 'complete:', img.complete);
+        if (base64) {
+          return base64;
+        }
+        // Fall through to browser-direct load if server-side fetch failed
+        this.logger.log('Server-side fetch produced undecodable image, trying browser-direct load...');
+      } catch (fetchErr) {
+        this.logger.warn(`Server-side image fetch failed, trying browser-direct load: ${(fetchErr as Error).message}`);
+      }
 
+      // Attempt 2: Load the image URL directly in the browser page rendering pipeline.
+      // This bypasses server IP blocks because the browser handles its own HTTP requests
+      // with full browser headers, cookies, and JS execution.
+      if (!page || page.isClosed()) {
+        page = await browser.newPage();
+        page.on('console', msg => {
+          this.logger.debug(`[Browser Console] ${msg.text()}`);
+        });
+      }
+
+      // Navigate to a safe page first, then inject the image via JS so we can capture it
+      await page.goto('about:blank', { waitUntil: 'load', timeout: 15000 });
+      
+      const result = await page.evaluate(async (url: string, size: number) => {
+        try {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          
+          const loadPromise = new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Image load failed'));
+          });
+          
+          img.src = url;
+          
+          // Wait with timeout
+          await Promise.race([
+            loadPromise,
+            new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Image load timeout')), 20000))
+          ]);
+          
+          console.log('[ThumbnailDebug] Browser-direct load - naturalWidth:', img.naturalWidth, 'naturalHeight:', img.naturalHeight);
+          
           const ratio = Math.min(size / img.naturalWidth, size / img.naturalHeight);
           const w = Math.round(img.naturalWidth * ratio);
           const h = Math.round(img.naturalHeight * ratio);
-          console.log('[ThumbnailDebug] computed canvas size:', w, 'x', h);
-
+          console.log('[ThumbnailDebug] Browser-direct canvas size:', w, 'x', h);
+          
           const canvas = new OffscreenCanvas(w, h);
           const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
           ctx.drawImage(img, 0, 0, w, h);
-
+          
           const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
           const arrBuf = await outBlob.arrayBuffer();
           const bytes = new Uint8Array(arrBuf);
-
+          
           let binary = '';
           for (let i = 0; i < bytes.byteLength; i++) {
             binary += String.fromCharCode(bytes[i]);
           }
+          
+          console.log('[ThumbnailDebug] Browser-direct JPEG output size:', bytes.length, 'bytes');
           return btoa(binary);
         } catch (e: any) {
-          console.log('[ThumbnailDebug] Error in evaluate:', e.message || String(e));
+          console.log('[ThumbnailDebug] Browser-direct error:', e.message || String(e));
           return undefined;
         }
-      }, maxSize);
-
-      return base64;
+      }, imageUrl, maxSize);
+      
+      return result;
     } catch (err) {
       this.logger.warn(`Thumbnail resize failed for ${imageUrl}: ${(err as Error).message}`);
       return undefined;
