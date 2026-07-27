@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Edit3, ChevronDown, ChevronRight, BarChart3, Search, CheckCircle, Layers } from 'lucide-react';
+import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Edit3, ChevronDown, ChevronRight, BarChart3, Search, CheckCircle, Layers, Ban } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -290,6 +290,19 @@ export default function WaAdvertisements() {
     }
   };
 
+  const handleCancel = async (ad: ApiAdFull) => {
+    setTogglingStatus(ad.id);
+    try {
+      await updateAd.mutateAsync({ id: ad.id, data: { status: 'cancelled' } });
+      success('Campaign cancelled', `"${ad.title}" moved to cancelled`);
+      queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
+    } catch (e: unknown) {
+      showError('Failed to cancel campaign', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setTogglingStatus(null);
+    }
+  };
+
   if (isLoading) return <CardGridSkeleton count={6} />;
 
   return (
@@ -367,6 +380,7 @@ export default function WaAdvertisements() {
               onEdit={openEditModal}
               onDelete={setDeleteTarget}
               onManualSend={handleManualSend}
+              onCancel={handleCancel}
               togglingStatus={togglingStatus}
             />
           ))}
@@ -684,6 +698,7 @@ function AdCard({
   onEdit,
   onDelete,
   onManualSend,
+  onCancel,
   togglingStatus,
 }: {
   ad: ApiAdFull;
@@ -692,6 +707,7 @@ function AdCard({
   onEdit: (ad: ApiAdFull) => void;
   onDelete: (target: { id: number; title: string }) => void;
   onManualSend: (ad: ApiAdFull) => void;
+  onCancel: (ad: ApiAdFull) => void;
   togglingStatus: number | null;
 }) {
   const [showLogs, setShowLogs] = useState(false);
@@ -700,7 +716,6 @@ function AdCard({
   const { data: rawTelemetry } = useAdTelemetryQuery(ad.id);
   const telemetry = rawTelemetry ? (rawTelemetry as unknown as Telemetry) : null;
   const isExpanded = expandedAd === ad.id;
-  const isLocked = ad.status === 'completed' || ad.status === 'cancelled';
   const canEdit = ad.status === 'draft' || ad.status === 'active' || ad.status === 'paused';
 
   const daysRemaining = telemetry?.daysRemaining ?? Math.max(0, (ad.packageDays || 1) - (ad.daysUsed || 0));
@@ -822,56 +837,60 @@ function AdCard({
 
       {/* ── Actions ──────────────────────── */}
       <CardFooter className="gap-2 flex-wrap">
-        {isLocked ? (
-          <>
-            <Badge variant="info" className="text-[11px]">{ad.status === 'completed' ? 'Completed' : 'Cancelled'}</Badge>
-            <Button
-              size="sm"
-              variant="danger"
-              icon={Trash2}
-              onClick={() => onDelete({ id: ad.id, title: ad.title })}
-            >
-              Delete
-            </Button>
-          </>
-        ) : (
-          <>
-            {canEdit && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={Edit3}
-                onClick={() => onEdit(ad)}
-              >
-                Edit
-              </Button>
-            )}
-
-            {(ad.status === 'draft' || ad.status === 'active' || ad.status === 'paused') && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={Send}
-                onClick={() => onManualSend(ad)}
-                loading={togglingStatus === ad.id}
-              >
-                Send Now
-              </Button>
-            )}
-
-
-            {(ad.status === 'draft' || ad.status === 'paused') && (
-              <Button
-                size="sm"
-                variant="danger"
-                icon={Trash2}
-                onClick={() => onDelete({ id: ad.id, title: ad.title })}
-              >
-                Delete
-              </Button>
-            )}
-          </>
+        {(ad.status === 'draft' || ad.status === 'active') && (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={Send}
+            onClick={() => onManualSend(ad)}
+            loading={togglingStatus === ad.id}
+          >
+            Send Now
+          </Button>
         )}
+
+        {canEdit && (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={Edit3}
+            onClick={() => onEdit(ad)}
+          >
+            Edit
+          </Button>
+        )}
+
+        {ad.status !== 'cancelled' && ad.status !== 'completed' && (
+          <Button
+            size="sm"
+            variant="danger"
+            icon={Ban}
+            onClick={() => {
+              if (window.confirm(`Cancel campaign "${ad.title}"? This will stop it permanently.`)) {
+                onCancel(ad);
+              }
+            }}
+            loading={togglingStatus === ad.id}
+          >
+            Cancel
+          </Button>
+        )}
+
+        {ad.status === 'completed' && (
+          <Badge variant="info" className="text-[11px]">Completed</Badge>
+        )}
+        {ad.status === 'cancelled' && (
+          <Badge variant="neutral" className="text-[11px]">Cancelled</Badge>
+        )}
+
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={Trash2}
+          onClick={() => onDelete({ id: ad.id, title: ad.title })}
+        >
+          Delete
+        </Button>
       </CardFooter>
     </Card>
   );

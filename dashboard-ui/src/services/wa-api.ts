@@ -116,6 +116,7 @@ export interface ApiBroadcast {
   messageText: string | null;
   createdAt: string;
   advertisementId: number | null;
+  advertisementTitle: string | null;
   article?: { title: string } | null;
   editHistory?: unknown[];
 }

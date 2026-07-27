@@ -33,10 +33,10 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
   const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-[fadeIn_0.15s_ease]" />
       <div
-        className={`relative w-full ${sizes[size]} bg-[var(--color-surface)] rounded-2xl shadow-[var(--shadow-xl)] animate-[scaleIn_0.2s_ease] flex flex-col max-h-[90vh]`}
+        className={`relative w-full ${sizes[size]} bg-[var(--color-surface)] sm:rounded-2xl rounded-t-2xl shadow-[var(--shadow-xl)] animate-[slideUp_0.2s_ease] flex flex-col max-h-[90vh] sm:max-h-[90vh]`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-light)]">

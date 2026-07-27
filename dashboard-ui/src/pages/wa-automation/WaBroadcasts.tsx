@@ -150,7 +150,7 @@ export default function WaBroadcasts() {
                       {selectedId === b.id ? <ChevronDown size={16} className="text-[var(--color-text-muted)] flex-shrink-0" /> : <ChevronRight size={16} className="text-[var(--color-text-muted)] flex-shrink-0" />}
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-[var(--color-text)] truncate">
-                          #{displayNumber} — {b.article?.title || `Advertisement #${b.advertisementId || 'N/A'}`}
+                          #{displayNumber} — {b.article?.title || (b.advertisementTitle ? `Advertisement: ${b.advertisementTitle}` : `Advertisement #${b.advertisementId || 'N/A'}`)}
                           {(b.editHistory?.length ?? 0) > 0 && <span className="ml-2 text-xs text-[var(--color-text-muted)] italic">(edited)</span>}
                         </p>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">

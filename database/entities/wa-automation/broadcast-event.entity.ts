@@ -23,6 +23,9 @@ export class BroadcastEvent {
   @Column({ type: 'int', nullable: true })
   advertisementId: number | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  advertisementTitle: string | null;
+
   @Column({ type: 'text', nullable: true })
   messageText: string | null;
 
