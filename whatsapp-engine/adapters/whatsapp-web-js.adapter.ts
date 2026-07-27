@@ -304,17 +304,19 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     this.ensureReady();
 
     // [NativePreviewCapture] Snapshot WAWebLinkPreviewChatAction before any sendMessage runs.
-    // This works because the patch installed by warmUpLinkPreview is URL-specific — it only
-    // intercepts links matching the pre-warmed hostname. For any OTHER link (e.g. BBC, TOI),
-    // the call falls through to the unpatched getLinkPreview, which we capture below.
-    // After capture, we restore the original so live traffic is unaffected.
+    // Reset the guard flag so the capture is installed fresh each time.
     if (this.client?.pupPage && options?.linkPreview !== false) {
       try {
-        const captured = await this.client.pupPage.evaluate(() => {
+        await this.client.pupPage.evaluate(() => {
           const mod = (window as any).require('WAWebLinkPreviewChatAction');
-          if (!mod || (mod as any).__nativePreviewCaptured) return;
+          if (!mod) return;
+          // Reset so we can install a fresh capture
+          (mod as any).__nativePreviewCaptured = false;
+          (window as any).__lastNativePreview = undefined;
+          
           const orig = mod.getLinkPreview.bind(mod);
           mod.getLinkPreview = (link: any) => {
+            // Restore original immediately (one-shot capture)
             mod.getLinkPreview = orig;
             (mod as any).__nativePreviewCaptured = true;
             const result = orig(link);
@@ -322,7 +324,6 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               if (preview && preview.data) {
                 const href = link?.href || link?.url || (typeof link === 'string' ? link : '');
                 const keys = Object.keys(preview.data);
-                // Store in a global var so we can read it back from the next evaluate call
                 (window as any).__lastNativePreview = {
                   url: href,
                   keys: keys,
