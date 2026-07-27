@@ -85,7 +85,7 @@ export class BrowserFetchUtil {
       });
       
       if (!response.ok) {
-        if (response.status === 403 || response.status === 503 || response.status === 406) {
+        if (response.status === 403 || response.status === 503 || response.status === 406 || response.status === 429) {
           this.logger.warn(`HTTP ${response.status} from ${url}, attempting browser fallback...`);
           return this.fetchPageContent(url, timeout + 15000);
         }
@@ -113,7 +113,7 @@ export class BrowserFetchUtil {
         },
       });
       if (!response.ok) {
-        if (response.status === 403 || response.status === 503 || response.status === 406) {
+        if (response.status === 403 || response.status === 503 || response.status === 406 || response.status === 429) {
           this.logger.warn(`HTTP ${response.status} fetching image ${url}, attempting browser fallback...`);
           return this.fetchArrayBufferViaBrowser(url, timeout + 15000);
         }
@@ -199,7 +199,7 @@ export class BrowserFetchUtil {
           const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
           ctx.drawImage(img, 0, 0, w, h);
 
-          const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
+          const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
           const arrBuf = await outBlob.arrayBuffer();
           const bytes = new Uint8Array(arrBuf);
 
