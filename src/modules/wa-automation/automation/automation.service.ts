@@ -243,10 +243,13 @@ export class AutomationService {
           ? imageUrl
           : new URL(imageUrl, url).toString();
         
-        // Fetch a larger image for better quality - WhatsApp will downscale as needed
-        // Use 800x400 for banner-style preview (similar to WhatsApp's preferred dimensions)
-        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 800);
-        this.logger.log(`Generated thumbnail (max 800px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
+        // Generate a SMALL inline thumbnail that embeds directly in the message.
+        // WhatsApp's ExtendedTextMessage has tight inline data limits (~10KB max
+        // for the base64 JPEG). The thumbnailWidth/thumbnailHeight tell the
+        // renderer the IMAGE DISPLAY SIZE (not the thumbnail pixel size), so
+        // you can embed a 200px thumbnail but render it at 800x400 banner ratio.
+        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 200);
+        this.logger.log(`Generated inline thumbnail (max 200px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
       }
 
       // Get image dimensions from the og:image for proper display

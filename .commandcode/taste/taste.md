@@ -31,6 +31,7 @@ See [workflow/taste.md](workflow/taste.md)
 - Never let errors pass silently unless they are explicitly caught, silenced, and documented. Confidence: 1
 - Show user-friendly messages for internal token errors (e.g. WhatsApp tokens) instead of cryptic technical error messages like "invalid or expired token". Confidence: 1
 - Implement a global error banner mechanism across all components that shows human-readable messages without trace or technical details in non-debugging mode. Confidence: 0.85
+- When using Puppeteer browser for WAF/CORS bypass fallback, the HTTP status trigger list must be comprehensive — include 403, 503, 406 **and 429 (Too Many Requests)**. Hostinger and similar WAFs commonly return 429 on rate-limit, and missing it from the fallback trigger causes the fetch to throw immediately without falling back to the browser. Confidence: 1
 - Gracefully degrade on failure — isolate errors to the individual feature so one component crashing doesn't bring down the entire app. Confidence: 1
 
 # loading-states

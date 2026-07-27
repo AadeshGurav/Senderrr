@@ -303,16 +303,18 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   async sendTextMessage(chatId: string, text: string, options?: { linkPreview?: boolean }): Promise<MessageResult> {
     this.ensureReady();
 
-    // [NativePreviewCapture] Install a one-time capture on getLinkPreview before any sendMessage call
-    // to log what the native crawler returns for different URL types.
+    // [NativePreviewCapture] Snapshot WAWebLinkPreviewChatAction before any sendMessage runs.
+    // This works because the patch installed by warmUpLinkPreview is URL-specific — it only
+    // intercepts links matching the pre-warmed hostname. For any OTHER link (e.g. BBC, TOI),
+    // the call falls through to the unpatched getLinkPreview, which we capture below.
+    // After capture, we restore the original so live traffic is unaffected.
     if (this.client?.pupPage && options?.linkPreview !== false) {
       try {
-        await this.client.pupPage.evaluate(() => {
+        const captured = await this.client.pupPage.evaluate(() => {
           const mod = (window as any).require('WAWebLinkPreviewChatAction');
           if (!mod || (mod as any).__nativePreviewCaptured) return;
           const orig = mod.getLinkPreview.bind(mod);
           mod.getLinkPreview = (link: any) => {
-            // Restore original immediately (one-shot capture)
             mod.getLinkPreview = orig;
             (mod as any).__nativePreviewCaptured = true;
             const result = orig(link);
@@ -320,11 +322,15 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               if (preview && preview.data) {
                 const href = link?.href || link?.url || (typeof link === 'string' ? link : '');
                 const keys = Object.keys(preview.data);
-                console.log('[NativePreviewCapture] URL:', href.slice(0, 120), '| keys:', keys.join(','));
-                console.log('[NativePreviewCapture] full:', JSON.stringify(preview, (k: string, v: any) => {
-                  if (k === 'thumbnail' && typeof v === 'string') return `<base64:${v.length}chars>`;
-                  return v;
-                }));
+                // Store in a global var so we can read it back from the next evaluate call
+                (window as any).__lastNativePreview = {
+                  url: href,
+                  keys: keys,
+                  data: JSON.parse(JSON.stringify(preview, (k: string, v: any) => {
+                    if (k === 'thumbnail' && typeof v === 'string') return `<base64:${v.length}chars>`;
+                    return v;
+                  }))
+                };
               }
             }).catch(() => {});
             return result;
@@ -339,6 +345,27 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       linkPreview: options?.linkPreview !== false,
       waitUntilMsgSent: true,
     });
+
+    // Read back the capture result (wait a beat for the async getLinkPreview to complete)
+    if (this.client?.pupPage) {
+      try {
+        await new Promise(r => setTimeout(r, 2000));
+        const captureResult = await this.client.pupPage.evaluate(() => {
+          const r = (window as any).__lastNativePreview;
+          (window as any).__lastNativePreview = undefined;
+          return r || null;
+        });
+        if (captureResult) {
+          this.logger.log('[NativePreviewCapture] URL: ' + captureResult.url.slice(0, 120) + ' | keys: ' + captureResult.keys.join(','));
+          this.logger.log('[NativePreviewCapture] full: ' + JSON.stringify(captureResult.data));
+        } else {
+          this.logger.log('[NativePreviewCapture] No capture result (link may not have triggered getLinkPreview)');
+        }
+      } catch {
+        // Best-effort read-back
+      }
+    }
+
     return {
       id: msg?.id?._serialized || '',
       timestamp: msg?.timestamp || Math.floor(Date.now() / 1000),
