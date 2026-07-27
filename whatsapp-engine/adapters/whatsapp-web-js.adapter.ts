@@ -412,7 +412,18 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 data: previewData,
               });
             }
-            return original(link);
+            // [NativePreviewCapture] Log the native response for non-targeted URLs to study real preview format
+            const nativeResult = original(link);
+            nativeResult.then((native: any) => {
+              if (native && native.data) {
+                console.log('[NativePreviewCapture] URL:', href, '| keys:', Object.keys(native.data).join(','));
+                console.log('[NativePreviewCapture] full:', JSON.stringify(native, (key, val) => {
+                  if (key === 'thumbnail' && typeof val === 'string') return `<base64:${val.length}chars>`;
+                  return val;
+                }));
+              }
+            }).catch(() => {});
+            return nativeResult;
           };
           
           console.log(`[LinkPreview] Successfully patched getLinkPreview for ${targetHostname}`);
