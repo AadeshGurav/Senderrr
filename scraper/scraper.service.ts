@@ -184,6 +184,10 @@ export class ScraperService {
     });
   }
 
+  async getArticleCount(): Promise<number> {
+    return this.articleRepo.count();
+  }
+
   async getArticle(id: number): Promise<ScrapedArticle | null> {
     return this.articleRepo.findOne({ where: { id } });
   }

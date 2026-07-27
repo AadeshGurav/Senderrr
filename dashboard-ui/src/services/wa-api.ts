@@ -209,6 +209,7 @@ export const templateApi = {
 
 export const scraperApi = {
   getArticles: () => request<ApiArticle[]>('/scraper/articles'),
+  getArticleCount: () => request<{ count: number }>('/scraper/articles/count'),
   run: (url: string) => request<{ detected: boolean; article?: ApiArticle }>('/scraper/run', { method: 'POST', body: JSON.stringify({ url }) }),
   runAll: () => request<{ scraped: number; articles: ApiArticle[] }>('/scraper/run-all', { method: 'POST' }),
   unseed: () => request<{ success: boolean; scraped: number; articles: ApiArticle[] }>('/scraper/unseed', { method: 'POST' }),

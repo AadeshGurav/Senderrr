@@ -41,11 +41,6 @@ See [workflow/taste.md](workflow/taste.md)
 - Use real component-specific skeletons and spinners for all async operations, not generic/fake loading indicators — e.g., show a skeleton of the QR code with a spinner overlay while session is initializing. Confidence: 1
 
 # ui-ux
-- Apply the 60/30/10 rule for color distribution (Neutral/Surface/Accent) strictly using semantic tokens (e.g., `bg-default`, `accent-primary`). Confidence: 0.90
-- Ensure WCAG AA/AAA compliance by never relying on color alone to convey meaning, status, or state. Confidence: 1
-- Adhere strictly to an 8-point spatial system (8px, 16px, 24px) and align all layouts to a baseline grid. Confidence: 0.95
-- Limit typography to a focused scale: approximately 4 core sizes and 2 primary weights (Regular, SemiBold). Confidence: 0.85
-- Use specific, action-oriented microcopy for interactive elements (e.g., "Save changes" instead of "Submit"). Confidence: 0.95
-
+See [ui-ux/taste.md](ui-ux/taste.md)
 # architecture
 See [architecture/taste.md](architecture/taste.md)

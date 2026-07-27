@@ -145,7 +145,7 @@ export default function WaBroadcasts() {
                   onClick={() => setSelectedId(selectedId === b.id ? null : b.id)}
                   className="w-full text-left cursor-pointer"
                 >
-                  <div className="flex items-center justify-between px-5 py-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-5 py-3 sm:py-4 gap-2">
                     <div className="flex items-center gap-3 min-w-0">
                       {selectedId === b.id ? <ChevronDown size={16} className="text-[var(--color-text-muted)] flex-shrink-0" /> : <ChevronRight size={16} className="text-[var(--color-text-muted)] flex-shrink-0" />}
                       <div className="min-w-0">
@@ -158,31 +158,33 @@ export default function WaBroadcasts() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                      <span className="text-xs text-[var(--color-text-secondary)]">S: {b.sentCount} / F: {b.failedCount}</span>
-                      <Badge variant={statusVariant(b.status)}>{b.status}</Badge>
-                      {(b.failedCount > 0 || b.status === 'failed') && (
-                        <Button size="sm" variant="ghost" icon={RotateCcw} onClick={e => { e.stopPropagation(); handleRetry(b.id); }}>
-                          Retry
-                        </Button>
-                      )}
-                      {b.status !== 'cancelled' && (
-                        <>
-                          <Button size="sm" variant="ghost" icon={Pencil} onClick={e => { e.stopPropagation(); setEditingId(b.id); setEditText(b.messageText || ''); }}>
-                            Edit
-                          </Button>
-                          <Button size="sm" variant="ghost" icon={Trash2} onClick={e => {
-                            e.stopPropagation();
-                            if (window.confirm(`Delete broadcast #${displayNumber}? This will permanently remove the message from all WhatsApp groups.`)) {
-                              deleteMutate.mutateAsync(b.id)
-                                .then(r => success('Deleted', `${r.deleted} messages removed from WhatsApp`))
-                                .catch((e: unknown) => showError('Delete failed', e instanceof Error ? e.message : 'Unknown error'));
-                            }
-                          }}>
-                            Delete
-                          </Button>
-                        </>
-                      )}
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 flex-wrap">
+                      <span className="text-xs text-[var(--color-text-secondary)] whitespace-nowrap">S: {b.sentCount} / F: {b.failedCount}</span>
+                      <Badge variant={statusVariant(b.status)} className="text-[10px]">{b.status}</Badge>
+                      <div className="flex items-center gap-1">
+                        {(b.failedCount > 0 || b.status === 'failed') && (
+                          <button onClick={e => { e.stopPropagation(); handleRetry(b.id); }} className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer" title="Retry">
+                            <RotateCcw size={14} />
+                          </button>
+                        )}
+                        {b.status !== 'cancelled' && (
+                          <>
+                            <button onClick={e => { e.stopPropagation(); setEditingId(b.id); setEditText(b.messageText || ''); }} className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer" title="Edit">
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={e => {
+                              e.stopPropagation();
+                              if (window.confirm(`Delete broadcast #${displayNumber}?`)) {
+                                deleteMutate.mutateAsync(b.id)
+                                  .then(r => success('Deleted', `${r.deleted} messages removed from WhatsApp`))
+                                  .catch((e: unknown) => showError('Delete failed', e instanceof Error ? e.message : 'Unknown error'));
+                              }
+                            }} className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer" title="Delete">
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </button>

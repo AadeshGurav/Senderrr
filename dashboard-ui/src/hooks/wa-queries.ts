@@ -448,34 +448,34 @@ export function useWaDashboardStatsQuery() {
   return useQuery({
     queryKey: ['wa', 'dashboard-stats'],
     queryFn: async () => {
-      const [admins, groups, broadcasts, workers, articles] = await Promise.all([
+      const [admins, groups, broadcasts, workers, articleCount] = await Promise.all([
         campaignApi.getAdmins().catch(() => [] as Admin[]),
         campaignApi.getGroups().catch(() => [] as Group[]),
         campaignApi.getBroadcasts().catch(() => ({ data: [] as Broadcast[], total: 0, page: 1, limit: 25 })),
         automationApi.getWorkers().catch(() => [] as Worker[]),
-        scraperApi.getArticles().catch(() => [] as unknown[]),
+        scraperApi.getArticleCount().catch(() => ({ count: 0 })),
       ]);
 
       const bcList = (broadcasts.data || []) as Broadcast[];
       const adminList = admins as Admin[];
+      const groupList = groups as Group[];
       const totalSent = adminList.reduce((sum, a) => sum + (a.totalSent || 0), 0);
       const totalFailed = adminList.reduce((sum, a) => sum + (a.totalFailed || 0), 0);
       const totalAttempted = totalSent + totalFailed;
       const deliveryRate = totalAttempted > 0 ? Math.round((totalSent / totalAttempted) * 100) : 100;
-      const activeBroadcasts = bcList.filter(b =>
-        b.status === 'in_progress' || b.status === 'pending'
-      ).length;
       const workerList = workers as Worker[];
       const readySessions = workerList.filter(w => w.openwaSessionStatus === 'ready').length;
       const totalSessions = workerList.length;
 
       return {
         activeAdmins: adminList.length,
-        activeGroups: (groups as Group[]).filter(g => g.isActive).length,
+        activeGroups: groupList.filter(g => g.isTargeted).length,
         totalBroadcasts: broadcasts.total,
-        activeBroadcasts,
+        activeBroadcasts: bcList.filter(b =>
+          b.status === 'in_progress' || b.status === 'pending'
+        ).length,
         activeWorkers: workerList.filter(w => w.status === 'active').length,
-        scrapedArticles: articles.length,
+        scrapedArticles: articleCount.count,
         totalSent,
         totalFailed,
         deliveryRate,

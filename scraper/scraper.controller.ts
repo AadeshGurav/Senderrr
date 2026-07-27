@@ -24,6 +24,13 @@ export class ScraperController {
     return this.scraperService.getRecentArticles();
   }
 
+  @Get('articles/count')
+  @ApiOperation({ summary: 'Total scraped articles count' })
+  async getArticleCount() {
+    const count = await this.scraperService.getArticleCount();
+    return { count };
+  }
+
   @Get('activity')
   @ApiOperation({ summary: 'Scraper activity log' })
   async getActivity(
