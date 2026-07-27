@@ -4,9 +4,13 @@
 - Fix issues permanently at the source (Dockerfile, setup scripts, config) rather than applying temporary runtime patches to running containers. Confidence: 0.90
 - WA_Automation UI is the primary customer-facing interface; OpenWA serves as the internal engine/API layer not directly exposed to users. Confidence: 0.80
 - Before implementing major architectural changes, present the plan for user approval first and ask clarifying questions. Confidence: 1
+- When client infrastructure has constraints outside their control (e.g., WAF blocking link previews), pragmatic workarounds like monkey-patching internal APIs are acceptable solutions rather than attempting to fix external limitations. Confidence: 0.85
 - Use only React (no Django/Python) in the tech stack; use OpenWA's Bull MQ instead of Celery for task queuing. Confidence: 0.85
 - Leverage OpenWA's built-in Redis and BullMQ instead of adding redundant separate services. Confidence: 0.65
 - When dealing with undocumented features, explore iteratively (try, fail, refine) within the actual capabilities of the underlying OpenWA engine rather than hacking/patching around it. Confidence: 0.70
+- Use multi-module fallback patterns when patching WhatsApp Web internals — try multiple module name candidates (e.g., `WAWebCollections`, `WACollections`, `Store`) and log which one succeeds, so the code adapts to WhatsApp Web's changing internal structure. Confidence: 0.85
+- When upgrading a library (e.g., wwebjs) that has custom monkey-patch workarounds, audit those patches before deploying — verify field names, enum values, and module paths against the new version's source code. Field names in patches (`thumbnail`, `jpegThumbnail`) and enum values are version-specific and break silently if not updated. Confidence: 0.95
+- Gracefully degrade optional features (e.g., link preview injection) — catch failures with try-catch, log warnings, and fall back to default behavior rather than throwing errors that could block the entire operation. Confidence: 0.90
 - For ngrok in docker-compose, conditionally include `--url=${NGROK_URL:-}` in the command when NGROK_URL is set in .env. Confidence: 0.65
 - For Render free tier services: do not configure persistent disks (unsupported on free plan). Confidence: 0.65
 - For Render services with an attached disk: do not set maxShutdownDelaySeconds (not supported). Confidence: 0.65

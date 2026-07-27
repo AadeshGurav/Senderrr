@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(codebase-memory-mcp:*)",
+      "Shell(mkdir -p ~/.commandcode && cat > ~/.commandcode/mcp.json << 'EOF' { \"mcpServers\": { \"codebase-memory\": { \"command\": \"codebase-memory-mcp\" } } } EOF)",
+      "mcp__codebase-memory__index_repository",
+      "Shell(git:*)",
+      "Shell(npm:*)",
+      "Shell(npx tsc --noEmit 2 >& 1)",
+      "Shell(grep:*)",
+      "Shell(cd /Users/aadeshgurav/projekts/OpenWA_1/OpenWA && git commit -F - <<'EOF' fix: upgrade whatsapp-web.js to 1.34.7 and fix link preview banner format - Bump whatsapp-web.js from ^1.26.1-alpha.3 to ~1.34.7 - Add graceful fallback logging to warmUpLinkPreview monkey-patch - Fix jpegThumbnail field name (was using thumbnail, now jpegThumbnail) - Set previewType: 2 for large banner-style link previews - Add thumbnailWidth/thumbnailHeight for proper image dimensions - Increase OG image fetch size to 800px for higher quality - Enhance getGroups fallback with multi-module detection - Extend interface with new preview data fields Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(cd /Users/aadeshgurav/projekts/OpenWA_1/OpenWA && git add src/common/utils/browser-fetch.util.ts && git commit -F - <<'EOF' fix: revert link preview image field name and preview type, update stale comment The field in the monkey-patched response must be `thumbnail` (not `jpegThumbnail`) — that's what WhatsApp's WAWebLinkPreviewChatAction.getLinkPreview reads. Also restore `richPreviewType: 0` instead of `previewType: 2` which broke the preview. Remove the outdated ~5KB thumbnail limit comment — WhatsApp handles its own compression for modern banner-style link preview cards. Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF git push 2>&1)",
+      "Shell(cd /Users/aadeshgurav/projekts/OpenWA_1/OpenWA && git add whatsapp-engine/adapters/whatsapp-web-js.adapter.ts && git commit -F - <<'EOF' fix: revert link preview image field to thumbnail (restore working format) - Changed jpegThumbnail back to thumbnail (the field WhatsApp internally reads) - Restored richPreviewType: 0 instead of previewType: 2 which broke the preview Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF git push 2>&1)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

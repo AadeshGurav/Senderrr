@@ -1,5 +1,6 @@
 # workflow
 - After making code changes, always add, commit, and push them to Git to prevent loss when multiple agents work on the same directory. Confidence: 0.90
+- When the user gives a direct command (e.g., "stage commit push" or a specific task directive), execute it without asking for additional confirmation. Only seek explicit confirmation ("yes") for new, large, or consequential changes not yet discussed. Confidence: 0.90
 - After completing a migration/refactor across files, do a follow-up grep sweep for remaining references to the old pattern to catch any missed files. Confidence: 0.70
 - Before running git operations (checkout, merge, rebase), first verify that all untracked and modified files are safe — stash, commit, or confirm they won't be lost. Confidence: 0.70
 - Use `caffeinate` (macOS) when starting Docker containers via `docker compose up` to prevent the system from sleeping during the process. Confidence: 0.85
@@ -7,7 +8,13 @@
 - Do not restart the dev server; it's already running and changes are picked up automatically after rebuilding. Confidence: 0.65
 - When building features incrementally, work on a single development instance (avoid separate dev+test environments) — changes are tested on the same live data. Confidence: 0.85
 - For complex debugging/troubleshooting issues, step back and formulate a clear, structured plan with rationale before making any changes — avoid scattered incremental attempts. Confidence: 0.90
+- When studying a library or feature, combine multiple web searches (different angles) with reading source files (e.g., package.json, actual implementation) to build comprehensive understanding before implementing. Confidence: 0.85
+- When a claim conflicts with observed modern behavior (e.g., old docs saying "images must be under 5KB" but the actual UI shows high-quality previews), verify against actual source code or live behavior rather than trusting stale documentation. Challenge unverified assumptions when the user pushes back. Confidence: 0.75
 - For blocker bugs that resist initial fixes: do exhaustive research first (web search, library source code, docs, GitHub issues) to find a definitive root cause before iterating on solutions. Confidence: 0.70
 - Write comments that explain the intent behind the code, never the implementation details; if the implementation is hard to explain, it must be refactored. Confidence: 0.95
 - Use a "react/" prefix for Git branch names when working on the React architecture (not "feature/"), and never push React architecture branches to main. Confidence: 0.75
 - For complex multi-feature work, write a comprehensive markdown plan file in `.commandcode/plans/` covering all files, changes, edge cases, and verification steps before implementing. Confidence: 0.70
+- When a plan is already approved (user says to execute it directly), proceed with implementation without re-entering plan mode or calling exit_plan_mode to re-present it. Confidence: 0.85
+- When upgrading library versions, test whether native functionality works before removing custom workarounds — verify first, then remove. Confidence: 0.80
+- Before version upgrades or migrations that could invalidate stateful data (sessions, persistent storage), explicitly back up that data first — check where state is actually stored (disk vs database) and protect accordingly. Confidence: 0.85
+- Before committing, exclude temporary/staging files (e.g., test-*.js, .commandcode/, fix-*.js) from the commit using `git reset HEAD <files>` — keep commits focused on real changes only. Confidence: 0.85

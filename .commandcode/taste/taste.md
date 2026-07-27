@@ -6,6 +6,7 @@
 - Provide a single entry point (Makefile at root) for non-technical users. Confidence: 1
 - Setup and installation must be fully automated with zero manual interruption. Confidence: 1
 - Verify TypeScript compilation by running `npx tsc --noEmit` (backend) and `cd dashboard && npx tsc --noEmit` (frontend) after making changes. Confidence: 0.65
+- Use `~` version pinning (patch-level control) for production dependencies to prevent unexpected breaking changes from minor version updates. Confidence: 0.80
 
 # workflow
 See [workflow/taste.md](workflow/taste.md)
