@@ -306,5 +306,11 @@ export interface IWhatsAppEngine {
 
   // Link Preview — injects pre-fetched OG metadata into the WA page context
   // so that WWebJS's internal sendMessage getLinkPreview call returns our data.
-  warmUpLinkPreview?(url: string, previewData: { title: string; description: string; jpegThumbnailBase64?: string }): Promise<void>;
+  warmUpLinkPreview?(url: string, previewData: { 
+    title: string; 
+    description: string; 
+    jpegThumbnailBase64?: string;
+    thumbnailWidth?: number;
+    thumbnailHeight?: number;
+  }): Promise<void>;
 }

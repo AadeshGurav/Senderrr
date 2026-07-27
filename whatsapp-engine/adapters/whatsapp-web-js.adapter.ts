@@ -135,7 +135,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       try {
         this.qrCode = await qrcode.toDataURL(qr);
         this.setStatus(EngineStatus.QR_READY);
-        this.callbacks.onQRCode?.(this.qrCode);
+        this.callbacks.onQRCode?.(this.qrCode!);
       } catch (error) {
         this.logger.error('Error generating QR code', String(error));
       }
@@ -333,51 +333,104 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       title: string;
       description: string;
       jpegThumbnailBase64?: string;
+      thumbnailWidth?: number;
+      thumbnailHeight?: number;
     },
   ): Promise<void> {
-    if (!this.client || !this.client.pupPage) return;
+    if (!this.client || !this.client.pupPage) {
+      this.logger.warn('warmUpLinkPreview skipped: client or pupPage not available');
+      return;
+    }
+    
+    this.logger.log(`Attempting to inject link preview for: ${url}`);
+    
     try {
       // Setup console forwarding if not already setup (to avoid duplicate listeners per call)
       if (!(this.client.pupPage as any)._hasConsoleListener) {
         this.client.pupPage.on('console', msg => {
-          this.logger.log(`[Browser Console] ${msg.text()}`);
+          this.logger.debug(`[Browser Console] ${msg.text()}`);
         });
         (this.client.pupPage as any)._hasConsoleListener = true;
       }
 
-      await this.client.pupPage.evaluate(
-        async (linkUrl: string, preview: { title: string; description: string; jpegThumbnailBase64?: string }) => {
-          const module = (window as any).require('WAWebLinkPreviewChatAction');
-          if (!module) return;
+      const result = await this.client.pupPage.evaluate(
+        async (linkUrl: string, preview: { 
+          title: string; 
+          description: string; 
+          jpegThumbnailBase64?: string;
+          thumbnailWidth?: number;
+          thumbnailHeight?: number;
+        }) => {
+          const moduleName = 'WAWebLinkPreviewChatAction';
+          const module = (window as any).require(moduleName);
+          
+          if (!module) {
+            console.warn(`[LinkPreview] Module ${moduleName} not found - link preview will use default behavior`);
+            return { success: false, error: 'module_not_found' };
+          }
+          
+          if (!module.getLinkPreview) {
+            console.warn(`[LinkPreview] getLinkPreview method not found on ${moduleName}`);
+            return { success: false, error: 'method_not_found' };
+          }
 
           const original = module.getLinkPreview.bind(module);
+          const targetHostname = new URL(linkUrl).hostname;
 
           module.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
-            if (href && href.includes(new URL(linkUrl).hostname)) {
+            if (href && href.includes(targetHostname)) {
               // We intentionally DO NOT restore the original function here.
               // This ensures the patch persists for all subsequent groups in the broadcast.
+              console.log(`[LinkPreview] Patching preview for: ${href}`);
+              
+              // Build preview data structure matching WhatsApp's expected format
+              // Using jpegThumbnail (not thumbnail) which is the correct field for link previews
+              const previewData: any = {
+                matchedText: linkUrl,
+                title: preview.title || '',
+                description: preview.description || '',
+                canonicalUrl: linkUrl,
+                // previewType: NONE (2) seems to enable the large banner format
+                previewType: 2,
+                doNotPlayInline: false,
+                isLoading: false,
+                // jpegThumbnail is the correct field name for the base64 thumbnail
+                jpegThumbnail: preview.jpegThumbnailBase64,
+                psp: null,
+              };
+              
+              // Add dimensions for the large image display
+              if (preview.thumbnailWidth) {
+                previewData.thumbnailWidth = preview.thumbnailWidth;
+              }
+              if (preview.thumbnailHeight) {
+                previewData.thumbnailHeight = preview.thumbnailHeight;
+              }
+              
               return Promise.resolve({
                 url: linkUrl,
-                data: {
-                  matchedText: linkUrl,
-                  title: preview.title || '',
-                  richPreviewType: 0,
-                  doNotPlayInline: false,
-                  isLoading: false,
-                  thumbnail: preview.jpegThumbnailBase64,
-                  psp: null,
-                },
+                data: previewData,
               });
             }
             return original(link);
           };
+          
+          console.log(`[LinkPreview] Successfully patched getLinkPreview for ${targetHostname}`);
+          return { success: true, hostname: targetHostname };
         },
         url,
         previewData,
       );
+      
+      if (result?.success) {
+        this.logger.log(`Link preview injection succeeded for: ${result.hostname}`);
+      } else {
+        this.logger.warn(`Link preview injection failed: ${result?.error || 'unknown'}. Will use default behavior.`);
+      }
     } catch (e) {
-      this.logger.warn('Failed to inject link preview patch', String(e));
+      // Log but don't fail - link preview is an optional enhancement
+      this.logger.warn('Link preview injection failed (using default behavior):', String(e));
     }
   }
 
@@ -511,7 +564,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     let chats: any[] = [];
     let attempts = 0;
     let usedFallback = false;
-    let fallbackGroups: Group[] = [];
+    let fallbackResult: { groups: Group[]; module?: string; error?: string } | Group[] = [];
 
     while (attempts < 3) {
       try {
@@ -520,26 +573,44 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       } catch (err) {
         attempts++;
         
-        if (attempts >= 3) {
+if (attempts >= 3) {
           this.logger.debug('wwebjs native getChats() failed (this is expected on newer WhatsApp versions). Proceeding to raw fallback...', String(err));
           this.logger.log('Attempting raw pupPage.evaluate fallback for groups...');
           try {
             // Direct robust fallback if whatsapp-web.js getChats() is broken (e.g. 'r: r' error)
             const page = (this.client as any).pupPage;
             if (page) {
-              fallbackGroups = await page.evaluate(() => {
+              fallbackResult = await page.evaluate(() => {
                 // @ts-ignore
-                if (!window.require) return [];
+                if (!window.require) return { groups: [], error: 'window.require not available' };
+                
+                // Try multiple possible module names for WhatsApp Web internal modules
+                const moduleCandidates = ['WAWebCollections', 'WACollections', 'Store'];
+                let foundModule = null;
                 let ChatCollection;
-                try {
-                  // @ts-ignore
-                  ChatCollection = window.require('WAWebCollections').Chat;
-                } catch (e) {
-                  return [];
+                
+                for (const modName of moduleCandidates) {
+                  try {
+                    // @ts-ignore
+                    const mod = window.require(modName);
+                    if (mod && mod.Chat) {
+                      ChatCollection = mod.Chat;
+                      foundModule = modName;
+                      break;
+                    }
+                  } catch (e) {
+                    // Continue to next candidate
+                  }
                 }
                 
+                if (!ChatCollection) {
+                  console.warn(`[getGroups] No chat collection found. Tried: ${moduleCandidates.join(', ')}`);
+                  return { groups: [], error: 'no_chat_collection' };
+                }
+                
+                console.log(`[getGroups] Using chat collection from module: ${foundModule}`);
                 const allChats = ChatCollection.getModelsArray();
-                return allChats
+                const groups = allChats
                   .filter((c: any) => c.isGroup || (c.id && c.id._serialized && c.id._serialized.endsWith('@g.us')))
                   .map((c: any) => {
                     let pCount = undefined;
@@ -549,19 +620,33 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                       if (c.groupMetadata) {
                          pCount = c.groupMetadata.participants ? c.groupMetadata.participants.length : undefined;
                          
+                         // Try to find Contact from the same module
                          // @ts-ignore
-                         const Contact = window.require('WAWebCollections').Contact;
-                         const me = Contact.getModelsArray().find((x: any) => x.isMe);
-                         if (me && me.id) {
-                            const meId = me.id._serialized || me.id;
-                            const myParticipant = c.groupMetadata.participants.find((p: any) => 
-                              p.id === meId || (p.id && p.id._serialized === meId)
-                            );
-                            if (myParticipant && (myParticipant.isAdmin || myParticipant.isSuperAdmin)) {
-                              isAdmin = true;
-                            }
+                         let Contact;
+                         for (const modName of moduleCandidates) {
+                           try {
+                             // @ts-ignore
+                             const mod = window.require(modName);
+                             if (mod && mod.Contact) {
+                               Contact = mod.Contact;
+                               break;
+                             }
+                           } catch (e) {}
                          }
-                      }
+                         
+                         if (Contact) {
+                           const me = Contact.getModelsArray().find((x: any) => x.isMe);
+                           if (me && me.id) {
+                              const meId = me.id._serialized || me.id;
+                              const myParticipant = c.groupMetadata.participants.find((p: any) => 
+                                p.id === meId || (p.id && p.id._serialized === meId)
+                              );
+                              if (myParticipant && (myParticipant.isAdmin || myParticipant.isSuperAdmin)) {
+                                isAdmin = true;
+                              }
+                           }
+                         }
+                       }
                     } catch (ignore) {}
 
                     return {
@@ -571,8 +656,21 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                       isAdmin: isAdmin
                     };
                   });
+                  
+                  return { groups, module: foundModule };
               });
-              usedFallback = true;
+              
+              // Type guard for the result object
+              if (fallbackResult && typeof fallbackResult === 'object' && 'groups' in fallbackResult) {
+                const result = fallbackResult as { groups: Group[]; module?: string; error?: string };
+                if (result.error) {
+                  this.logger.warn(`Fallback getGroups failed: ${result.error}`);
+                } else if (result.groups && result.groups.length > 0) {
+                  this.logger.log(`Fallback getGroups succeeded using module: ${result.module}, found ${result.groups.length} groups`);
+                  usedFallback = true;
+                  return result.groups;
+                }
+              }
               break;
             }
           } catch (fallbackErr) {
@@ -583,10 +681,6 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         // Wait 2 seconds before retrying
         await new Promise(r => setTimeout(r, 2000));
       }
-    }
-
-    if (usedFallback) {
-      return fallbackGroups;
     }
 
     // Filter only group chats (use fallback check for @g.us if isGroup is missing)

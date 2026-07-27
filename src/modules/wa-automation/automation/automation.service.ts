@@ -242,11 +242,24 @@ export class AutomationService {
         const absImageUrl = imageUrl.startsWith('http')
           ? imageUrl
           : new URL(imageUrl, url).toString();
-        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 600);
-        this.logger.log(`Generated thumbnail (max 600px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
+        
+        // Fetch a larger image for better quality - WhatsApp will downscale as needed
+        // Use 800x400 for banner-style preview (similar to WhatsApp's preferred dimensions)
+        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 800);
+        this.logger.log(`Generated thumbnail (max 800px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
       }
 
-      await engine.warmUpLinkPreview(url, { title, description, jpegThumbnailBase64 });
+      // Get image dimensions from the og:image for proper display
+      const imageWidth = $('meta[property="og:image:width"]').attr('content') || '800';
+      const imageHeight = $('meta[property="og:image:height"]').attr('content') || '400';
+
+      await engine.warmUpLinkPreview(url, { 
+        title, 
+        description, 
+        jpegThumbnailBase64,
+        thumbnailWidth: parseInt(imageWidth, 10) || 800,
+        thumbnailHeight: parseInt(imageHeight, 10) || 400
+      });
       this.logger.log(`Link preview injected for: ${url} | title: "${title.slice(0, 60)}"`);
     } catch (err) {
       this.logger.warn(`preWarmLinkPreview failed for ${url}: ${(err as Error).message}`);
