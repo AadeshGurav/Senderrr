@@ -243,8 +243,11 @@ export function useRetryAllBroadcastsMutation() {
 
 // ─── Advertisements ──────────────────────────────────────────────
 
-export function useWaAdvertisementsQuery() {
-  return useQuery({ queryKey: waKeys.advertisements, queryFn: () => adApi.list() });
+export function useWaAdvertisementsQuery(status?: string, search?: string) {
+  return useQuery({
+    queryKey: [...waKeys.advertisements, status ?? 'all', search ?? ''],
+    queryFn: () => adApi.list(status, search),
+  });
 }
 
 export function useAdTelemetryQuery(id: number) {
@@ -289,6 +292,52 @@ export function useUpdateAdMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => adApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
+  });
+}
+
+// ─── Ad Templates ───────────────────────────────────────────
+
+export function useAdTemplatesQuery(adId: number) {
+  return useQuery({
+    queryKey: [...waKeys.advertisements, 'templates', adId],
+    queryFn: () => adApi.listTemplates(adId),
+    enabled: !!adId,
+  });
+}
+
+export function useCreateAdTemplateMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ adId, data }: { adId: number; data: { name: string; body?: string; mediaId?: number } }) =>
+      adApi.createTemplate(adId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
+  });
+}
+
+export function useUpdateAdTemplateMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ adId, tplId, data }: { adId: number; tplId: number; data: { name?: string; body?: string; mediaId?: number } }) =>
+      adApi.updateTemplate(adId, tplId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
+  });
+}
+
+export function useActivateAdTemplateMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ adId, tplId }: { adId: number; tplId: number }) =>
+      adApi.activateTemplate(adId, tplId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
+  });
+}
+
+export function useDeleteAdTemplateMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ adId, tplId }: { adId: number; tplId: number }) =>
+      adApi.deleteTemplate(adId, tplId),
     onSuccess: () => qc.invalidateQueries({ queryKey: waKeys.advertisements }),
   });
 }

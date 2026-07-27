@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Param,
   Body,
@@ -23,6 +24,7 @@ import { extname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import type { Multer } from 'multer';
 import { AdvertisementService } from './advertisement.service';
+import { AdTemplateService } from './ad-template.service';
 import { WaAuthGuard } from '../wa-auth/wa-auth.guard';
 import type { Advertisement } from '@database/entities/wa-automation/advertisement.entity';
 
@@ -30,12 +32,18 @@ import type { Advertisement } from '@database/entities/wa-automation/advertiseme
 @Controller('wa/advertisements')
 @UseGuards()
 export class AdvertisementController {
-  constructor(private readonly adService: AdvertisementService) {}
+  constructor(
+    private readonly adService: AdvertisementService,
+    private readonly tplService: AdTemplateService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List all advertisements' })
-  async findAll() {
-    return this.adService.findAll();
+  async findAll(
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adService.findAll(status, search);
   }
 
   @Get(':id')
@@ -123,6 +131,52 @@ export class AdvertisementController {
   @ApiOperation({ summary: 'Update advertisement' })
   async update(@Param('id', ParseIntPipe) id: number, @Body() body: Partial<Advertisement>) {
     return this.adService.update(id, body);
+  }
+
+  // ─── Template CRUD ───────────────────────────────────────────────
+
+  @Get(':id/templates')
+  @ApiOperation({ summary: 'List templates for an advertisement' })
+  async listTemplates(@Param('id', ParseIntPipe) id: number) {
+    return this.tplService.findByAd(id);
+  }
+
+  @Post(':id/templates')
+  @ApiOperation({ summary: 'Create a template for an advertisement' })
+  async createTemplate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { name: string; body?: string; mediaId?: number },
+  ) {
+    return this.tplService.create(id, body);
+  }
+
+  @Put(':id/templates/:tplId')
+  @ApiOperation({ summary: 'Update a template' })
+  async updateTemplate(
+    @Param('id', ParseIntPipe) _id: number,
+    @Param('tplId', ParseIntPipe) tplId: number,
+    @Body() body: { name?: string; body?: string; mediaId?: number },
+  ) {
+    return this.tplService.update(tplId, body);
+  }
+
+  @Post(':id/templates/:tplId/activate')
+  @ApiOperation({ summary: 'Activate a template for an advertisement' })
+  async activateTemplate(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('tplId', ParseIntPipe) tplId: number,
+  ) {
+    return this.tplService.activate(id, tplId);
+  }
+
+  @Delete(':id/templates/:tplId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a template' })
+  async deleteTemplate(
+    @Param('id', ParseIntPipe) _id: number,
+    @Param('tplId', ParseIntPipe) tplId: number,
+  ) {
+    await this.tplService.delete(tplId);
   }
 
   @Delete(':id')

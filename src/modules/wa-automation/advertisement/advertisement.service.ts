@@ -1,13 +1,14 @@
 /* eslint-disable */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, MoreThanOrEqual } from 'typeorm';
+import { Repository, In, MoreThanOrEqual, Like } from 'typeorm';
 import * as fs from 'fs/promises';
 import {
   Advertisement,
   AdvertisementStatus,
   AdvertisementTargetType,
 } from '@database/entities/wa-automation/advertisement.entity';
+import { AdTemplate } from '@database/entities/wa-automation/ad-template.entity';
 import { MediaAttachment } from '@database/entities/wa-automation/media-attachment.entity';
 import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
 import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
@@ -15,6 +16,7 @@ import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automatio
 import { MessageTask, MessageTaskStatus } from '@database/entities/wa-automation/message-task.entity';
 import { AdminAssignerService } from '../campaign/admin-assigner.service';
 import { BroadcastDispatcherService } from '../campaign/broadcast-dispatcher.service';
+import { SettingsService } from '../settings/settings.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -39,6 +41,8 @@ export class AdvertisementService {
   constructor(
     @InjectRepository(Advertisement, 'data')
     private readonly adRepo: Repository<Advertisement>,
+    @InjectRepository(AdTemplate, 'data')
+    private readonly tplRepo: Repository<AdTemplate>,
     @InjectRepository(MediaAttachment, 'data')
     private readonly mediaRepo: Repository<MediaAttachment>,
     @InjectRepository(WhatsAppGroup, 'data')
@@ -51,11 +55,20 @@ export class AdvertisementService {
     private readonly taskRepo: Repository<MessageTask>,
     private readonly adminAssigner: AdminAssignerService,
     private readonly dispatcher: BroadcastDispatcherService,
+    private readonly settingsService: SettingsService,
   ) {}
 
-  async findAll(): Promise<Advertisement[]> {
+  async findAll(status?: string, search?: string): Promise<Advertisement[]> {
     await this.checkExpired();
+    const where: any = {};
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+    if (search && search.trim()) {
+      where.title = Like(`%${search.trim()}%`);
+    }
     return this.adRepo.find({
+      where,
       order: { createdAt: 'DESC' },
       relations: ['targetGroups', 'targetCommunities', 'mediaAttachments'],
     });
@@ -130,6 +143,26 @@ export class AdvertisementService {
     }
   }
 
+  /** Get midnight of today (00:00) in the configured timezone. */
+  private getTodayStartInTimezone(tz: string): Date {
+    const now = new Date();
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const dateStr = formatter.format(now); // "2026-07-27"
+      return new Date(`${dateStr}T00:00:00`);
+    } catch {
+      // Fallback to server local time if timezone is invalid
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+  }
+
   /**
    * Get detailed telemetry for an ad campaign including per-group breakdown.
    */
@@ -163,8 +196,8 @@ export class AdvertisementService {
       };
     }
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
+    const todayStart = this.getTodayStartInTimezone(tz);
 
     // All broadcasts for this ad
     const broadcasts = await this.broadcastRepo.find({
@@ -324,27 +357,48 @@ export class AdvertisementService {
       return;
     }
 
-    // Resolve all media attachments as data URIs
-    const mediaItems = await this.mediaRepo.find({
-      where: { advertisement: { id: ad.id } },
-      order: { createdAt: 'ASC' },
-    });
+    // Resolve message text and media from active template, fall back to ad-level fields
+    let messageText = ad.body || '';
     const imageUrls: string[] = [];
-    for (const m of mediaItems) {
-      if (m.filePath) {
+
+    const activeTpl = await this.tplRepo.findOne({
+      where: { advertisement: { id: ad.id }, isActive: true },
+      relations: ['media'],
+    });
+
+    if (activeTpl) {
+      messageText = activeTpl.body || '';
+      if (activeTpl.media?.filePath) {
         try {
-          const fileBuffer = await fs.readFile(m.filePath);
-          const mimeType = this.getMimeType(m.filePath);
+          const fileBuffer = await fs.readFile(activeTpl.media.filePath);
+          const mimeType = this.getMimeType(activeTpl.media.filePath);
           imageUrls.push(`data:${mimeType};base64,${fileBuffer.toString('base64')}`);
         } catch (err) {
-          this.logger.warn(`Ad #${ad.id}: could not read media file ${m.filePath}: ${(err as Error).message}`);
+          this.logger.warn(`Ad #${ad.id}: could not read template media file ${activeTpl.media.filePath}: ${(err as Error).message}`);
+        }
+      }
+    } else {
+      // Fallback: use ad-level media
+      const mediaItems = await this.mediaRepo.find({
+        where: { advertisement: { id: ad.id } },
+        order: { createdAt: 'ASC' },
+      });
+      for (const m of mediaItems) {
+        if (m.filePath) {
+          try {
+            const fileBuffer = await fs.readFile(m.filePath);
+            const mimeType = this.getMimeType(m.filePath);
+            imageUrls.push(`data:${mimeType};base64,${fileBuffer.toString('base64')}`);
+          } catch (err) {
+            this.logger.warn(`Ad #${ad.id}: could not read media file ${m.filePath}: ${(err as Error).message}`);
+          }
         }
       }
     }
 
     const broadcast = this.broadcastRepo.create({
       advertisementId: ad.id,
-      messageText: ad.body,
+      messageText,
       status: BroadcastStatus.PENDING,
       totalMessages: groups.length,
     });
@@ -380,7 +434,7 @@ export class AdvertisementService {
     // This reuses the full anti-ban pipeline: rate limits, jitter, human-like pacing,
     // quiet hours, group health, retry with backoff, etc.
     // Pass the ad body as messageText and all media as imageUrls
-    this.dispatcher.dispatchBroadcast(saved.id, ad.body || '', imageUrls).catch((err: Error) => {
+    this.dispatcher.dispatchBroadcast(saved.id, messageText, imageUrls).catch((err: Error) => {
       this.logger.error(`Ad broadcast #${saved.id} crashed: ${err.message}`);
       this.broadcastRepo
         .update(saved.id, {
@@ -474,8 +528,8 @@ export class AdvertisementService {
     const ad = await this.adRepo.findOne({ where: { id } });
     if (!ad) return;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
+    const today = this.getTodayStartInTimezone(tz);
 
     const lastDispatch = ad.lastDispatchedAt ? new Date(ad.lastDispatchedAt) : null;
     const isNewDay = !lastDispatch || lastDispatch < today;

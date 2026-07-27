@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Edit3, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
+import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Edit3, ChevronDown, ChevronRight, BarChart3, Search, CheckCircle, Layers } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -17,9 +17,13 @@ import {
   useWaCommunitiesQuery,
   useUpdateAdMutation,
   useAdLogsQuery,
+  useAdTemplatesQuery,
+  useCreateAdTemplateMutation,
+  useActivateAdTemplateMutation,
+  useDeleteAdTemplateMutation,
 } from '../../hooks/wa-queries';
 import { adApi } from '../../services/wa-api';
-import type { ApiAd } from '../../services/wa-api';
+import type { ApiAd, ApiAdTemplate } from '../../services/wa-api';
 
 // ─── Local extended types ──────────────────────────────────────────
 
@@ -90,16 +94,22 @@ interface Community {
 }
 
 export default function WaAdvertisements() {
-  const { data: ads = [], isLoading } = useWaAdvertisementsQuery();
+  const { data: ads = [], isLoading } = useWaAdvertisementsQuery(statusFilter, searchTerm);
   const { data: groups = [] } = useWaGroupsQuery();
   const { data: communities = [] } = useWaCommunitiesQuery();
   const deleteMutate = useDeleteAdMutation();
   const updateAd = useUpdateAdMutation();
+  const { data: existingTemplates = [] } = useAdTemplatesQuery(editingAd?.id ?? 0);
+  const createTemplateMut = useCreateAdTemplateMutation();
+  const activateTemplateMut = useActivateAdTemplateMutation();
+  const deleteTemplateMut = useDeleteAdTemplateMutation();
   const { success, error: showError } = useToast();
   const queryClient = useQueryClient();
   const waKeys = { advertisements: ['wa', 'advertisements'] as const };
 
   const [showForm, setShowForm] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [packageDaysInput, setPackageDaysInput] = useState('1');
   const [editingAd, setEditingAd] = useState<ApiAdFull | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
@@ -107,17 +117,16 @@ export default function WaAdvertisements() {
 
   const [formData, setFormData] = useState({
     title: '',
-    body: '',
     targetType: 'all_groups' as string,
     selectedGroups: [] as Group[],
     selectedCommunities: [] as Community[],
     packageDays: 1,
   });
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-  const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
-  const [removedMediaIds, setRemovedMediaIds] = useState<number[]>([]);
+  const [newTplName, setNewTplName] = useState('');
+  const [newTplBody, setNewTplBody] = useState('');
+  const [newTplFile, setNewTplFile] = useState<File | null>(null);
+  const [newTplPreview, setNewTplPreview] = useState('');
   const [creating, setCreating] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
 
   const selectableGroups = groups.filter(
@@ -149,62 +158,83 @@ export default function WaAdvertisements() {
     }
   };
 
-  const handleFilesSelect = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const newFiles: File[] = [];
-    const newPreviews: string[] = [];
-    for (const file of files) {
-      newFiles.push(file);
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setMediaPreviews(prev => [...prev, e.target?.result as string]);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        newPreviews.push('');
-      }
-    }
-    setMediaFiles(prev => [...prev, ...newFiles]);
-  };
-
-  const removeMedia = (index: number) => {
-    setMediaFiles(prev => prev.filter((_, i) => i !== index));
-    setMediaPreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
   const openEditModal = (ad: ApiAdFull) => {
     setEditingAd(ad);
     setFormData({
       title: ad.title || '',
-      body: ad.body || '',
       targetType: ad.targetType || 'all_groups',
       selectedGroups: (ad.targetGroups as Group[] | undefined) ?? [],
       selectedCommunities: (ad.targetCommunities as Community[] | undefined) ?? [],
       packageDays: ad.packageDays || 1,
     });
     setPackageDaysInput(String(ad.packageDays || 1));
-    setMediaFiles([]);
-    setMediaPreviews([]);
-    setRemovedMediaIds([]);
+    setNewTplName('');
+    setNewTplBody('');
+    setNewTplFile(null);
+    setNewTplPreview('');
     setShowForm(true);
+  };
+
+  const handleCreateTemplate = async () => {
+    const adId = editingAd?.id;
+    if (!adId) {
+      showError('Validation', 'Save the campaign first before adding templates');
+      return;
+    }
+    if (!newTplName.trim()) {
+      showError('Validation', 'Template name is required');
+      return;
+    }
+
+    try {
+      await createTemplateMut.mutateAsync({
+        adId,
+        data: { name: newTplName.trim(), body: newTplBody || undefined },
+      });
+
+      // Upload media if provided
+      if (newTplFile) {
+        await adApi.uploadMedia(adId, newTplFile);
+      }
+
+      success('Template added', `"${newTplName}" created`);
+      setNewTplName('');
+      setNewTplBody('');
+      setNewTplFile(null);
+      setNewTplPreview('');
+      queryClient.invalidateQueries({ queryKey: ['wa', 'advertisements', 'templates', adId] });
+    } catch (e: unknown) {
+      showError('Failed to create template', e instanceof Error ? e.message : 'Unknown error');
+    }
+  };
+
+  const handleActivateTemplate = async (tplId: number) => {
+    if (!editingAd) return;
+    try {
+      await activateTemplateMut.mutateAsync({ adId: editingAd.id, tplId });
+      success('Template activated');
+      queryClient.invalidateQueries({ queryKey: ['wa', 'advertisements', 'templates', editingAd.id] });
+    } catch (e: unknown) {
+      showError('Failed to activate template', e instanceof Error ? e.message : 'Unknown error');
+    }
+  };
+
+  const handleDeleteTemplate = async (tplId: number) => {
+    if (!editingAd) return;
+    try {
+      await deleteTemplateMut.mutateAsync({ adId: editingAd.id, tplId });
+      success('Template deleted');
+      queryClient.invalidateQueries({ queryKey: ['wa', 'advertisements', 'templates', editingAd.id] });
+    } catch (e: unknown) {
+      showError('Failed to delete template', e instanceof Error ? e.message : 'Unknown error');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate: title required + at least body or attachments
     if (!formData.title.trim()) {
       showError('Validation', 'Campaign title is required');
-      setCreating(false);
-      return;
-    }
-    const hasBody = formData.body.trim().length > 0;
-    const hasNewMedia = mediaFiles.length > 0;
-    const hasExistingMedia = editingAd && (editingAd.mediaAttachments?.length ?? 0) > removedMediaIds.length;
-    if (!hasBody && !hasNewMedia && !hasExistingMedia) {
-      showError('Validation', 'Provide a message body or upload at least one attachment');
-      setCreating(false);
       return;
     }
 
@@ -212,7 +242,6 @@ export default function WaAdvertisements() {
     try {
       const payload: Record<string, unknown> = {
         title: formData.title,
-        body: formData.body,
         targetType: formData.targetType,
         packageDays: formData.packageDays,
       };
@@ -223,42 +252,21 @@ export default function WaAdvertisements() {
 
       if (editingAd) {
         await updateAd.mutateAsync({ id: editingAd.id, data: payload });
-
-        // Remove any media the user deleted
-        if (removedMediaIds.length > 0) {
-          for (const mid of removedMediaIds) {
-            await adApi.removeMedia(mid);
-          }
-        }
-
-        // Upload new files
-        if (mediaFiles.length > 0) {
-          for (const file of mediaFiles) {
-            await adApi.uploadMedia(editingAd.id, file);
-          }
-        }
-
         success('Campaign updated', `"${formData.title}" saved`);
       } else {
-        const ad = await adApi.create(payload);
-
-        if (mediaFiles.length > 0 && ad?.id) {
-          for (const file of mediaFiles) {
-            await adApi.uploadMedia(ad.id, file);
-          }
-        }
-
-        success('Campaign saved as draft. Use Send Now to dispatch.');
+        await adApi.create(payload);
+        success('Campaign saved as draft. Add templates and use Send Now to dispatch.');
       }
 
       queryClient.invalidateQueries({ queryKey: waKeys.advertisements });
       setShowForm(false);
       setEditingAd(null);
-      setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 });
+      setFormData({ title: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 });
       setPackageDaysInput('1');
-      setMediaFiles([]);
-      setMediaPreviews([]);
-      setRemovedMediaIds([]);
+      setNewTplName('');
+      setNewTplBody('');
+      setNewTplFile(null);
+      setNewTplPreview('');
     } catch (e: unknown) {
       showError('Failed to save campaign', e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -289,7 +297,46 @@ export default function WaAdvertisements() {
           <h1 className="text-2xl font-bold text-[var(--color-text)]">Advertisements</h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">Manage promotional ad campaigns</p>
         </div>
-        <Button icon={Plus} onClick={() => { setEditingAd(null); setFormData({ title: '', body: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 }); setPackageDaysInput('1'); setMediaFiles([]); setMediaPreviews([]); setShowForm(true); }}>New Campaign</Button>
+        <Button icon={Plus} onClick={() => { setEditingAd(null); setFormData({ title: '', targetType: 'all_groups', selectedGroups: [], selectedCommunities: [], packageDays: 1 }); setPackageDaysInput('1'); setNewTplName(''); setNewTplBody(''); setNewTplFile(null); setNewTplPreview(''); setShowForm(true); }}>New Campaign</Button>
+      </div>
+
+      {/* ─── Filter Bar ────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="flex items-center gap-1 bg-[var(--color-bg-secondary)] rounded-xl p-1 border border-[var(--color-border)]">
+          {['all', 'draft', 'active', 'completed', 'cancelled'].map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer capitalize ${
+                statusFilter === s
+                  ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg)]'
+              }`}
+            >
+              {s === 'all' ? 'All' : s}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 max-w-xs w-full">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search campaigns..."
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] outline-none focus:border-[var(--color-primary)] transition-colors"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ─── Empty / Grid ───────────────────────────────────── */}
@@ -344,111 +391,134 @@ export default function WaAdvertisements() {
                   placeholder="e.g., Summer Sale 2026"
                   required
                 />
-                <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-                    Message Body
-                  </label>
-                  <div className="relative">
-                    <Textarea
-                      value={formData.body}
-                      onChange={(e) => setFormData({ ...formData, body: e.target.value })}
-                      placeholder="Enter your promotional message... Leave empty to send only attachments"
-                      rows={5}
-                      className="pr-20"
-                    />
-                    <span className="absolute bottom-2.5 right-3 text-[10px] text-[var(--color-text-muted)] font-mono">
-                      {formData.body.length} chars
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1">Supports WhatsApp formatting: *bold*, _italic_, ~strikethrough~</p>
-                </div>
               </div>
             </div>
 
-            {/* ── Media / Attachments upload right below message body ── */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                    <Image size={15} />
-                  </div>
-                  <h3 className="text-sm font-semibold text-[var(--color-text)]">Attachments</h3>
-                  <span className="text-[11px] text-[var(--color-text-muted)]">optional</span>
+            {/* ── Section: Templates ─────────────────────────── */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                  <Layers size={15} />
                 </div>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">Templates</h3>
+                <span className="text-[11px] text-[var(--color-text-muted)]">One active per campaign</span>
+              </div>
 
-                {/* Existing attachments (edit mode only) */}
-                {editingAd && (editingAd.mediaAttachments?.length ?? 0) > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {editingAd.mediaAttachments!
-                      .filter((m: MediaAttachment) => !removedMediaIds.includes(m.id))
-                      .map((m: MediaAttachment) => (
-                        <div key={m.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Image size={16} className="text-[var(--color-text-muted)] flex-shrink-0" />
-                            <span className="text-xs text-[var(--color-text)] truncate">{m.originalFilename || `Attachment #${m.id}`}</span>
-                          </div>
+              {/* Existing templates (edit mode) */}
+              {editingAd && existingTemplates.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {existingTemplates.map((tpl: ApiAdTemplate) => (
+                    <div
+                      key={tpl.id}
+                      className={`p-3 rounded-xl border transition-colors ${
+                        tpl.isActive
+                          ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10'
+                          : 'border-[var(--color-border)] bg-[var(--color-bg)]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className="font-medium text-xs text-[var(--color-text)]">{tpl.name}</span>
+                          {tpl.isActive && <Badge variant="success">Active</Badge>}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {!tpl.isActive && (
+                            <button
+                              type="button"
+                              onClick={() => handleActivateTemplate(tpl.id)}
+                              className="text-xs text-[var(--color-primary)] hover:text-[var(--color-primary)]/80 cursor-pointer px-2 py-1 rounded hover:bg-[var(--color-primary)]/5"
+                            >
+                              Activate
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => setRemovedMediaIds(prev => [...prev, m.id])}
-                            className="text-xs text-red-500 hover:text-red-600 flex-shrink-0 cursor-pointer p-1"
+                            onClick={() => handleDeleteTemplate(tpl.id)}
+                            className="text-xs text-red-500 hover:text-red-600 cursor-pointer p-1"
                           >
-                            <X size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
-                      ))}
-                  </div>
-                )}
-
-                {/* Drag-and-drop zone for new files */}
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFilesSelect(e.dataTransfer.files); }}
-                  className={`relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
-                    dragOver
-                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                      : mediaFiles.length > 0
-                        ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10'
-                        : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] bg-[var(--color-bg-secondary)]'
-                  }`}
-                >
-                  <input
-                    type="file"
-                    multiple
-                    onChange={(e) => handleFilesSelect(e.target.files)}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-
-                  {mediaFiles.length > 0 ? (
-                    <div className="w-full space-y-2">
-                      {mediaFiles.map((file, i) => (
-                        <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--color-bg)]">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {mediaPreviews[i] ? (
-                              <img src={mediaPreviews[i]} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
-                            ) : (
-                              <div className="w-10 h-10 rounded bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
-                                <Upload size={16} className="text-[var(--color-text-muted)]" />
-                              </div>
-                            )}
-                            <span className="text-xs text-[var(--color-text)] truncate">{file.name}</span>
-                          </div>
-                          <button type="button" onClick={() => removeMedia(i)} className="text-xs text-red-500 hover:text-red-600 flex-shrink-0 cursor-pointer p-1">
-                            <X size={14} />
-                          </button>
+                      </div>
+                      {tpl.body && (
+                        <p className="text-[11px] text-[var(--color-text-secondary)] mt-1 line-clamp-2">{tpl.body}</p>
+                      )}
+                      {tpl.media && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Image size={11} className="text-[var(--color-text-muted)]" />
+                          <span className="text-[10px] text-[var(--color-text-muted)]">{tpl.media.originalFilename}</span>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  ) : (
-                    <>
-                      <Upload size={24} className="text-[var(--color-text-muted)] mb-2" />
-                      <p className="text-xs text-[var(--color-text-secondary)]">
-                        <span className="text-[var(--color-primary)] font-medium">Click to upload</span> or drag and drop
-                      </p>
-                      <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Any file type — images, videos, documents</p>
-                    </>
-                  )}
+                  ))}
                 </div>
-              </div>
+              )}
+
+              {/* Add template form */}
+              {editingAd && (
+                <div className="bg-[var(--color-bg-secondary)] rounded-xl p-4 border border-[var(--color-border)] border-dashed space-y-3">
+                  <p className="text-xs font-medium text-[var(--color-text-secondary)]">Add New Template</p>
+                  <Input
+                    label="Template Name"
+                    value={newTplName}
+                    onChange={(e) => setNewTplName(e.target.value)}
+                    placeholder="e.g., Text with Image, Plain Text, Offer"
+                  />
+                  <Textarea
+                    label="Message Body"
+                    value={newTplBody}
+                    onChange={(e) => setNewTplBody(e.target.value)}
+                    placeholder="Enter message for this template..."
+                    rows={3}
+                  />
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+                      Optional Media
+                    </label>
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setNewTplFile(file);
+                        if (file?.type.startsWith('image/')) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setNewTplPreview(ev.target?.result as string);
+                          reader.readAsDataURL(file);
+                        } else {
+                          setNewTplPreview('');
+                        }
+                      }}
+                      className="text-xs text-[var(--color-text-secondary)] file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-[var(--color-primary)]/10 file:text-[var(--color-primary)] hover:file:bg-[var(--color-primary)]/20 cursor-pointer"
+                    />
+                    {newTplPreview && (
+                      <img src={newTplPreview} alt="" className="mt-2 w-16 h-16 rounded object-cover border border-[var(--color-border)]" />
+                    )}
+                    {newTplFile && !newTplPreview && (
+                      <div className="flex items-center gap-1 mt-2">
+                        <Upload size={12} className="text-[var(--color-text-muted)]" />
+                        <span className="text-[10px] text-[var(--color-text-muted)]">{newTplFile.name}</span>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    icon={Plus}
+                    onClick={handleCreateTemplate}
+                    loading={createTemplateMut.isPending}
+                  >
+                    Add Template
+                  </Button>
+                </div>
+              )}
+
+              {!editingAd && (
+                <div className="px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                  <CheckCircle size={14} />
+                  Save the campaign first, then add templates with custom messages and media.
+                </div>
+              )}
+            </div>
 
             {/* ── Section: Targeting ──────────────────────────── */}
             <div>

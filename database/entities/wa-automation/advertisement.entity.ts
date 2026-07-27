@@ -5,6 +5,7 @@ import {
 import { WhatsAppGroup } from '@database/entities/wa-automation/whatsapp-group.entity';
 import { WhatsAppCommunity } from '@database/entities/wa-automation/whatsapp-community.entity';
 import { MediaAttachment } from '@database/entities/wa-automation/media-attachment.entity';
+import { AdTemplate } from '@database/entities/wa-automation/ad-template.entity';
 
 export enum AdvertisementTargetType {
   ALL_GROUPS = 'all_groups',
@@ -43,6 +44,9 @@ export class Advertisement {
 
   @OneToMany(() => MediaAttachment, (media) => media.advertisement, { cascade: true })
   mediaAttachments: MediaAttachment[];
+
+  @OneToMany(() => AdTemplate, (tpl) => tpl.advertisement, { cascade: true })
+  templates: AdTemplate[];
 
   @Column({ type: 'varchar', length: 20, default: AdvertisementStatus.DRAFT })
   status: AdvertisementStatus;

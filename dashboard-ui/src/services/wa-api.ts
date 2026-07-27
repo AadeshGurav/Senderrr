@@ -139,6 +139,18 @@ export interface ApiAd {
   [key: string]: unknown;
 }
 
+/** Minimal shape for advertisement template objects. */
+export interface ApiAdTemplate {
+  id: number;
+  name: string;
+  body: string | null;
+  isActive: boolean;
+  mediaId: number | null;
+  media: { id: number; originalFilename: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Minimal shape for worker objects. */
 export interface ApiWorker {
   id: number;
@@ -296,7 +308,13 @@ async function uploadFile<T>(endpoint: string, file: File, fieldName = 'file'): 
 }
 
 export const adApi = {
-  list: () => request<ApiAd[]>('/advertisements'),
+  list: (status?: string, search?: string) => {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.set('status', status);
+    if (search) params.set('search', search);
+    const qs = params.toString();
+    return request<ApiAd[]>(`/advertisements${qs ? `?${qs}` : ''}`);
+  },
   get: (id: number) => request<ApiAd>(`/advertisements/${id}`),
   getStatistics: (id: number) => request<Record<string, unknown>>(`/advertisements/${id}/statistics`),
   getTelemetry: (id: number) => request<Record<string, unknown> & { status?: string }>(`/advertisements/${id}/telemetry`),
@@ -308,6 +326,17 @@ export const adApi = {
   uploadMedia: (id: number, file: File) =>
     uploadFile<ApiAd>(`/advertisements/${id}/media`, file, 'file'),
   removeMedia: (id: number) => request<void>(`/advertisements/media/${id}`, { method: 'DELETE' }),
+
+  // ─── Templates ─────────────────────────────────────────────
+  listTemplates: (adId: number) => request<ApiAdTemplate[]>(`/advertisements/${adId}/templates`),
+  createTemplate: (adId: number, data: { name: string; body?: string; mediaId?: number }) =>
+    request<ApiAdTemplate>(`/advertisements/${adId}/templates`, { method: 'POST', body: JSON.stringify(data) }),
+  updateTemplate: (adId: number, tplId: number, data: { name?: string; body?: string; mediaId?: number }) =>
+    request<ApiAdTemplate>(`/advertisements/${adId}/templates/${tplId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  activateTemplate: (adId: number, tplId: number) =>
+    request<ApiAdTemplate>(`/advertisements/${adId}/templates/${tplId}/activate`, { method: 'POST' }),
+  deleteTemplate: (adId: number, tplId: number) =>
+    request<void>(`/advertisements/${adId}/templates/${tplId}`, { method: 'DELETE' }),
 };
 
 export const automationApi = {
