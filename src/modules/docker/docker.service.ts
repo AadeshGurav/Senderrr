@@ -76,9 +76,8 @@ export class DockerService implements OnModuleInit {
       this.isAvailable = true;
       this.logger.log('Docker API connected successfully');
     } catch (error) {
-      this.logger.warn(
+      this.logger.debug(
         'Docker socket not available. Container orchestration disabled.',
-        error instanceof Error ? error.message : error,
       );
       this.isAvailable = false;
     }
