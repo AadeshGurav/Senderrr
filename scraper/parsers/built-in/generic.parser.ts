@@ -236,13 +236,17 @@ export class GenericParser implements IArticleParser {
         const $first = $container.find('h3.wp-block-heading').first();
         if ($first.length === 0) continue;
 
-        // Collect it and all following h3.wp-block-heading siblings
+        // Include it, then walk adjacent siblings one by one.
+        // Only include the next h3 if it directly follows without
+        // any non-whitespace-only elements in between (no <p>, <div>, ads, etc.).
         const text = $first.text().trim();
         if (text.length > 5) foundBulletPoints.push(text);
-        $first.nextAll('h3.wp-block-heading').each((_, el) => {
-          const t = $(el).text().trim();
+        let $cur = $first.next();
+        while ($cur.length && $cur.is('h3.wp-block-heading')) {
+          const t = $cur.text().trim();
           if (t.length > 5) foundBulletPoints.push(t);
-        });
+          $cur = $cur.next();
+        }
 
         if (foundBulletPoints.length > 0) break;
       }
