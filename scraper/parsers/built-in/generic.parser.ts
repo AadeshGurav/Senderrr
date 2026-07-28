@@ -164,7 +164,7 @@ export class GenericParser implements IArticleParser {
         || $('h1').first().text()
         || '';
 
-      // Description: meta description > og:description
+      // Description: meta description > og:description > first h3.wp-block-heading
       description = $('meta[name="description"]').attr('content')
         || $('meta[property="og:description"]').attr('content')
         || '';
@@ -217,9 +217,10 @@ export class GenericParser implements IArticleParser {
         if (!isNaN(d.getTime())) publishedAt = d;
       }
 
-      // Bullet points: extract heading elements with class `wp-block-heading`
-      // that exist within the primary content container to avoid picking up
-      // sidebar/footer headings that share the same class.
+      // Bullet points: find the FIRST h3.wp-block-heading inside the primary
+      // content container, then collect it and all adjacent h3.wp-block-heading
+      // siblings that follow it directly. This picks up a clean list of headings
+      // like sub-topics/key-points without grabbing sidebar/footer noise.
       const foundBulletPoints: string[] = [];
       const containerSelectors = [
         'article', 'main',
@@ -231,12 +232,16 @@ export class GenericParser implements IArticleParser {
         const $container = $(sel).first();
         if ($container.length === 0) continue;
 
-        // Find h2 and h3 with wp-block-heading class inside this container
-        $container.find('h2.wp-block-heading, h3.wp-block-heading, h4.wp-block-heading').each((_, el) => {
-          const text = $(el).text().trim();
-          if (text.length > 5) {
-            foundBulletPoints.push(text);
-          }
+        // Find the FIRST h3.wp-block-heading
+        const $first = $container.find('h3.wp-block-heading').first();
+        if ($first.length === 0) continue;
+
+        // Collect it and all following h3.wp-block-heading siblings
+        const text = $first.text().trim();
+        if (text.length > 5) foundBulletPoints.push(text);
+        $first.nextAll('h3.wp-block-heading').each((_, el) => {
+          const t = $(el).text().trim();
+          if (t.length > 5) foundBulletPoints.push(t);
         });
 
         if (foundBulletPoints.length > 0) break;

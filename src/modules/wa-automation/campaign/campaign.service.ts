@@ -156,7 +156,7 @@ export class CampaignService {
     const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
     const template = await this.templateService.getActive();
     const bulletsText = (article as any).bulletPoints?.length
-      ? (article as any).bulletPoints.map((bp: string) => `• ${bp}`).join('\n')
+      ? (article as any).bulletPoints.join('\n')
       : article.description || '';
     const placeholders: NewsPlaceholders = {
       title: article.title || '',
