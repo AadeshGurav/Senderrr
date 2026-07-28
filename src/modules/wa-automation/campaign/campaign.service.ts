@@ -140,6 +140,7 @@ export class CampaignService {
     imageUrl: string | null;
     sourceName: string | null;
     publishedAt: Date | null;
+    bulletPoints?: string[] | null;
   }): Promise<BroadcastEvent> {
     const groups = await this.getEligibleGroups();
     if (groups.length === 0) {
@@ -155,8 +156,8 @@ export class CampaignService {
     // Compose message content
     const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
     const template = await this.templateService.getActive();
-    const bulletsText = (article as any).bulletPoints?.length
-      ? (article as any).bulletPoints.join('\n')
+    const bulletsText = article.bulletPoints?.length
+      ? article.bulletPoints.join('\n')
       : article.description || '';
     const placeholders: NewsPlaceholders = {
       title: article.title || '',
@@ -612,7 +613,7 @@ export class CampaignService {
     const template = await this.templateService.getActive();
     if (!template) return null;
     const bulletsText = article.bulletPoints?.length
-      ? article.bulletPoints.map((bp: string) => `• ${bp}`).join('\n')
+      ? article.bulletPoints.join('\n')
       : article.description || '';
     const placeholders: NewsPlaceholders = {
       title: article.title || '',

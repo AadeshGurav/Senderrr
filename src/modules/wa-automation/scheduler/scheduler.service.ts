@@ -104,6 +104,7 @@ export class SchedulerService {
           imageUrl: article.imageUrl,
           sourceName: article.sourceName,
           publishedAt: article.publishedAt,
+          bulletPoints: (article as any).bulletPoints,
         });
         this.logger.log(`Broadcast ${broadcast.id} created for article ${article.id}`);
       } catch (err) {
