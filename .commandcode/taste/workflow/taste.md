@@ -25,3 +25,4 @@
 - Before committing, exclude temporary/staging files (e.g., test-*.js, .commandcode/, fix-*.js) from the commit using `git reset HEAD <files>` — keep commits focused on real changes only. Confidence: 0.85
 - Use conventional commit format (`type: description`) with a detailed multi-line body for commit messages. Verify staged files with `git diff --cached --stat` before committing. Confidence: 0.70
 - When debugging HTML/scraper parsing issues, validate against minimal reproduction HTML samples from real live pages — provide only the relevant section (e.g., just the `<article>` tag), state the expected output, and show the actual wrong output. This ensures the scraper logic is tested against genuine site markup rather than synthetic data. Confidence: 0.90
+- When GitHub reports that a repository has moved/renamed (e.g., via push notification), update the local git remote URL to the new location immediately rather than relying on forwarding. Confidence: 0.85
