@@ -440,16 +440,12 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       return;
     }
 
-    // Always install the JS monkey-patch first. WA's getLinkPreview crawler
-    // bypasses Puppeteer's CDP page.on('request') entirely (service worker /
-    // internal XHR), so CDP interception never fires for the image fetch.
-    // The monkey-patch runs inside the browser JS context and IS evaluated by
-    // WA's local getLinkPreview call, guaranteeing our pre-fetched thumbnail
-    // is injected into the ExtendedTextMessage regardless of crawl path.
-    await this._startLegacyPatch(url, previewData);
-
     if (!previewData.pageHtml) {
-      // No HTML to serve via CDP — monkey-patch is the only path.
+      // No HTML available to serve via CDP. Fall back to the JS monkey-patch so
+      // WA at least gets our pre-fetched title/description/thumbnail instead of
+      // an empty preview.
+      this.logger.warn('[LinkPreview] No pageHtml — falling back to monkey-patch');
+      await this._startLegacyPatch(url, previewData);
       return;
     }
 
