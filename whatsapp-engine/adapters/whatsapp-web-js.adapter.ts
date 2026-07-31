@@ -690,9 +690,31 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               isNewsletter: false,
             });
 
+            // wwebjs processMediaData: mediaBlob may be a plain Blob/File after
+            // prep — it must be wrapped in OpaqueData before .url()/.autorelease()
+            // are called (OpaqueData.createFromData is the wrapper).
+            if (!(mediaData.mediaBlob instanceof OpaqueData)) {
+              mediaData.mediaBlob = await OpaqueData.createFromData(
+                mediaData.mediaBlob,
+                mediaData.mediaBlob.type,
+              );
+            }
+
             mediaData.renderableUrl = mediaData.mediaBlob.url();
             mediaObject.consolidate(mediaData.toJSON());
             mediaData.mediaBlob.autorelease();
+
+            const shouldUseMediaCache = window
+              .require('WAWebMediaDataUtils')
+              .shouldUseMediaCache(
+                window.require('WAWebMmsMediaTypes').castToV4(mediaObject.type),
+              );
+            if (shouldUseMediaCache && mediaData.mediaBlob instanceof OpaqueData) {
+              const formData = mediaData.mediaBlob.formData();
+              window
+                .require('WAWebMediaInMemoryBlobCache')
+                .InMemoryMediaBlobCache.put(mediaObject.filehash, formData);
+            }
 
             const { uploadMedia } = window.require('WAWebMediaMmsV4Upload');
             const uploadedMedia = await uploadMedia({
