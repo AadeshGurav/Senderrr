@@ -222,7 +222,10 @@ export class AutomationService {
     if (!engine || !engine.warmUpLinkPreview) return;
 
     try {
+      this.logger.log(`[LinkPreview] Stage 1/5 fetch article html: ${url}`);
       const html = await BrowserFetchUtil.fetchWithFallback(url, 20000);
+      this.logger.log(`[LinkPreview] Stage 1/5 done — html length: ${html.length}`);
+
       const $ = cheerio.load(html);
       const title =
         $('meta[property="og:title"]').attr('content') ||
@@ -233,6 +236,7 @@ export class AutomationService {
         $('meta[property="og:description"]').attr('content') ||
         $('meta[name="description"]').attr('content') ||
         '';
+      this.logger.log(`[LinkPreview] Stage 2/5 og parsed — title: "${title.slice(0, 60)}" | description len: ${description.length}`);
 
       let jpegThumbnailBase64: string | undefined;
       const imageUrl =
@@ -241,6 +245,7 @@ export class AutomationService {
       let absImageUrl: string | undefined;
       if (imageUrl) {
         absImageUrl = new URL(imageUrl, url).href;
+        this.logger.log(`[LinkPreview] Stage 3/5 og:image raw: ${imageUrl} | encoded: ${absImageUrl}`);
         
         // Generate a SMALL inline thumbnail that embeds directly in the message.
         // WhatsApp's ExtendedTextMessage has tight inline data limits (~10KB max
@@ -248,12 +253,15 @@ export class AutomationService {
         // WhatsApp Web rendering will force it to be a compact square regardless 
         // of thumbnailWidth/Height. 600px is a good balance between size and quality.
         jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 600);
-        this.logger.log(`Generated inline thumbnail (max 600px) base64 length: ${jpegThumbnailBase64?.length || 0} chars (~${Math.round(((jpegThumbnailBase64?.length || 0) * 0.75) / 1024)} KB)`);
+        this.logger.log(`[LinkPreview] Stage 3/5 thumbnail result: ${jpegThumbnailBase64 ? `OK (${jpegThumbnailBase64.length} b64 chars, ~${Math.round((jpegThumbnailBase64.length * 0.75) / 1024)} KB)` : 'FAILED/undefined — fallback image will be missing!'}`);
+      } else {
+        this.logger.warn(`[LinkPreview] Stage 3/5 NO og:image or twitter:image found — no thumbnail will be available`);
       }
 
       // Get image dimensions from the og:image for proper display
       const imageWidth = $('meta[property="og:image:width"]').attr('content') || '800';
       const imageHeight = $('meta[property="og:image:height"]').attr('content') || '400';
+      this.logger.log(`[LinkPreview] Stage 4/5 warmUpLinkPreview — img dims: ${imageWidth}x${imageHeight} | jpegThumbnail: ${jpegThumbnailBase64 ? 'present' : 'absent'}`);
 
       await engine.warmUpLinkPreview(url, { 
         title, 
@@ -264,9 +272,9 @@ export class AutomationService {
         thumbnailWidth: parseInt(imageWidth, 10) || 800,
         thumbnailHeight: parseInt(imageHeight, 10) || 400
       });
-      this.logger.log(`Link preview injected for: ${url} | title: "${title.slice(0, 60)}"`);
+      this.logger.log(`[LinkPreview] Stage 5/5 injected for: ${url} | title: "${title.slice(0, 60)}"`);
     } catch (err) {
-      this.logger.warn(`preWarmLinkPreview failed for ${url}: ${(err as Error).message}`);
+      this.logger.warn(`[LinkPreview] preWarmLinkPreview FAILED for ${url}: ${(err as Error).message}`);
     }
   }
 

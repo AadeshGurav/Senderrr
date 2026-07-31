@@ -34,7 +34,7 @@ export class BrowserFetchUtil {
   }
 
   static async fetchPageContent(url: string, timeout = 45_000): Promise<string> {
-    this.logger.log(`Fetching via browser (Hostinger WAF bypass): ${url}`);
+    this.logger.log(`[HtmlFetch] Browser fallback (Hostinger WAF bypass): ${url}`);
     const browser = await this.getBrowser();
     let page: puppeteer.Page | null = null;
     try {
@@ -53,6 +53,7 @@ export class BrowserFetchUtil {
       await new Promise(r => setTimeout(r, 2000));
       
       const content = await page.content();
+      this.logger.log(`[HtmlFetch] Browser fallback OK: ${url} (${content.length} chars)`);
       return content;
     } catch (err) {
       throw new Error(`Browser fetch failed for ${url}: ${(err as Error).message}`);
@@ -86,15 +87,18 @@ export class BrowserFetchUtil {
       
       if (!response.ok) {
         if (response.status === 403 || response.status === 503 || response.status === 406 || response.status === 429) {
-          this.logger.warn(`HTTP ${response.status} from ${url}, attempting browser fallback...`);
+          this.logger.warn(`[HtmlFetch] HTTP ${response.status} (WAF block) from ${url}, attempting browser fallback...`);
           return this.fetchPageContent(url, timeout + 15000);
         }
+        this.logger.warn(`[HtmlFetch] HTTP ${response.status} (non-WAF) from ${url} — no browser fallback for this status`);
         throw new Error(`HTTP ${response.status} fetching ${url}`);
       }
-      return await response.text();
+      const text = await response.text();
+      this.logger.log(`[HtmlFetch] raw fetch OK: ${url} (${text.length} chars)`);
+      return text;
     } catch (err: any) {
       if (err.name === 'TimeoutError' || err.code === 'ECONNRESET' || (err.message && err.message.includes('fetch failed'))) {
-        this.logger.warn(`Network error fetching ${url}, attempting browser fallback... (${err.message})`);
+        this.logger.warn(`[HtmlFetch] Network error fetching ${url}, attempting browser fallback... (${err.message})`);
         return this.fetchPageContent(url, timeout + 15000);
       }
       throw err;
@@ -114,15 +118,18 @@ export class BrowserFetchUtil {
       });
       if (!response.ok) {
         if (response.status === 403 || response.status === 503 || response.status === 406 || response.status === 429) {
-          this.logger.warn(`HTTP ${response.status} fetching image ${url}, attempting browser fallback...`);
+          this.logger.warn(`[ImageFetch] HTTP ${response.status} (WAF block) from ${url}, attempting browser fallback...`);
           return this.fetchArrayBufferViaBrowser(url, timeout + 15000);
         }
+        this.logger.warn(`[ImageFetch] HTTP ${response.status} (non-WAF) from ${url} — no browser fallback for this status`);
         throw new Error(`HTTP ${response.status} fetching ${url}`);
       }
-      return await response.arrayBuffer();
+      const buf = await response.arrayBuffer();
+      this.logger.log(`[ImageFetch] raw fetch OK: ${url} (${buf.byteLength} bytes)`);
+      return buf;
     } catch (err: any) {
       if (err.name === 'TimeoutError' || err.code === 'ECONNRESET' || (err.message && err.message.includes('fetch failed'))) {
-        this.logger.warn(`Network error fetching image ${url}, attempting browser fallback... (${err.message})`);
+        this.logger.warn(`[ImageFetch] Network error fetching image ${url}, attempting browser fallback... (${err.message})`);
         return this.fetchArrayBufferViaBrowser(url, timeout + 15000);
       }
       throw err;
@@ -130,7 +137,7 @@ export class BrowserFetchUtil {
   }
 
   private static async fetchArrayBufferViaBrowser(url: string, timeout = 45_000): Promise<ArrayBuffer> {
-    this.logger.log(`Fetching image via browser (Hostinger WAF bypass): ${url}`);
+    this.logger.log(`[ImageFetch] Browser fallback for image: ${url}`);
     const browser = await this.getBrowser();
     let page: puppeteer.Page | null = null;
     try {
@@ -141,7 +148,11 @@ export class BrowserFetchUtil {
       if (!response) {
         throw new Error('No response from browser for image fetch');
       }
+      if (!response.ok()) {
+        throw new Error(`Browser image fetch HTTP ${response.status()} for ${url}`);
+      }
       const buffer = await response.buffer();
+      this.logger.log(`[ImageFetch] Browser fallback OK: ${url} (${buffer.length} bytes)`);
       return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
     } catch (err) {
       throw new Error(`Browser image fetch failed for ${url}: ${(err as Error).message}`);
@@ -159,7 +170,7 @@ export class BrowserFetchUtil {
    * compression and re-encoding server-side, so the source quality should be reasonable.
    */
   static async fetchAndResizeImageBase64(imageUrl: string, maxSize = 100): Promise<string | undefined> {
-    this.logger.log(`Fetching and resizing thumbnail via browser: ${imageUrl}`);
+    this.logger.log(`[ThumbnailGen] start for: ${imageUrl} (max ${maxSize}px)`);
     const browser = await this.getBrowser();
     let page: puppeteer.Page | null = null;
     try {
@@ -217,12 +228,13 @@ export class BrowserFetchUtil {
         }, maxSize);
 
         if (base64) {
+          this.logger.log(`[ThumbnailGen] Attempt 1 (server fetch + canvas) OK: ${base64.length} b64 chars`);
           return base64;
         }
         // Fall through to browser-direct load if server-side fetch failed
-        this.logger.log('Server-side fetch produced undecodable image, trying browser-direct load...');
+        this.logger.warn('[ThumbnailGen] Attempt 1 produced undecodable image, trying browser-direct load...');
       } catch (fetchErr) {
-        this.logger.warn(`Server-side image fetch failed, trying browser-direct load: ${(fetchErr as Error).message}`);
+        this.logger.warn(`[ThumbnailGen] Attempt 1 (server fetch) failed, trying browser-direct load: ${(fetchErr as Error).message}`);
       }
 
       // Attempt 2: Load the image URL directly in the browser page rendering pipeline.
@@ -284,9 +296,14 @@ export class BrowserFetchUtil {
         }
       }, imageUrl, maxSize);
       
+      if (result) {
+        this.logger.log(`[ThumbnailGen] Attempt 2 (browser-direct) OK: ${result.length} b64 chars`);
+      } else {
+        this.logger.warn(`[ThumbnailGen] Attempt 2 (browser-direct) FAILED for ${imageUrl} — no thumbnail will be available`);
+      }
       return result;
     } catch (err) {
-      this.logger.warn(`Thumbnail resize failed for ${imageUrl}: ${(err as Error).message}`);
+      this.logger.warn(`[ThumbnailGen] Thumbnail resize failed for ${imageUrl}: ${(err as Error).message}`);
       return undefined;
     } finally {
       if (page) {

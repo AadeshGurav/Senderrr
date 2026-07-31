@@ -82,6 +82,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     expiresAt: number;
   }>> = new WeakMap();
   private linkPreviewInterceptionEnabled: WeakSet<object> = new WeakSet();
+  /** Pages whose browser console has already been piped into the backend logger. */
+  private pageConsolePiped: WeakSet<object> = new WeakSet();
   /** TTL for an intercept entry — long enough for WA's two-pass pipeline. */
   private readonly LINK_PREVIEW_INTERCEPT_TTL_MS = 60_000;
 
@@ -452,10 +454,24 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       this.logger.warn('[LinkPreview] No pageHtml available');
       return;
     }
+    this.logger.log(`[LinkPreview] warmUpLinkPreview url=${url} | titleLen=${previewData.title?.length || 0} | descLen=${previewData.description?.length || 0} | htmlLen=${previewData.pageHtml.length} | imageUrl=${previewData.imageUrl ? 'present' : 'ABSENT'} | jpegThumbnail=${previewData.jpegThumbnailBase64 ? `${previewData.jpegThumbnailBase64.length} chars` : 'ABSENT'}`);
 
     this.logger.log(`[LinkPreview] Request interception for: ${url}`);
 
     const page = this.client.pupPage;
+
+    // Pipe the WA page's browser console (incl. our [PatchTrace] logs from
+    // the in-page getLinkPreview patch) into the backend logger so preview
+    // failures are visible in production logs. Installed once per page.
+    if (!this.pageConsolePiped.has(page)) {
+      this.pageConsolePiped.add(page);
+      page.on('console', msg => {
+        const text = msg.text();
+        if (text.includes('[PatchTrace]') || text.includes('[ThumbnailDebug]') || text.includes('[ReqTrace]')) {
+          this.logger.log(`[PageConsole] ${text}`);
+        }
+      });
+    }
 
     // Pre-fetch the OG image bytes once (via the WAF-bypass pipeline) so the
     // request interceptor can serve them to WhatsApp's native getLinkPreview
@@ -476,6 +492,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       } catch (err) {
         this.logger.warn(`[LinkPreview] Could not pre-fetch OG image ${previewData.imageUrl}: ${String(err)}`);
       }
+    } else {
+      this.logger.warn('[LinkPreview] No imageUrl — CDP image intercept will have nothing to serve');
     }
 
     // Store this URL's intercept so the CDP request handler can serve it.
@@ -565,7 +583,12 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 });
                 return;
               }
+              this.logger.log(`[ReqTrace] #${seq} IMAGE_MISS req=${decodedReq.slice(0, 160)} | stored=${normalizedImage.slice(0, 160)} | resourceType=${req.resourceType()}`);
             }
+          }
+
+          if (live.length > 0) {
+            this.logger.log(`[ReqTrace] #${seq} NO_MATCH url=${reqUrl.slice(0, 160)} resourceType=${req.resourceType()} | liveIntercepts=${live.length}`);
           }
 
           req.continue();
@@ -632,6 +655,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             }
 
             const activePreview = (window as any).__linkPreviewFallbacks[fallbackSourceUrl];
+            const hasFallbackThumb = !!(activePreview && activePreview.jpegThumbnailBase64);
+
+            console.log(`[PatchTrace] getLinkPreview href=${href.slice(0, 140)} | fallbackFound=${!!activePreview} | fallbackThumbLen=${activePreview?.jpegThumbnailBase64?.length || 0} | fallbackKeys=${activePreview ? Object.keys(activePreview).join(',') : 'n/a'}`);
 
             // If we don't have a fallback registered for this URL, just run native
             if (!activePreview) {
@@ -642,12 +668,16 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             return original(link)
               .then((native: any) => {
                 const nativeThumbnail: string = native?.data?.thumbnail || '';
+                console.log(`[PatchTrace] native resolved for ${href.slice(0, 100)} | nativeThumbLen=${nativeThumbnail.length} | nativeKeys=${native?.data ? Object.keys(native.data).join(',') : 'n/a'} | decide=${nativeThumbnail.length > 100 ? 'KEEP_NATIVE' : 'INJECT_FALLBACK'}`);
                 if (nativeThumbnail.length > 100) {
                   // Native crawl succeeded with a real image — preserve banner.
                   return native;
                 }
 
                 // Native has no usable thumbnail — inject ours as fallback.
+                if (!activePreview.jpegThumbnailBase64) {
+                  console.log('[PatchTrace] native empty BUT no fallback thumbnail to inject — preview will be text-only');
+                }
                 const fallbackData: any = {
                   matchedText: href,
                   title: activePreview.title || '',
@@ -666,6 +696,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               })
               .catch(() => {
                 // Native getLinkPreview threw — full synthetic fallback.
+                console.log(`[PatchTrace] native REJECTED for ${href.slice(0, 100)} | hasFallbackThumb=${hasFallbackThumb}`);
                 if (!activePreview.jpegThumbnailBase64) return { url: href, data: {} };
                 
                 const fallbackData: any = {
