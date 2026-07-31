@@ -52,6 +52,15 @@ export interface WhatsAppWebJsConfig {
   };
 }
 
+/** Safely decode a percent-encoded URL, returning the raw string on failure. */
+function safeDecodeUri(url: string): string {
+  try {
+    return decodeURIComponent(url);
+  } catch {
+    return url;
+  }
+}
+
 export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngine {
   private client: Client | null = null;
   private status: EngineStatus = EngineStatus.DISCONNECTED;
@@ -496,6 +505,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           const reqUrl = req.url();
           const seq = ++reqSeq;
           const normalizedReq = reqUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+          // Decode percent-encoding so non-ASCII filenames (e.g. Devanagari) match
+          // the raw Unicode string stored in intercept.imageUrl.
+          const decodedReq = safeDecodeUri(normalizedReq);
           const ts = Date.now();
 
           // Prune expired entries before matching.
@@ -510,8 +522,6 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
             if (htmlMatched) {
               this.logger.log(`[ReqTrace] #${seq} HTML_INTERCEPT url=${reqUrl} target=${intercept.targetUrl} resourceType=${req.resourceType()}`);
-              // Mark HTML as served. Only prune the entry when both HTML and
-              // image have been served (or there is no image to serve).
               intercept.htmlServed = true;
               const imageAlreadyDone = !intercept.imageUrl || !intercept.imageBase64 || intercept.imageServed;
               if (imageAlreadyDone) {
@@ -527,10 +537,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             }
 
             if (intercept.imageUrl && intercept.imageBase64 && !intercept.imageServed) {
-              const normalizedImage = intercept.imageUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
-              if (normalizedReq === normalizedImage || normalizedReq.startsWith(normalizedImage)) {
+              // Compare decoded forms so that percent-encoded non-ASCII filenames
+              // (e.g. Devanagari characters Chromium encodes as %E0%A4...) match
+              // the raw Unicode string we stored from the og:image meta tag.
+              const normalizedImage = safeDecodeUri(
+                intercept.imageUrl.replace(/\/$/, '').split('#')[0].split('?')[0],
+              );
+              if (decodedReq === normalizedImage || decodedReq.startsWith(normalizedImage)) {
                 this.logger.log(`[ReqTrace] #${seq} IMAGE_INTERCEPT url=${reqUrl} image=${intercept.imageUrl} resourceType=${req.resourceType()}`);
-                // Mark image as served and prune if HTML was already served.
                 intercept.imageServed = true;
                 if (intercept.htmlServed) {
                   const list = this.linkPreviewIntercepts.get(page) || [];
