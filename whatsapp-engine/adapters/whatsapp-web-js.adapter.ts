@@ -805,20 +805,20 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                     .then((entry: any) => {
                       Object.assign(fallbackData, entry);
                       console.log(`[PatchTrace] BANNER payload built: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | thumbW=${fallbackData.thumbnailWidth} thumbH=${fallbackData.thumbnailHeight}`);
-                      return { url: href, data: fallbackData };
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
                     })
                     .catch((err: Error) => {
                       console.log(`[PatchTrace] thumbnail upload FAILED (${err.message}) — falling back to inline thumbnail`);
-                      return { url: href, data: fallbackData };
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
                     });
                 }
 
-                return { url: href, data: fallbackData };
+                return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               })
               .catch(() => {
                 // Native getLinkPreview threw — full synthetic fallback.
                 console.log(`[PatchTrace] native REJECTED for ${href.slice(0, 100)} | hasFallbackThumb=${hasFallbackThumb}`);
-                if (!activePreview.jpegThumbnailBase64) return { url: href, data: {} };
+                if (!activePreview.jpegThumbnailBase64) return { url: href, data: {}, preview: true, subtype: 'url' };
                 
                 const fallbackData: any = {
                   matchedText: href,
@@ -839,14 +839,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   return uploadFallbackThumbnail(activePreview.jpegThumbnailBase64, mime)
                     .then((entry: any) => {
                       Object.assign(fallbackData, entry);
-                      return { url: href, data: fallbackData };
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
                     })
                     .catch(() => {
-                      return { url: href, data: fallbackData };
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
                     });
                 }
                 
-                return { url: href, data: fallbackData };
+                return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               });
           };
         },
