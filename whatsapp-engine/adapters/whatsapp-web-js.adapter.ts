@@ -605,27 +605,40 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     try {
       const page = this.client.pupPage;
       await page.evaluate(
-        (linkUrl: string, preview: {
-          title: string;
-          description: string;
-          jpegThumbnailBase64?: string;
-          thumbnailWidth?: number;
-          thumbnailHeight?: number;
-        }) => {
+        (linkUrl: string, preview: any) => {
           const mod = (window as any).require('WAWebLinkPreviewChatAction');
           if (!mod) return;
+
+          // Store the fallback data globally keyed by URL so we don't need to stack patches
+          (window as any).__linkPreviewFallbacks = (window as any).__linkPreviewFallbacks || {};
+          (window as any).__linkPreviewFallbacks[linkUrl] = preview;
+
+          // Only patch once
+          if ((window as any).__linkPreviewPatched) return;
+          (window as any).__linkPreviewPatched = true;
+
           const original = mod.getLinkPreview.bind(mod);
-          const targetHostname = new URL(linkUrl).hostname;
 
           mod.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
-            if (!href || !href.includes(targetHostname)) {
+            
+            // Look up if we have fallback data for this specific exact URL or its base
+            let fallbackSourceUrl = href;
+            if (!(window as any).__linkPreviewFallbacks[href]) {
+                const cleanHref = href.replace(/\/$/, '').split('#')[0].split('?')[0];
+                const availableKeys = Object.keys((window as any).__linkPreviewFallbacks);
+                const match = availableKeys.find(k => k.replace(/\/$/, '').split('#')[0].split('?')[0] === cleanHref);
+                if (match) fallbackSourceUrl = match;
+            }
+
+            const activePreview = (window as any).__linkPreviewFallbacks[fallbackSourceUrl];
+
+            // If we don't have a fallback registered for this URL, just run native
+            if (!activePreview) {
               return original(link);
             }
 
-            // Run WA's native server-side crawl first. If it gets a real
-            // thumbnail (thumbnailDirectPath → CDN upload → banner), keep it.
-            // Only fall back to our inline JPEG when native returns nothing.
+            // Run WA's native server-side crawl first.
             return original(link)
               .then((native: any) => {
                 const nativeThumbnail: string = native?.data?.thumbnail || '';
@@ -635,53 +648,49 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 }
 
                 // Native has no usable thumbnail — inject ours as fallback.
-                // Do NOT mutate `native.data` because it contains flags like `preview: true`
-                // and `subtype: "url"` that force a small thumbnail layout. Returning a clean
-                // object exactly like 9c0e568 allows WhatsApp to render it as a banner
-                // based on our injected thumbnailWidth/Height.
                 const fallbackData: any = {
                   matchedText: href,
-                  title: preview.title || '',
-                  description: preview.description || '',
+                  title: activePreview.title || '',
+                  description: activePreview.description || '',
                   canonicalUrl: href,
                   richPreviewType: 0,
                   doNotPlayInline: false,
                   isLoading: false,
-                  thumbnail: preview.jpegThumbnailBase64,
+                  thumbnail: activePreview.jpegThumbnailBase64,
                   psp: null,
                 };
-                if (preview.thumbnailWidth) fallbackData.thumbnailWidth = preview.thumbnailWidth;
-                if (preview.thumbnailHeight) fallbackData.thumbnailHeight = preview.thumbnailHeight;
+                if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
+                if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
                 
                 return { url: href, data: fallbackData };
               })
               .catch(() => {
                 // Native getLinkPreview threw — full synthetic fallback.
-                if (!preview.jpegThumbnailBase64) return { url: href, data: {} };
-                return {
-                  url: href,
-                  data: {
-                    matchedText:    href,
-                    title:          preview.title || '',
-                    description:    preview.description || '',
-                    canonicalUrl:   href,
-                    richPreviewType: 0,
-                    doNotPlayInline: false,
-                    isLoading:      false,
-                    thumbnail:      preview.jpegThumbnailBase64,
-                    psp:            null,
-                    thumbnailWidth:  preview.thumbnailWidth,
-                    thumbnailHeight: preview.thumbnailHeight,
-                  },
+                if (!activePreview.jpegThumbnailBase64) return { url: href, data: {} };
+                
+                const fallbackData: any = {
+                  matchedText: href,
+                  title: activePreview.title || '',
+                  description: activePreview.description || '',
+                  canonicalUrl: href,
+                  richPreviewType: 0,
+                  doNotPlayInline: false,
+                  isLoading: false,
+                  thumbnail: activePreview.jpegThumbnailBase64,
+                  psp: null,
                 };
+                if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
+                if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
+                
+                return { url: href, data: fallbackData };
               });
           };
         },
         url,
         previewData,
       );
-    } catch (e) {
-      this.logger.warn('[LinkPreview] Legacy patch failed:', String(e));
+    } catch (err) {
+      this.logger.warn(`[LinkPreview] Legacy patch error: ${String(err)}`);
     }
   }
 
