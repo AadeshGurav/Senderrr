@@ -645,6 +645,39 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
           const original = mod.getLinkPreview.bind(mod);
 
+          // Replicate WA's own thumbnailHQ -> CDN path for received URL
+          // previews (bundle: notRefiningTypeIsUrl -> WAWebMediaUploadMmsThumbnail
+          // with MEDIA_TYPES.NEWSLETTER_THUMBNAIL_LINK). Returns the payload
+          // fields WA's real preview carries: thumbnailDirectPath (CDN) +
+          // thumbnailSha256 (plaintext filehash). This is what makes remote
+          // clients render a full-width banner.
+          async function uploadThumbnailHQ(b64: string) {
+            if ((window as any).__uploadedThumbnails && (window as any).__uploadedThumbnails[b64]) {
+              return (window as any).__uploadedThumbnails[b64];
+            }
+            (window as any).__uploadedThumbnails = (window as any).__uploadedThumbnails || {};
+            const OpaqueData = window.require('WAWebMediaOpaqueData');
+            const thumbnail = await OpaqueData.createFromBase64Jpeg(b64);
+            const result = await window.require('WAWebMediaUploadMmsThumbnail')({
+              thumbnail,
+              mediaType: window.require('WAWebMmsMediaTypes').MEDIA_TYPES.NEWSLETTER_THUMBNAIL_LINK,
+              uploadOrigin: window.require('WAWebWamEnumUploadOriginType').UPLOAD_ORIGIN_TYPE.UNKNOWN,
+              forwardedFromWeb: true,
+              isViewOnce: false,
+            });
+            const mediaEntry = result && result.mediaEntry;
+            if (!mediaEntry || !mediaEntry.directPath) {
+              throw new Error('thumbnailHQ upload returned no mediaEntry');
+            }
+            const entry = {
+              thumbnailDirectPath: mediaEntry.directPath,
+              thumbnailSha256: result.filehash,
+            };
+            (window as any).__uploadedThumbnails[b64] = entry;
+            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | sha=${String(entry.thumbnailSha256).slice(0, 16)}...`);
+            return entry;
+          }
+
           mod.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
             
@@ -705,6 +738,21 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
                 if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
 
+                // Upload the HQ thumbnail via WA's own pipeline so remote
+                // clients get a real CDN thumbnailDirectPath → full banner.
+                if (activePreview.jpegThumbnailBase64) {
+                  return uploadThumbnailHQ(activePreview.jpegThumbnailBase64)
+                    .then((entry: any) => {
+                      Object.assign(fallbackData, entry);
+                      console.log(`[PatchTrace] BANNER payload built: directPath=${String(fallbackData.thumbnailDirectPath).slice(0, 50)} | thumbnailHQ=${fallbackData.thumbnailHQ ? 'present' : 'MISSING'}`);
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
+                    })
+                    .catch((err: Error) => {
+                      console.log(`[PatchTrace] thumbnailHQ upload FAILED (${err.message}) — inline-only fallback`);
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
+                    });
+                }
+
                 return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               })
               .catch(() => {
@@ -730,6 +778,17 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 };
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
                 if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
+
+                if (activePreview.jpegThumbnailBase64) {
+                  return uploadThumbnailHQ(activePreview.jpegThumbnailBase64)
+                    .then((entry: any) => {
+                      Object.assign(fallbackData, entry);
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
+                    })
+                    .catch(() => {
+                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
+                    });
+                }
                 
                 return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               });
