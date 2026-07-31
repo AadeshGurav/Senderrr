@@ -635,20 +635,25 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 }
 
                 // Native has no usable thumbnail — inject ours as fallback.
-                if (!preview.jpegThumbnailBase64) return native ?? { url: href, data: {} };
-
-                const d: any = native?.data ?? {};
-                d.thumbnail = preview.jpegThumbnailBase64;
-                if (!d.matchedText) d.matchedText = href;
-                if (!d.title)       d.title = preview.title || '';
-                if (!d.description) d.description = preview.description || '';
-                if (!d.canonicalUrl) d.canonicalUrl = href;
-                if (d.richPreviewType === undefined) d.richPreviewType = 0;
-                if (d.isLoading === undefined)       d.isLoading = false;
-                if (d.psp === undefined)             d.psp = null;
-                d.thumbnailWidth  = preview.thumbnailWidth;
-                d.thumbnailHeight = preview.thumbnailHeight;
-                return { url: native?.url || href, data: d };
+                // Do NOT mutate `native.data` because it contains flags like `preview: true`
+                // and `subtype: "url"` that force a small thumbnail layout. Returning a clean
+                // object exactly like 9c0e568 allows WhatsApp to render it as a banner
+                // based on our injected thumbnailWidth/Height.
+                const fallbackData: any = {
+                  matchedText: href,
+                  title: preview.title || '',
+                  description: preview.description || '',
+                  canonicalUrl: href,
+                  richPreviewType: 0,
+                  doNotPlayInline: false,
+                  isLoading: false,
+                  thumbnail: preview.jpegThumbnailBase64,
+                  psp: null,
+                };
+                if (preview.thumbnailWidth) fallbackData.thumbnailWidth = preview.thumbnailWidth;
+                if (preview.thumbnailHeight) fallbackData.thumbnailHeight = preview.thumbnailHeight;
+                
+                return { url: href, data: fallbackData };
               })
               .catch(() => {
                 // Native getLinkPreview threw — full synthetic fallback.
