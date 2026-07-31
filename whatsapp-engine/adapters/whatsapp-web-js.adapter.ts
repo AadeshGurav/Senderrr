@@ -745,7 +745,11 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             // inline (unencrypted) base64 thumbnail.
             const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: mediaObject.filehash || filehash,
+              // The WORKING native payload sets thumbnailSha256 == thumbnailEncSha256
+              // (both = the encrypted CDN blob hash). Remote clients hash the
+              // downloaded bytes against thumbnailSha256 — a mismatched
+              // "plaintext" hash here is what made them render a BLACK banner.
+              thumbnailSha256: mediaEntry.encFilehash || filehash,
               thumbnailEncSha256: mediaEntry.encFilehash || filehash,
               mediaKey: mediaEntry.mediaKey,
               mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
@@ -799,10 +803,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   title: activePreview.title || '',
                   description: activePreview.description || '',
                   canonicalUrl: href,
-                  // Message.ExtendedTextMessage.PreviewType.IMAGE = 5.
-                  // NONE (0) makes every client render a compact text-only card
-                  // with no image, even when thumbnailDirectPath is present.
-                  richPreviewType: 5,
+                  // The WORKING native payload uses PreviewType.NONE (0) and
+                  // still renders a full banner via thumbnailHQ + thumbnailDirectPath.
+                  // IMAGE (5) deviates from what WA's own pipeline produces.
+                  richPreviewType: 0,
                   doNotPlayInline: false,
                   isLoading: false,
                   thumbnail: activePreview.jpegThumbnailBase64,
@@ -845,10 +849,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   title: activePreview.title || '',
                   description: activePreview.description || '',
                   canonicalUrl: href,
-                  // Message.ExtendedTextMessage.PreviewType.IMAGE = 5.
-                  // NONE (0) makes every client render a compact text-only card
-                  // with no image, even when thumbnailDirectPath is present.
-                  richPreviewType: 5,
+                  // The WORKING native payload uses PreviewType.NONE (0) and
+                  // still renders a full banner via thumbnailHQ + thumbnailDirectPath.
+                  // IMAGE (5) deviates from what WA's own pipeline produces.
+                  richPreviewType: 0,
                   doNotPlayInline: false,
                   isLoading: false,
                   thumbnail: activePreview.jpegThumbnailBase64,

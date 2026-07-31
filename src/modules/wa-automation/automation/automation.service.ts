@@ -252,7 +252,14 @@ export class AutomationService {
         // for the base64 JPEG). However, if the image is too small (e.g. 200px), 
         // WhatsApp Web rendering will force it to be a compact square regardless 
         // of thumbnailWidth/Height. 600px is a good balance between size and quality.
-        jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 600);
+        // Retry on transient WAF/network failures so a fallback registered
+        // without a thumbnail never leaves a group with a text-only preview.
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 600);
+          if (jpegThumbnailBase64) break;
+          this.logger.warn(`[LinkPreview] Stage 3/5 thumbnail attempt ${attempt} failed — retrying...`);
+          await new Promise(r => setTimeout(r, 3000));
+        }
         this.logger.log(`[LinkPreview] Stage 3/5 thumbnail result: ${jpegThumbnailBase64 ? `OK (${jpegThumbnailBase64.length} b64 chars, ~${Math.round((jpegThumbnailBase64.length * 0.75) / 1024)} KB)` : 'FAILED/undefined — fallback image will be missing!'}`);
       } else {
         this.logger.warn(`[LinkPreview] Stage 3/5 NO og:image or twitter:image found — no thumbnail will be available`);
