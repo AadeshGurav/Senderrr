@@ -440,12 +440,16 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       return;
     }
 
+    // Always install the native-first JS monkey-patch. WA's native crawler runs
+    // on their backend server, which means CDP interception never fires. If the
+    // backend crawl fails (e.g. WAF block or Marathi/Unicode filenames), the
+    // native preview returns empty. This patch calls the native pipeline, waits
+    // for its result, and injects our fallback image ONLY if native failed,
+    // ensuring we get banners for working articles and fallbacks for broken ones.
+    await this._startLegacyPatch(url, previewData);
+
     if (!previewData.pageHtml) {
-      // No HTML available to serve via CDP. Fall back to the JS monkey-patch so
-      // WA at least gets our pre-fetched title/description/thumbnail instead of
-      // an empty preview.
-      this.logger.warn('[LinkPreview] No pageHtml — falling back to monkey-patch');
-      await this._startLegacyPatch(url, previewData);
+      this.logger.warn('[LinkPreview] No pageHtml available');
       return;
     }
 
