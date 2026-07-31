@@ -240,9 +240,7 @@ export class AutomationService {
         $('meta[name="twitter:image"]').attr('content');
       let absImageUrl: string | undefined;
       if (imageUrl) {
-        absImageUrl = imageUrl.startsWith('http')
-          ? imageUrl
-          : new URL(imageUrl, url).toString();
+        absImageUrl = new URL(imageUrl, url).href;
         
         // Generate a SMALL inline thumbnail that embeds directly in the message.
         // WhatsApp's ExtendedTextMessage has tight inline data limits (~10KB max
