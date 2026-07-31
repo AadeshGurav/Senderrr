@@ -200,7 +200,7 @@ export class BrowserFetchUtil {
             const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
             ctx.drawImage(img, 0, 0, w, h);
 
-            const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
+            const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.5 });
             const arrBuf = await outBlob.arrayBuffer();
             const bytes = new Uint8Array(arrBuf);
 
