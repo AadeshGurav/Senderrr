@@ -58,6 +58,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private phoneNumber: string | null = null;
   private pushName: string | null = null;
   private callbacks: EngineEventCallbacks = {};
+  private consoleForwardedPages: WeakSet<object> = new WeakSet();
 
   constructor(
     private readonly config: WhatsAppWebJsConfig,
@@ -416,6 +417,19 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
     const page = this.client.pupPage;
 
+    // Forward the page's console to our Node logs once per page. The fetch
+    // override below logs every request via console.log; without this they'd
+    // be invisible in the browser context.
+    if (!this.consoleForwardedPages.has(page)) {
+      this.consoleForwardedPages.add(page);
+      page.on('console', msg => {
+        const text = msg.text();
+        if (text.startsWith('[LinkPreview]') || text.startsWith('[FetchTrace]')) {
+          this.logger.log(`[PageConsole] ${text}`);
+        }
+      });
+    }
+
     // Override window.fetch inside the page to intercept the article URL request.
     // WA's native getLinkPreview code calls fetch() to get the page HTML.
     // By serving our pre-fetched HTML, the native pipeline runs completely:
@@ -425,25 +439,28 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         async (opts: { targetUrl: string; html: string }) => {
           const originalFetch = window.fetch.bind(window);
           let intercepted = false;
+          let fetchSeq = 0;
 
           window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            const seq = ++fetchSeq;
             const reqUrl = typeof input === 'string' ? input :
               input instanceof Request ? input.url : input.toString();
+            const normalizedReq = reqUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+            const normalizedTarget = opts.targetUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+            const matched = normalizedReq === normalizedTarget || normalizedReq.startsWith(normalizedTarget);
 
             // One-shot intercept: if request matches our article URL
-            if (!intercepted) {
-              const normalizedReq = reqUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
-              const normalizedTarget = opts.targetUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
-              if (normalizedReq === normalizedTarget || normalizedReq.startsWith(normalizedTarget)) {
-                intercepted = true;
-                console.log('[LinkPreview] Intercepted fetch, serving pre-fetched HTML');
-                return new Response(opts.html, {
-                  status: 200,
-                  headers: { 'Content-Type': 'text/html; charset=utf-8' },
-                });
-              }
+            if (matched && !intercepted) {
+              intercepted = true;
+              console.log(`[FetchTrace] #${seq} INTERCEPTED match url=${reqUrl} target=${opts.targetUrl}`);
+              console.log('[LinkPreview] Intercepted fetch, serving pre-fetched HTML');
+              return new Response(opts.html, {
+                status: 200,
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+              });
             }
 
+            console.log(`[FetchTrace] #${seq} passthrough url=${reqUrl} target=${opts.targetUrl} matched=${matched}`);
             return originalFetch(input, init);
           };
 
