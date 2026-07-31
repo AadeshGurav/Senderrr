@@ -467,7 +467,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       this.pageConsolePiped.add(page);
       page.on('console', msg => {
         const text = msg.text();
-        if (text.includes('[PatchTrace]') || text.includes('[ThumbnailDebug]') || text.includes('[ReqTrace]')) {
+        if (text.includes('[PatchTrace]') || text.includes('[ThumbnailDebug]') || text.includes('[ReqTrace]') || text.includes('[UploadTrace]')) {
           this.logger.log(`[PageConsole] ${text}`);
         }
       });
@@ -611,8 +611,11 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
    *     When this succeeds it returns `thumbnailDirectPath` (CDN URL) which
    *     WhatsApp renders as a full-width BANNER image — we must not skip this.
    *  2. If native returns an empty thumbnail (og:image blocked on WA's servers,
-   *     e.g. WAF or non-ASCII filenames), inject our pre-fetched JPEG as a
-   *     fallback so the preview shows SOME image rather than none.
+   *     e.g. WAF or non-ASCII filenames), upload our pre-fetched JPEG through
+   *     WA's own in-page media upload pipeline (WAWebMediaMmsV4Upload.uploadMedia)
+   *     and inject `thumbnailDirectPath` + hashes + dimensions. An inline base64
+   *     `thumbnail` alone renders as a COMPACT card; only a real CDN thumbnail
+   *     (`thumbnailDirectPath`) renders as the full-width BANNER.
    */
   private async _startLegacyPatch(
     url: string,
@@ -636,11 +639,90 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           (window as any).__linkPreviewFallbacks = (window as any).__linkPreviewFallbacks || {};
           (window as any).__linkPreviewFallbacks[linkUrl] = preview;
 
+          // Cache the uploaded CDN thumbnail per base64 so each image is only
+          // uploaded once (the patch runs for every URL in a broadcast).
+          (window as any).__uploadedThumbnails = (window as any).__uploadedThumbnails || {};
+
           // Only patch once
           if ((window as any).__linkPreviewPatched) return;
           (window as any).__linkPreviewPatched = true;
 
           const original = mod.getLinkPreview.bind(mod);
+
+          // Upload our JPEG through WA's native media pipeline so the preview
+          // carries a real thumbnailDirectPath (CDN URL) → full-width banner.
+          async function uploadFallbackThumbnail(b64: string, mime: string) {
+            if ((window as any).__uploadedThumbnails[b64]) {
+              console.log(`[UploadTrace] cache hit for thumbnail (${b64.length} b64 chars)`);
+              return (window as any).__uploadedThumbnails[b64];
+            }
+            console.log(`[UploadTrace] uploading thumbnail via WA media pipeline (${b64.length} b64 chars)...`);
+
+            const binaryData = window.atob(b64);
+            const buffer = new ArrayBuffer(binaryData.length);
+            const view = new Uint8Array(buffer);
+            for (let i = 0; i < binaryData.length; i++) {
+              view[i] = binaryData.charCodeAt(i);
+            }
+            const blob = new Blob([buffer], { type: mime || 'image/jpeg' });
+            const file = new File([blob], 'preview-thumbnail.jpg', {
+              type: mime || 'image/jpeg',
+              lastModified: Date.now(),
+            });
+
+            // --- Replicate wwebjs processMediaData (node_modules/whatsapp-web.js/src/util/Injected/Utils.js) ---
+            const OpaqueData = window.require('WAWebMediaOpaqueData');
+            const opaqueData = await OpaqueData.createFromData(file, file.type);
+            const mediaPrep = window
+              .require('WAWebPrepRawMedia')
+              .prepRawMedia(opaqueData, { asSticker: false, asGif: false, isPtt: false, asDocument: false });
+            const mediaData = await mediaPrep.waitForPrep();
+            if (!mediaData.filehash) {
+              throw new Error('media-fault: thumbnail filehash undefined');
+            }
+
+            const mediaObject = window
+              .require('WAWebMediaStorage')
+              .getOrCreateMediaObject(mediaData.filehash);
+            const mediaType = window.require('WAWebMmsMediaTypes').msgToMediaType({
+              type: mediaData.type,
+              isGif: mediaData.isGif,
+              isNewsletter: false,
+            });
+
+            mediaData.renderableUrl = mediaData.mediaBlob.url();
+            mediaObject.consolidate(mediaData.toJSON());
+            mediaData.mediaBlob.autorelease();
+
+            const { uploadMedia } = window.require('WAWebMediaMmsV4Upload');
+            const uploadedMedia = await uploadMedia({
+              mimetype: mediaData.mimetype,
+              mediaObject,
+              mediaType,
+            });
+
+            const mediaEntry = uploadedMedia.mediaEntry;
+            if (!mediaEntry) {
+              throw new Error('upload failed: media entry was not created');
+            }
+
+            const filehash = await crypto.subtle
+              .digest('SHA-256', await file.arrayBuffer())
+              .then((hb: ArrayBuffer) =>
+                btoa(String.fromCharCode(...new Uint8Array(hb))),
+              );
+
+            const entry: any = {
+              thumbnailDirectPath: mediaEntry.directPath,
+              thumbnailSha256: mediaEntry.filehash || mediaEntry.encFilehash || filehash,
+              thumbnailEncSha256: mediaEntry.encFilehash || filehash,
+              thumbnailHeight: preview.thumbnailHeight,
+              thumbnailWidth: preview.thumbnailWidth,
+            };
+            (window as any).__uploadedThumbnails[b64] = entry;
+            console.log(`[UploadTrace] upload OK: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | sha=${String(entry.thumbnailSha256).slice(0, 20)}...`);
+            return entry;
+          }
 
           mod.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
@@ -678,6 +760,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 if (!activePreview.jpegThumbnailBase64) {
                   console.log('[PatchTrace] native empty BUT no fallback thumbnail to inject — preview will be text-only');
                 }
+
                 const fallbackData: any = {
                   matchedText: href,
                   title: activePreview.title || '',
@@ -691,7 +774,23 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 };
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
                 if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
-                
+
+                // Upload our JPEG to WA's CDN so the preview renders as a BANNER
+                // (thumbnailDirectPath) instead of a compact card (inline base64).
+                if (activePreview.jpegThumbnailBase64) {
+                  const mime = (activePreview.imageMimeType) || 'image/jpeg';
+                  return uploadFallbackThumbnail(activePreview.jpegThumbnailBase64, mime)
+                    .then((entry: any) => {
+                      Object.assign(fallbackData, entry);
+                      console.log(`[PatchTrace] BANNER payload built: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | thumbW=${fallbackData.thumbnailWidth} thumbH=${fallbackData.thumbnailHeight}`);
+                      return { url: href, data: fallbackData };
+                    })
+                    .catch((err: Error) => {
+                      console.log(`[PatchTrace] thumbnail upload FAILED (${err.message}) — falling back to inline thumbnail`);
+                      return { url: href, data: fallbackData };
+                    });
+                }
+
                 return { url: href, data: fallbackData };
               })
               .catch(() => {
@@ -712,6 +811,18 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 };
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
                 if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
+
+                if (activePreview.jpegThumbnailBase64) {
+                  const mime = (activePreview.imageMimeType) || 'image/jpeg';
+                  return uploadFallbackThumbnail(activePreview.jpegThumbnailBase64, mime)
+                    .then((entry: any) => {
+                      Object.assign(fallbackData, entry);
+                      return { url: href, data: fallbackData };
+                    })
+                    .catch(() => {
+                      return { url: href, data: fallbackData };
+                    });
+                }
                 
                 return { url: href, data: fallbackData };
               });
