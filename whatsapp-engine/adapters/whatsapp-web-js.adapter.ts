@@ -806,6 +806,12 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   doNotPlayInline: false,
                   isLoading: false,
                   thumbnail: activePreview.jpegThumbnailBase64,
+                  // thumbnailHQ is what the native (working) payload carries.
+                  // Its presence makes WA Web auto-upload the HQ image via
+                  // WAWebMediaUploadMmsThumbnail and render a proper banner on
+                  // ALL devices. Without it, remote clients must fetch+decrypt
+                  // the CDN thumbnail, which fails → pitch-black banner.
+                  thumbnailHQ: activePreview.jpegThumbnailBase64,
                   psp: null,
                 };
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
@@ -818,7 +824,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   return uploadFallbackThumbnail(activePreview.jpegThumbnailBase64, mime)
                     .then((entry: any) => {
                       Object.assign(fallbackData, entry);
-                      console.log(`[PatchTrace] BANNER payload built: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | thumbW=${fallbackData.thumbnailWidth} thumbH=${fallbackData.thumbnailHeight}`);
+                      console.log(`[PatchTrace] BANNER payload built: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | thumbW=${fallbackData.thumbnailWidth} thumbH=${fallbackData.thumbnailHeight} | thumbnailHQ=${fallbackData.thumbnailHQ ? 'present' : 'MISSING'}`);
                       return { url: href, data: fallbackData, preview: true, subtype: 'url' };
                     })
                     .catch((err: Error) => {
@@ -846,6 +852,12 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   doNotPlayInline: false,
                   isLoading: false,
                   thumbnail: activePreview.jpegThumbnailBase64,
+                  // thumbnailHQ is what the native (working) payload carries.
+                  // Its presence makes WA Web auto-upload the HQ image via
+                  // WAWebMediaUploadMmsThumbnail and render a proper banner on
+                  // ALL devices. Without it, remote clients must fetch+decrypt
+                  // the CDN thumbnail, which fails → pitch-black banner.
+                  thumbnailHQ: activePreview.jpegThumbnailBase64,
                   psp: null,
                 };
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
