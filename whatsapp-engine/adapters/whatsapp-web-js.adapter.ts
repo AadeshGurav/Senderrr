@@ -788,7 +788,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   title: activePreview.title || '',
                   description: activePreview.description || '',
                   canonicalUrl: href,
-                  richPreviewType: 0,
+                  // Message.ExtendedTextMessage.PreviewType.IMAGE = 5.
+                  // NONE (0) makes every client render a compact text-only card
+                  // with no image, even when thumbnailDirectPath is present.
+                  richPreviewType: 5,
                   doNotPlayInline: false,
                   isLoading: false,
                   thumbnail: activePreview.jpegThumbnailBase64,
@@ -825,7 +828,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   title: activePreview.title || '',
                   description: activePreview.description || '',
                   canonicalUrl: href,
-                  richPreviewType: 0,
+                  // Message.ExtendedTextMessage.PreviewType.IMAGE = 5.
+                  // NONE (0) makes every client render a compact text-only card
+                  // with no image, even when thumbnailDirectPath is present.
+                  richPreviewType: 5,
                   doNotPlayInline: false,
                   isLoading: false,
                   thumbnail: activePreview.jpegThumbnailBase64,
