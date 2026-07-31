@@ -59,7 +59,22 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private phoneNumber: string | null = null;
   private pushName: string | null = null;
   private callbacks: EngineEventCallbacks = {};
-  private consoleForwardedPages: WeakSet<object> = new WeakSet();
+  private linkPreviewIntercepts: WeakMap<object, Array<{
+    targetUrl: string;
+    html?: string;
+    imageUrl?: string;
+    imageBase64?: string;
+    imageMimeType?: string;
+    /** Set to true once WA's crawler has consumed the HTML intercept. */
+    htmlServed: boolean;
+    /** Set to true once WA's crawler has consumed the image intercept. */
+    imageServed: boolean;
+    /** Epoch ms after which this entry is pruned regardless of served state. */
+    expiresAt: number;
+  }>> = new WeakMap();
+  private linkPreviewInterceptionEnabled: WeakSet<object> = new WeakSet();
+  /** TTL for an intercept entry — long enough for WA's two-pass pipeline. */
+  private readonly LINK_PREVIEW_INTERCEPT_TTL_MS = 60_000;
 
   constructor(
     private readonly config: WhatsAppWebJsConfig,
@@ -377,20 +392,27 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   /**
    * Makes WA's native link preview work for WAF-blocked URLs by intercepting
-   * the page URL request at Puppeteer level and serving our pre-fetched HTML.
+   * the request at the CDP network layer (page.setRequestInterception) and
+   * serving our pre-fetched HTML / OG-image bytes.
+   *
+   * Why CDP and not window.fetch: observed production logs showed WA's native
+   * getLinkPreview crawler never issues requests through the page's
+   * window.fetch override (zero [FetchTrace] hits despite the override being
+   * installed), so interception must happen at the network layer where the
+   * crawler's requests actually flow.
    *
    * How it works:
-   * 1. We register a Puppeteer request interception via page.route() for the
-   *    exact article URL.
-   * 2. When WA's internal getLinkPreview calls fetch()/XHR for that URL,
-   *    Puppeteer intercepts and returns our pre-fetched HTML.
+   * 1. warmUpLinkPreview pre-fetches the article HTML and the og:image bytes
+   *    once (via BrowserFetchUtil's WAF-bypass pipeline) and registers them
+   *    against the page.
+   * 2. A page.on('request') handler answers any request whose URL matches the
+   *    article (with our HTML) or the og:image (with the image bytes), and
+   *    continues everything else untouched.
    * 3. WA's native pipeline runs completely: it parses the OG tags from our
-   *    HTML, downloads the og:image via its own mechanism (which may succeed
-   *    on a different CDN endpoint), uploads the image to WA's media CDN,
+   *    HTML, gets the og:image bytes, uploads the image to WA's media CDN,
    *    and returns a proper banner preview with thumbnailDirectPath etc.
    *
    * No monkey-patching needed — WA does everything natively.
-   * The route is automatically removed after first match (one-shot).
    */
   async warmUpLinkPreview(
     url: string,
@@ -420,7 +442,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     const page = this.client.pupPage;
 
     // Pre-fetch the OG image bytes once (via the WAF-bypass pipeline) so the
-    // fetch interceptor can serve them to WhatsApp's native getLinkPreview
+    // request interceptor can serve them to WhatsApp's native getLinkPreview
     // when it makes its own second request for the image.
     let imageBase64: string | undefined;
     let imageMimeType = 'image/jpeg';
@@ -440,83 +462,100 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       }
     }
 
-    // Forward the page's console to our Node logs once per page. The fetch
-    // override below logs every request via console.log; without this they'd
-    // be invisible in the browser context.
-    if (!this.consoleForwardedPages.has(page)) {
-      this.consoleForwardedPages.add(page);
-      page.on('console', msg => {
-        const text = msg.text();
-        if (text.startsWith('[LinkPreview]') || text.startsWith('[FetchTrace]')) {
-          this.logger.log(`[PageConsole] ${text}`);
-        }
+    // Store this URL's intercept so the CDP request handler can serve it.
+    // HTML and image are tracked independently: the entry is only pruned once
+    // BOTH have been served (or the TTL expires), so removing the HTML entry
+    // does not prevent WA's second-pass image request from being intercepted.
+    const now = Date.now();
+    const existing = this.linkPreviewIntercepts.get(page) || [];
+    existing.push({
+      targetUrl: url,
+      html: previewData.pageHtml,
+      imageUrl: previewData.imageUrl,
+      imageBase64,
+      imageMimeType,
+      htmlServed: false,
+      imageServed: false,
+      expiresAt: now + this.LINK_PREVIEW_INTERCEPT_TTL_MS,
+    });
+    this.linkPreviewIntercepts.set(page, existing);
+
+    // Install the CDP request interceptor once per page. WA's native
+    // getLinkPreview crawler does NOT go through the page's window.fetch
+    // (observed: zero [FetchTrace] hits despite the override being installed),
+    // so we must intercept at the network layer.
+    if (!this.linkPreviewInterceptionEnabled.has(page)) {
+      this.linkPreviewInterceptionEnabled.add(page);
+      let reqSeq = 0;
+
+      // Avoid re-installing overlapping handlers if the page navigates.
+      try { await page.setRequestInterception(true); } catch { /* best effort */ }
+
+      page.on('request', req => {
+        void (async () => {
+          const reqUrl = req.url();
+          const seq = ++reqSeq;
+          const normalizedReq = reqUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+          const ts = Date.now();
+
+          // Prune expired entries before matching.
+          const live = (this.linkPreviewIntercepts.get(page) || []).filter(i => i.expiresAt > ts);
+          this.linkPreviewIntercepts.set(page, live);
+
+          for (const intercept of live) {
+            const normalizedTarget = intercept.targetUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+            const htmlMatched =
+              !intercept.htmlServed &&
+              (normalizedReq === normalizedTarget || normalizedReq.startsWith(normalizedTarget));
+
+            if (htmlMatched) {
+              this.logger.log(`[ReqTrace] #${seq} HTML_INTERCEPT url=${reqUrl} target=${intercept.targetUrl} resourceType=${req.resourceType()}`);
+              // Mark HTML as served. Only prune the entry when both HTML and
+              // image have been served (or there is no image to serve).
+              intercept.htmlServed = true;
+              const imageAlreadyDone = !intercept.imageUrl || !intercept.imageBase64 || intercept.imageServed;
+              if (imageAlreadyDone) {
+                const list = this.linkPreviewIntercepts.get(page) || [];
+                this.linkPreviewIntercepts.set(page, list.filter(i => i !== intercept));
+              }
+              req.respond({
+                status: 200,
+                contentType: 'text/html; charset=utf-8',
+                body: intercept.html || '',
+              });
+              return;
+            }
+
+            if (intercept.imageUrl && intercept.imageBase64 && !intercept.imageServed) {
+              const normalizedImage = intercept.imageUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+              if (normalizedReq === normalizedImage || normalizedReq.startsWith(normalizedImage)) {
+                this.logger.log(`[ReqTrace] #${seq} IMAGE_INTERCEPT url=${reqUrl} image=${intercept.imageUrl} resourceType=${req.resourceType()}`);
+                // Mark image as served and prune if HTML was already served.
+                intercept.imageServed = true;
+                if (intercept.htmlServed) {
+                  const list = this.linkPreviewIntercepts.get(page) || [];
+                  this.linkPreviewIntercepts.set(page, list.filter(i => i !== intercept));
+                }
+                const bytes = Buffer.from(intercept.imageBase64, 'base64');
+                req.respond({
+                  status: 200,
+                  contentType: intercept.imageMimeType || 'image/jpeg',
+                  body: bytes,
+                });
+                return;
+              }
+            }
+          }
+
+          req.continue();
+        })().catch(err => {
+          this.logger.warn(`[LinkPreview] request interception error: ${String(err)}`);
+          req.continue().catch(() => {});
+        });
       });
     }
 
-    // Override window.fetch inside the page to intercept the article URL request
-    // (serving our pre-fetched HTML) AND the OG image URL request (serving the
-    // actual image bytes). WA's native getLinkPreview makes a separate fetch for
-    // the image to upload it to WA's CDN; without intercepting that too, the
-    // WAF blocks it and the banner thumbnail comes back empty.
-    try {
-      await page.evaluate(
-        async (opts: { targetUrl: string; html: string; imageUrl?: string; imageBase64?: string; imageMimeType?: string }) => {
-          const originalFetch = window.fetch.bind(window);
-          let intercepted = false;
-          let fetchSeq = 0;
-
-          window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-            const seq = ++fetchSeq;
-            const reqUrl = typeof input === 'string' ? input :
-              input instanceof Request ? input.url : input.toString();
-            const normalizedReq = reqUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
-            const normalizedTarget = opts.targetUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
-            const matched = normalizedReq === normalizedTarget || normalizedReq.startsWith(normalizedTarget);
-
-            // One-shot intercept: if request matches our article URL
-            if (matched && !intercepted) {
-              intercepted = true;
-              console.log(`[FetchTrace] #${seq} INTERCEPTED match url=${reqUrl} target=${opts.targetUrl}`);
-              console.log('[LinkPreview] Intercepted fetch, serving pre-fetched HTML');
-              return new Response(opts.html, {
-                status: 200,
-                headers: { 'Content-Type': 'text/html; charset=utf-8' },
-              });
-            }
-
-            // Image intercept: if the request matches the OG image URL and we
-            // have the pre-fetched bytes, serve them with the image content type.
-            if (opts.imageUrl && opts.imageBase64) {
-              const normalizedImage = opts.imageUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
-              if (normalizedReq === normalizedImage || normalizedReq.startsWith(normalizedImage)) {
-                console.log(`[FetchTrace] #${seq} IMAGE_INTERCEPTED url=${reqUrl} image=${opts.imageUrl}`);
-                const bytes = Uint8Array.from(atob(opts.imageBase64), c => c.charCodeAt(0));
-                return new Response(bytes, {
-                  status: 200,
-                  headers: { 'Content-Type': opts.imageMimeType || 'image/jpeg' },
-                });
-              }
-            }
-
-            console.log(`[FetchTrace] #${seq} passthrough url=${reqUrl} target=${opts.targetUrl} matched=${matched}`);
-            return originalFetch(input, init);
-          };
-
-          console.log('[LinkPreview] fetch override installed for:', opts.targetUrl.slice(0, 80));
-        },
-        {
-          targetUrl: url,
-          html: previewData.pageHtml,
-          imageUrl: previewData.imageUrl,
-          imageBase64,
-          imageMimeType,
-        }
-      );
-      this.logger.log(`[LinkPreview] fetch override active for ${url}`);
-    } catch (e) {
-      this.logger.warn('[LinkPreview] fetch override failed, falling back to legacy patch:', String(e));
-      await this._startLegacyPatch(url, previewData);
-    }
+    this.logger.log(`[LinkPreview] CDP request interception active for ${url}`);
   }
 
   /**
