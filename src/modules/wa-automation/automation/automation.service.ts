@@ -45,6 +45,15 @@ export class AutomationService {
   private readonly FAILED_RETRY_TTL_MS = 3_600_000;
   private readonly rateLimitRetryDelay: number;
 
+  /**
+   * Cache of generated link-preview thumbnails keyed by article URL.
+   * Hostinger WAF rate-limits the Render IP when the same Devanagari image
+   * is re-fetched on every broadcast (429 on raw + browser fetch). Caching
+   * means each article's og:image is fetched at most once per process.
+   */
+  private readonly previewThumbnailCache = new Map<string, { base64?: string; at: number }>();
+  private readonly PREVIEW_THUMBNAIL_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+
   constructor(
     private readonly engineFactory: EngineFactory,
     private readonly rateLimiter: RateLimiterService,
@@ -254,11 +263,20 @@ export class AutomationService {
         // of thumbnailWidth/Height. 600px is a good balance between size and quality.
         // Retry on transient WAF/network failures so a fallback registered
         // without a thumbnail never leaves a group with a text-only preview.
-        for (let attempt = 1; attempt <= 2; attempt++) {
-          jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 600);
-          if (jpegThumbnailBase64) break;
-          this.logger.warn(`[LinkPreview] Stage 3/5 thumbnail attempt ${attempt} failed — retrying...`);
-          await new Promise(r => setTimeout(r, 3000));
+        // Cache per-article so we don't re-hit the WAF on every broadcast.
+        const cached = this.previewThumbnailCache.get(url);
+        if (cached && Date.now() - cached.at < this.PREVIEW_THUMBNAIL_TTL_MS) {
+          jpegThumbnailBase64 = cached.base64;
+          this.logger.log(`[LinkPreview] Stage 3/5 thumbnail cache hit for ${url}`);
+        }
+        if (!jpegThumbnailBase64) {
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            jpegThumbnailBase64 = await BrowserFetchUtil.fetchAndResizeImageBase64(absImageUrl, 600);
+            if (jpegThumbnailBase64) break;
+            this.logger.warn(`[LinkPreview] Stage 3/5 thumbnail attempt ${attempt} failed — retrying...`);
+            await new Promise(r => setTimeout(r, 3000));
+          }
+          this.previewThumbnailCache.set(url, { base64: jpegThumbnailBase64, at: Date.now() });
         }
         this.logger.log(`[LinkPreview] Stage 3/5 thumbnail result: ${jpegThumbnailBase64 ? `OK (${jpegThumbnailBase64.length} b64 chars, ~${Math.round((jpegThumbnailBase64.length * 0.75) / 1024)} KB)` : 'FAILED/undefined — fallback image will be missing!'}`);
       } else {
