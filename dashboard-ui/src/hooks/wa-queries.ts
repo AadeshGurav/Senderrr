@@ -247,6 +247,7 @@ export function useWaAdvertisementsQuery(status?: string, search?: string) {
   return useQuery({
     queryKey: [...waKeys.advertisements, status ?? 'all', search ?? ''],
     queryFn: () => adApi.list(status, search),
+    placeholderData: (previousData) => previousData,
   });
 }
 
