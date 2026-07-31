@@ -734,15 +734,26 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 btoa(String.fromCharCode(...new Uint8Array(hb))),
               );
 
+            // Mirror wwebjs processMediaData field mapping (Utils.js mediaData.set):
+            //   filehash      = mediaObject.filehash   (PLAINTEXT sha256, base64)
+            //   encFilehash   = mediaEntry.encFilehash (ENCRYPTED sha256, base64)
+            //   mediaKey      = mediaEntry.mediaKey
+            //   mediaKeyTimestamp = mediaEntry.mediaKeyTimestamp
+            // Remote devices MUST have mediaKey + the correct plaintext
+            // thumbnailSha256 to decrypt the CDN thumbnail; without them they
+            // render no image at all while the sender's Web shows only the
+            // inline (unencrypted) base64 thumbnail.
             const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: mediaEntry.filehash || mediaEntry.encFilehash || filehash,
+              thumbnailSha256: mediaObject.filehash || filehash,
               thumbnailEncSha256: mediaEntry.encFilehash || filehash,
+              mediaKey: mediaEntry.mediaKey,
+              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
               thumbnailHeight: preview.thumbnailHeight,
               thumbnailWidth: preview.thumbnailWidth,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
-            console.log(`[UploadTrace] upload OK: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | sha=${String(entry.thumbnailSha256).slice(0, 20)}...`);
+            console.log(`[UploadTrace] upload OK: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | plainSha=${String(entry.thumbnailSha256).slice(0, 16)}... | encSha=${String(entry.thumbnailEncSha256).slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'}`);
             return entry;
           }
 
