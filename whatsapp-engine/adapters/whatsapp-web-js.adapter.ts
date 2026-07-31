@@ -580,8 +580,16 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   /**
-   * Legacy monkey-patch fallback — kept as insurance in case the Puppeteer
-   * request interception approach doesn't work for some page.
+   * Patches WAWebLinkPreviewChatAction.getLinkPreview in the browser JS context.
+   *
+   * Strategy:
+   *  1. Always run WA's NATIVE getLinkPreview first so WA's server-side
+   *     crawler can attempt to fetch the og:image and upload it to its CDN.
+   *     When this succeeds it returns `thumbnailDirectPath` (CDN URL) which
+   *     WhatsApp renders as a full-width BANNER image — we must not skip this.
+   *  2. If native returns an empty thumbnail (og:image blocked on WA's servers,
+   *     e.g. WAF or non-ASCII filenames), inject our pre-fetched JPEG as a
+   *     fallback so the preview shows SOME image rather than none.
    */
   private async _startLegacyPatch(
     url: string,
@@ -597,9 +605,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     try {
       const page = this.client.pupPage;
       await page.evaluate(
-        async (linkUrl: string, preview: { 
-          title: string; 
-          description: string; 
+        (linkUrl: string, preview: {
+          title: string;
+          description: string;
           jpegThumbnailBase64?: string;
           thumbnailWidth?: number;
           thumbnailHeight?: number;
@@ -611,34 +619,57 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
           mod.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
-            if (href && href.includes(targetHostname)) {
-              const previewData: any = {
-                matchedText: linkUrl,
-                title: preview.title || '',
-                description: preview.description || '',
-                canonicalUrl: linkUrl,
-                richPreviewType: 0,
-                doNotPlayInline: false,
-                isLoading: false,
-                thumbnail: preview.jpegThumbnailBase64,
-                psp: null,
-              };
-              if (preview.thumbnailWidth) previewData.thumbnailWidth = preview.thumbnailWidth;
-              if (preview.thumbnailHeight) previewData.thumbnailHeight = preview.thumbnailHeight;
-              return Promise.resolve({ url: linkUrl, data: previewData });
+            if (!href || !href.includes(targetHostname)) {
+              return original(link);
             }
-            // [NativePreviewCapture]
-            const nativeResult = original(link);
-            nativeResult.then((native: any) => {
-              if (native && native.data) {
-                console.log('[NativePreviewCapture] URL:', href, '| keys:', Object.keys(native.data).join(','));
-                console.log('[NativePreviewCapture] full:', JSON.stringify(native, (k, v) => {
-                  if (k === 'thumbnail' && typeof v === 'string') return `<base64:${v.length}chars>`;
-                  return v;
-                }));
-              }
-            }).catch(() => {});
-            return nativeResult;
+
+            // Run WA's native server-side crawl first. If it gets a real
+            // thumbnail (thumbnailDirectPath → CDN upload → banner), keep it.
+            // Only fall back to our inline JPEG when native returns nothing.
+            return original(link)
+              .then((native: any) => {
+                const nativeThumbnail: string = native?.data?.thumbnail || '';
+                if (nativeThumbnail.length > 100) {
+                  // Native crawl succeeded with a real image — preserve banner.
+                  return native;
+                }
+
+                // Native has no usable thumbnail — inject ours as fallback.
+                if (!preview.jpegThumbnailBase64) return native ?? { url: href, data: {} };
+
+                const d: any = native?.data ?? {};
+                d.thumbnail = preview.jpegThumbnailBase64;
+                if (!d.matchedText) d.matchedText = href;
+                if (!d.title)       d.title = preview.title || '';
+                if (!d.description) d.description = preview.description || '';
+                if (!d.canonicalUrl) d.canonicalUrl = href;
+                if (d.richPreviewType === undefined) d.richPreviewType = 0;
+                if (d.isLoading === undefined)       d.isLoading = false;
+                if (d.psp === undefined)             d.psp = null;
+                d.thumbnailWidth  = preview.thumbnailWidth;
+                d.thumbnailHeight = preview.thumbnailHeight;
+                return { url: native?.url || href, data: d };
+              })
+              .catch(() => {
+                // Native getLinkPreview threw — full synthetic fallback.
+                if (!preview.jpegThumbnailBase64) return { url: href, data: {} };
+                return {
+                  url: href,
+                  data: {
+                    matchedText:    href,
+                    title:          preview.title || '',
+                    description:    preview.description || '',
+                    canonicalUrl:   href,
+                    richPreviewType: 0,
+                    doNotPlayInline: false,
+                    isLoading:      false,
+                    thumbnail:      preview.jpegThumbnailBase64,
+                    psp:            null,
+                    thumbnailWidth:  preview.thumbnailWidth,
+                    thumbnailHeight: preview.thumbnailHeight,
+                  },
+                };
+              });
           };
         },
         url,
