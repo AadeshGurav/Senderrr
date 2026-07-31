@@ -310,6 +310,7 @@ export interface IWhatsAppEngine {
     title: string; 
     description: string; 
     pageHtml?: string;
+    imageUrl?: string;
     jpegThumbnailBase64?: string;
     thumbnailWidth?: number;
     thumbnailHeight?: number;

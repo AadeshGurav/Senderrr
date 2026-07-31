@@ -28,6 +28,7 @@ import {
   PaginatedProducts,
 } from '../interfaces/whatsapp-engine.interface';
 import { createLogger } from '@common/services/logger.service';
+import { BrowserFetchUtil } from '@common/utils/browser-fetch.util';
 import {
   GroupChat,
   MessageWithReactions,
@@ -397,6 +398,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       title: string;
       description: string;
       pageHtml?: string;
+      imageUrl?: string;
       jpegThumbnailBase64?: string;
       thumbnailWidth?: number;
       thumbnailHeight?: number;
@@ -417,6 +419,27 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
     const page = this.client.pupPage;
 
+    // Pre-fetch the OG image bytes once (via the WAF-bypass pipeline) so the
+    // fetch interceptor can serve them to WhatsApp's native getLinkPreview
+    // when it makes its own second request for the image.
+    let imageBase64: string | undefined;
+    let imageMimeType = 'image/jpeg';
+    if (previewData.imageUrl) {
+      try {
+        const buf = await BrowserFetchUtil.fetchArrayBufferWithFallback(previewData.imageUrl, 20000);
+        imageBase64 = Buffer.from(buf).toString('base64');
+        // Guess mime from the URL extension; default to jpeg for .jpg/.jpeg
+        const ext = previewData.imageUrl.split('?')[0].split('.').pop()?.toLowerCase();
+        if (ext === 'png') imageMimeType = 'image/png';
+        else if (ext === 'webp') imageMimeType = 'image/webp';
+        else if (ext === 'gif') imageMimeType = 'image/gif';
+        else if (ext === 'svg') imageMimeType = 'image/svg+xml';
+        this.logger.log(`[LinkPreview] Pre-fetched OG image ${previewData.imageUrl} (${imageBase64.length} b64 chars, ${imageMimeType})`);
+      } catch (err) {
+        this.logger.warn(`[LinkPreview] Could not pre-fetch OG image ${previewData.imageUrl}: ${String(err)}`);
+      }
+    }
+
     // Forward the page's console to our Node logs once per page. The fetch
     // override below logs every request via console.log; without this they'd
     // be invisible in the browser context.
@@ -430,13 +453,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       });
     }
 
-    // Override window.fetch inside the page to intercept the article URL request.
-    // WA's native getLinkPreview code calls fetch() to get the page HTML.
-    // By serving our pre-fetched HTML, the native pipeline runs completely:
-    // parses OG tags, downloads og:image, uploads to WA CDN → banner preview.
+    // Override window.fetch inside the page to intercept the article URL request
+    // (serving our pre-fetched HTML) AND the OG image URL request (serving the
+    // actual image bytes). WA's native getLinkPreview makes a separate fetch for
+    // the image to upload it to WA's CDN; without intercepting that too, the
+    // WAF blocks it and the banner thumbnail comes back empty.
     try {
       await page.evaluate(
-        async (opts: { targetUrl: string; html: string }) => {
+        async (opts: { targetUrl: string; html: string; imageUrl?: string; imageBase64?: string; imageMimeType?: string }) => {
           const originalFetch = window.fetch.bind(window);
           let intercepted = false;
           let fetchSeq = 0;
@@ -460,13 +484,33 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               });
             }
 
+            // Image intercept: if the request matches the OG image URL and we
+            // have the pre-fetched bytes, serve them with the image content type.
+            if (opts.imageUrl && opts.imageBase64) {
+              const normalizedImage = opts.imageUrl.replace(/\/$/, '').split('#')[0].split('?')[0];
+              if (normalizedReq === normalizedImage || normalizedReq.startsWith(normalizedImage)) {
+                console.log(`[FetchTrace] #${seq} IMAGE_INTERCEPTED url=${reqUrl} image=${opts.imageUrl}`);
+                const bytes = Uint8Array.from(atob(opts.imageBase64), c => c.charCodeAt(0));
+                return new Response(bytes, {
+                  status: 200,
+                  headers: { 'Content-Type': opts.imageMimeType || 'image/jpeg' },
+                });
+              }
+            }
+
             console.log(`[FetchTrace] #${seq} passthrough url=${reqUrl} target=${opts.targetUrl} matched=${matched}`);
             return originalFetch(input, init);
           };
 
           console.log('[LinkPreview] fetch override installed for:', opts.targetUrl.slice(0, 80));
         },
-        { targetUrl: url, html: previewData.pageHtml }
+        {
+          targetUrl: url,
+          html: previewData.pageHtml,
+          imageUrl: previewData.imageUrl,
+          imageBase64,
+          imageMimeType,
+        }
       );
       this.logger.log(`[LinkPreview] fetch override active for ${url}`);
     } catch (e) {

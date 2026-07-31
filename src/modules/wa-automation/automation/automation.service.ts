@@ -238,8 +238,9 @@ export class AutomationService {
       const imageUrl =
         $('meta[property="og:image"]').attr('content') ||
         $('meta[name="twitter:image"]').attr('content');
+      let absImageUrl: string | undefined;
       if (imageUrl) {
-        const absImageUrl = imageUrl.startsWith('http')
+        absImageUrl = imageUrl.startsWith('http')
           ? imageUrl
           : new URL(imageUrl, url).toString();
         
@@ -260,6 +261,7 @@ export class AutomationService {
         title, 
         description, 
         pageHtml: html,
+        imageUrl: absImageUrl,
         jpegThumbnailBase64,
         thumbnailWidth: parseInt(imageWidth, 10) || 800,
         thumbnailHeight: parseInt(imageHeight, 10) || 400
