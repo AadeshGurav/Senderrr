@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Trash2, Image, Plus, X, Send, Globe, Users, Target, Upload, Calendar, Edit3, ChevronDown, ChevronRight, BarChart3, Search, CheckCircle, Layers, Ban } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../../components/ui/Card';
@@ -101,6 +101,14 @@ export default function WaAdvertisements() {
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce the search so each keystroke doesn't trigger a refetch
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 350);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
   const [packageDaysInput, setPackageDaysInput] = useState('1');
   const [editingAd, setEditingAd] = useState<ApiAdFull | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
@@ -119,7 +127,7 @@ export default function WaAdvertisements() {
   const [creating, setCreating] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
 
-  const { data: ads = [], isLoading } = useWaAdvertisementsQuery(statusFilter, searchTerm);
+  const { data: ads = [], isLoading, isFetching } = useWaAdvertisementsQuery(statusFilter, debouncedSearch);
   const { data: groups = [] } = useWaGroupsQuery();
   const { data: communities = [] } = useWaCommunitiesQuery();
   const deleteMutate = useDeleteAdMutation();
@@ -303,7 +311,7 @@ export default function WaAdvertisements() {
     }
   };
 
-  if (isLoading) return <CardGridSkeleton count={6} />;
+  if (isLoading && ads.length === 0) return <CardGridSkeleton count={6} />;
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -337,16 +345,25 @@ export default function WaAdvertisements() {
         <div className="relative flex-1 max-w-xs w-full">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search campaigns..."
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] outline-none focus:border-[var(--color-primary)] transition-colors"
           />
+          {isFetching && searchTerm !== debouncedSearch && (
+            <span className="absolute right-8 top-1/2 -translate-y-1/2">
+              <svg className="animate-spin h-3 w-3 text-[var(--color-text-muted)]" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </span>
+          )}
           {searchTerm && (
             <button
               type="button"
-              onClick={() => setSearchTerm('')}
+              onClick={() => { setSearchTerm(''); searchInputRef.current?.focus(); }}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
             >
               <X size={12} />
