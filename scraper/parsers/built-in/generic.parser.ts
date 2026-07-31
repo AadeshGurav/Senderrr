@@ -13,6 +13,7 @@ export class GenericParser implements IArticleParser {
     // Try cheerio-based parsing first (more robust)
     try {
       const $ = cheerio.load(html);
+      $('script, style').remove();
       const baseHost = new URL(baseUrl).host;
 
       // Collect all candidate links from common article containers
@@ -156,6 +157,7 @@ export class GenericParser implements IArticleParser {
 
     try {
       const $ = cheerio.load(html);
+      $('script, style').remove();
 
       // Title: og:title > twitter:title > <title> > <h1>
       title = $('meta[property="og:title"]').attr('content')
@@ -169,15 +171,17 @@ export class GenericParser implements IArticleParser {
         || $('meta[property="og:description"]').attr('content')
         || '';
 
-      // Image: og:image > twitter:image
+      // Image: og:image > twitter:image > first article image
       imageUrl = $('meta[property="og:image"]').attr('content')
         || $('meta[name="twitter:image"]').attr('content')
+        || $('article img').first().attr('src')
+        || $('.td-post-featured-image img').first().attr('src')
+        || $('main img').first().attr('src')
+        || $('img').first().attr('src')
         || '';
 
       // Body: article > main > known content classes
       const bodySelectors = [
-        'article',
-        'main',
         '.td-post-content',
         '.entry-content',
         '.post-content',
@@ -185,15 +189,17 @@ export class GenericParser implements IArticleParser {
         '.article-content',
         '.content',
         '.td-block-row',
-        '.post',
         '.story-body',
         '.news-body',
+        'article',
+        'main',
+        '.post',
       ];
       for (const sel of bodySelectors) {
         const el = $(sel).first();
         if (el.length) {
           body = el.text().trim().replace(/\s+/g, ' ').slice(0, 2000);
-          if (body.length > 100) break;
+          if (body.length > 50) break;
         }
       }
 
@@ -223,10 +229,10 @@ export class GenericParser implements IArticleParser {
       // like sub-topics/key-points without grabbing sidebar/footer noise.
       const foundBulletPoints: string[] = [];
       const containerSelectors = [
-        'article', 'main',
         '.td-post-content', '.entry-content', '.post-content',
         '.article-body', '.article-content', '.content',
-        '.td-block-row', '.post', '.story-body', '.news-body',
+        '.td-block-row', '.story-body', '.news-body',
+        'article', 'main', '.post',
       ];
       for (const sel of containerSelectors) {
         const $container = $(sel).first();
