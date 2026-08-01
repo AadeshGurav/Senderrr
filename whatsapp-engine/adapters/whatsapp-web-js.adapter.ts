@@ -645,22 +645,23 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
           const original = mod.getLinkPreview.bind(mod);
 
-          // Upload our resized JPEG through WA's ENCRYPTED media pipeline
-          // (WAWebUploadManager.encryptAndUpload, the same path wwebjs uses for
-          // stickers/media — Utils.js processStickerData). This returns a real
-          // encrypted CDN thumbnail: directPath + encFilehash + mediaKey +
-          // mediaKeyTimestamp, exactly the fields the native (working) link
-          // preview payload carries (/v/t62...enc). The previous
-          // WAWebMediaUploadMmsThumbnail (NEWSLETTER_THUMBNAIL_LINK) upload
-          // produced an UNENCRYPTED thumbnail with no mediaKey, so remote
-          // clients could not decrypt the CDN image (blank/stale preview).
+          // Upload our resized JPEG through WA's regular encrypted MEDIA
+          // pipeline (WAWebMediaMmsV4Upload.uploadMedia, the same path wwebjs
+          // uses to send images — Utils.js processMediaData). This is what the
+          // NATIVE (working) link-preview thumbnail uses: its directPath is
+          // /v/t62...enc, a regular encrypted image CDN entry with a full
+          // mediaEntry (directPath + encFilehash + mediaKey +
+          // mediaKeyTimestamp). The previous encryptAndUpload(type:'image')
+          // produced /o1/v/t24/f2/m234/... — a "link thumbnail" CDN class that
+          // remote clients cannot decrypt (black banner), even with the right
+          // key fields present.
           async function uploadThumbnailHQ(b64: string) {
             if ((window as any).__uploadedThumbnails && (window as any).__uploadedThumbnails[b64]) {
               return (window as any).__uploadedThumbnails[b64];
             }
             (window as any).__uploadedThumbnails = (window as any).__uploadedThumbnails || {};
 
-            // Decode base64 JPEG into a Blob/File for the upload manager.
+            // Decode base64 JPEG into a File for WA's media prep pipeline.
             const binaryData = window.atob(b64);
             const buffer = new ArrayBuffer(binaryData.length);
             const view = new Uint8Array(buffer);
@@ -672,45 +673,76 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               lastModified: Date.now(),
             });
 
-            // wwebjs WWebJS.generateHash(32): 32 random chars from A-Za-z0-9.
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            let mediaKey = '';
-            for (let i = 0; i < 32; i++) {
-              mediaKey += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            const controller = new AbortController();
-            const uploadedInfo = await window
-              .require('WAWebUploadManager')
-              .encryptAndUpload({
-                blob: file,
-                type: 'image',
-                signal: controller.signal,
-                mediaKey,
-                uploadQpl: window
-                  .require('WAWebStartMediaUploadQpl')
-                  .startMediaUploadQpl({ entryPoint: 'MediaUpload' }),
-              });
-
-            // wwebjs WWebJS.getFileHash: SHA-256 of the file bytes, base64.
+            // Plaintext SHA-256 of the JPEG bytes (computed directly, so there
+            // is no ambiguity with the encrypted hash).
             const hashBuffer = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
             const plainSha = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
-            if (!uploadedInfo || !uploadedInfo.directPath) {
-              throw new Error('encryptAndUpload returned no directPath');
+
+            // Replicate wwebjs processMediaData (Utils.js) exactly.
+            const OpaqueData = window.require('WAWebMediaOpaqueData');
+            const opaqueData = await OpaqueData.createFromData(file, file.type);
+            const mediaPrep = window
+              .require('WAWebPrepRawMedia')
+              .prepRawMedia(opaqueData, { asSticker: false, asGif: false, isPtt: false, asDocument: false });
+            const mediaData = await mediaPrep.waitForPrep();
+            if (!mediaData.filehash) {
+              throw new Error('media-fault: thumbnail filehash undefined');
             }
-            // Map to the native preview payload fields:
-            //   thumbnailDirectPath = uploadedInfo.directPath (encrypted CDN)
-            //   thumbnailSha256     = plaintext SHA-256 of the JPEG
-            //   thumbnailEncSha256  = uploadedInfo.encFilehash (encrypted hash)
-            //   mediaKey / mediaKeyTimestamp = from encryptAndUpload
+
+            const mediaObject = window
+              .require('WAWebMediaStorage')
+              .getOrCreateMediaObject(mediaData.filehash);
+            const mediaType = window.require('WAWebMmsMediaTypes').msgToMediaType({
+              type: mediaData.type,
+              isGif: mediaData.isGif,
+              isNewsletter: false,
+            });
+
+            if (!(mediaData.mediaBlob instanceof OpaqueData)) {
+              mediaData.mediaBlob = await OpaqueData.createFromData(
+                mediaData.mediaBlob,
+                mediaData.mediaBlob.type,
+              );
+            }
+            mediaData.renderableUrl = mediaData.mediaBlob.url();
+            mediaObject.consolidate(mediaData.toJSON());
+            mediaData.mediaBlob.autorelease();
+
+            const shouldUseMediaCache = window
+              .require('WAWebMediaDataUtils')
+              .shouldUseMediaCache(
+                window.require('WAWebMmsMediaTypes').castToV4(mediaObject.type),
+              );
+            if (shouldUseMediaCache && mediaData.mediaBlob instanceof OpaqueData) {
+              const formData = mediaData.mediaBlob.formData();
+              window
+                .require('WAWebMediaInMemoryBlobCache')
+                .InMemoryMediaBlobCache.put(mediaObject.filehash, formData);
+            }
+
+            const { uploadMedia } = window.require('WAWebMediaMmsV4Upload');
+            const uploadedMedia = await uploadMedia({
+              mimetype: mediaData.mimetype,
+              mediaObject,
+              mediaType,
+            });
+
+            const mediaEntry = uploadedMedia && uploadedMedia.mediaEntry;
+            if (!mediaEntry || !mediaEntry.directPath) {
+              throw new Error('uploadMedia returned no mediaEntry');
+            }
+
+            // Map to the native preview payload fields (mirror Utils.js
+            // mediaData.set): filehash=plaintext, encFilehash=encrypted.
             const entry: any = {
-              thumbnailDirectPath: uploadedInfo.directPath,
+              thumbnailDirectPath: mediaEntry.directPath,
               thumbnailSha256: plainSha,
-              thumbnailEncSha256: uploadedInfo.encFilehash,
-              mediaKey: uploadedInfo.mediaKey || mediaKey,
-              mediaKeyTimestamp: uploadedInfo.mediaKeyTimestamp,
+              thumbnailEncSha256: mediaEntry.encFilehash,
+              mediaKey: mediaEntry.mediaKey,
+              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
-            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | plainSha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | encSha=${String(entry.thumbnailEncSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | uploadKeys=${uploadedInfo && typeof uploadedInfo === 'object' ? Object.keys(uploadedInfo).join(',') : 'n/a'}`);
+            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | plainSha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | encSha=${String(entry.thumbnailEncSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | entryKeys=${mediaEntry && typeof mediaEntry === 'object' ? Object.keys(mediaEntry).join(',') : 'n/a'}`);
             return entry;
           }
 
