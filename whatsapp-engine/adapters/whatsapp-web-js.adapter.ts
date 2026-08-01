@@ -740,7 +740,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             // keys (mediaKey/thumbnailEncSha256) since they expect raw JPEGs.
             const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: plainSha,
+              thumbnailSha256: mediaData.filehash,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
             return entry;
