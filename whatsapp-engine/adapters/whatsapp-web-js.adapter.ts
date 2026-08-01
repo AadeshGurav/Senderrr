@@ -720,27 +720,27 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 .InMemoryMediaBlobCache.put(mediaObject.filehash, formData);
             }
 
-            const { uploadUnencryptedMedia } = window.require('WAWebMediaMmsV4Upload');
-            const uploadedMedia = await uploadUnencryptedMedia({
+            const { uploadMedia } = window.require('WAWebMediaMmsV4Upload');
+            const uploadedMedia = await uploadMedia({
               mimetype: mediaData.mimetype,
               mediaObject,
               mediaType,
-              calculateToken: window.require('WAMediaCalculateFilehash').getRandomFilehash,
             });
 
             const mediaEntry = uploadedMedia && uploadedMedia.mediaEntry;
             if (!mediaEntry || !mediaEntry.directPath) {
-              throw new Error('uploadUnencryptedMedia returned no mediaEntry');
+              throw new Error('uploadMedia returned no mediaEntry');
             }
 
             // Map to the native preview payload fields. Link preview thumbnails
-            // must be uploaded UNENCRYPTED. The native payload only provides
-            // thumbnailDirectPath and the plaintext thumbnailSha256. Remote
-            // clients will fail to render the banner if we provide encryption
-            // keys (mediaKey/thumbnailEncSha256) since they expect raw JPEGs.
+            // use a standard encrypted media payload under the hood. The payload
+            // requires the correct plaintext filehash along with the encryption keys.
             const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
               thumbnailSha256: mediaData.filehash,
+              thumbnailEncSha256: mediaEntry.encFilehash,
+              mediaKey: mediaEntry.mediaKey,
+              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
             return entry;
