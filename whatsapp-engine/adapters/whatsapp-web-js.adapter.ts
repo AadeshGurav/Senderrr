@@ -732,17 +732,23 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
               throw new Error('uploadMedia returned no mediaEntry');
             }
 
-            // Map to the native preview payload fields (mirror Utils.js
-            // mediaData.set): filehash=plaintext, encFilehash=encrypted.
+            // Map to the native preview payload fields. The NATIVE (working)
+            // payload carries ONLY thumbnailDirectPath + thumbnailSha256 (no
+            // mediaKey / thumbnailEncSha256 / mediaKeyTimestamp) — the CDN
+            // directPath embeds the server-assigned key material (oh= param)
+            // that remote clients use to decrypt, and thumbnailSha256 verifies
+            // the decrypted plaintext. Injecting our own mediaKey/encSha
+            // mismatch that server-side key and makes receivers fail to
+            // decrypt (pitch-black banner).
             const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: plainSha,
-              thumbnailEncSha256: mediaEntry.encFilehash,
-              mediaKey: mediaEntry.mediaKey,
-              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
+              // Use the hash the server stored for the exact bytes it uploaded
+              // (mediaObject.filehash) so the receiver's plaintext verification
+              // matches. Fall back to our direct SHA-256 only if absent.
+              thumbnailSha256: mediaObject.filehash || plainSha,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
-            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | plainSha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | encSha=${String(entry.thumbnailEncSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | entryKeys=${mediaEntry && typeof mediaEntry === 'object' ? Object.keys(mediaEntry).join(',') : 'n/a'}`);
+            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | plainSha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | serverMediaKey=${mediaEntry.mediaKey ? 'present' : 'MISSING'} | serverEncSha=${mediaEntry.encFilehash ? 'present' : 'MISSING'} | serverMediaKeyTs=${mediaEntry.mediaKeyTimestamp ? 'present' : 'MISSING'} | entryKeys=${mediaEntry && typeof mediaEntry === 'object' ? Object.keys(mediaEntry).join(',') : 'n/a'}`);
             return entry;
           }
 
