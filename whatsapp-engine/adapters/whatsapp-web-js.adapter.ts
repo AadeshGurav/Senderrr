@@ -645,45 +645,72 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
           const original = mod.getLinkPreview.bind(mod);
 
-          // Replicate WA's own thumbnailHQ -> CDN path for received URL
-          // previews (bundle: notRefiningTypeIsUrl -> WAWebMediaUploadMmsThumbnail
-          // with MEDIA_TYPES.NEWSLETTER_THUMBNAIL_LINK). Returns the payload
-          // fields WA's real preview carries: thumbnailDirectPath (CDN) +
-          // thumbnailSha256 (plaintext filehash). This is what makes remote
-          // clients render a full-width banner.
+          // Upload our resized JPEG through WA's ENCRYPTED media pipeline
+          // (WAWebUploadManager.encryptAndUpload, the same path wwebjs uses for
+          // stickers/media — Utils.js processStickerData). This returns a real
+          // encrypted CDN thumbnail: directPath + encFilehash + mediaKey +
+          // mediaKeyTimestamp, exactly the fields the native (working) link
+          // preview payload carries (/v/t62...enc). The previous
+          // WAWebMediaUploadMmsThumbnail (NEWSLETTER_THUMBNAIL_LINK) upload
+          // produced an UNENCRYPTED thumbnail with no mediaKey, so remote
+          // clients could not decrypt the CDN image (blank/stale preview).
           async function uploadThumbnailHQ(b64: string) {
             if ((window as any).__uploadedThumbnails && (window as any).__uploadedThumbnails[b64]) {
               return (window as any).__uploadedThumbnails[b64];
             }
             (window as any).__uploadedThumbnails = (window as any).__uploadedThumbnails || {};
-            const OpaqueData = window.require('WAWebMediaOpaqueData');
-            const thumbnail = await OpaqueData.createFromBase64Jpeg(b64);
-            const result = await window.require('WAWebMediaUploadMmsThumbnail')({
-              thumbnail,
-              mediaType: window.require('WAWebMmsMediaTypes').MEDIA_TYPES.NEWSLETTER_THUMBNAIL_LINK,
-              uploadOrigin: window.require('WAWebWamEnumUploadOriginType').UPLOAD_ORIGIN_TYPE.UNKNOWN,
-              forwardedFromWeb: true,
-              isViewOnce: false,
-            });
-            const mediaEntry = result && result.mediaEntry;
-            if (!mediaEntry || !mediaEntry.directPath) {
-              throw new Error('thumbnailHQ upload returned no mediaEntry');
+
+            // Decode base64 JPEG into a Blob/File for the upload manager.
+            const binaryData = window.atob(b64);
+            const buffer = new ArrayBuffer(binaryData.length);
+            const view = new Uint8Array(buffer);
+            for (let i = 0; i < binaryData.length; i++) {
+              view[i] = binaryData.charCodeAt(i);
             }
-            // The native (working) payload carries BOTH the CDN path and the
-            // encryption fields. Remote clients decrypt the CDN thumbnail with
-            // mediaKey + mediaKeyTimestamp and verify it with thumbnailEncSha256
-            // (encrypted hash). Without them the CDN thumbnail is unreadable:
-            // senders render only the inline base64 (small card), receivers
-            // show no image or a stale cached one.
+            const file = new File([buffer], 'preview-thumbnail.jpg', {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+
+            // wwebjs WWebJS.generateHash(32): 32 random chars from A-Za-z0-9.
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let mediaKey = '';
+            for (let i = 0; i < 32; i++) {
+              mediaKey += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            const controller = new AbortController();
+            const uploadedInfo = await window
+              .require('WAWebUploadManager')
+              .encryptAndUpload({
+                blob: file,
+                type: 'image',
+                signal: controller.signal,
+                mediaKey,
+                uploadQpl: window
+                  .require('WAWebStartMediaUploadQpl')
+                  .startMediaUploadQpl({ entryPoint: 'MediaUpload' }),
+              });
+
+            // wwebjs WWebJS.getFileHash: SHA-256 of the file bytes, base64.
+            const hashBuffer = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+            const plainSha = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
+            if (!uploadedInfo || !uploadedInfo.directPath) {
+              throw new Error('encryptAndUpload returned no directPath');
+            }
+            // Map to the native preview payload fields:
+            //   thumbnailDirectPath = uploadedInfo.directPath (encrypted CDN)
+            //   thumbnailSha256     = plaintext SHA-256 of the JPEG
+            //   thumbnailEncSha256  = uploadedInfo.encFilehash (encrypted hash)
+            //   mediaKey / mediaKeyTimestamp = from encryptAndUpload
             const entry: any = {
-              thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: result.filehash || mediaEntry.filehash,
-              thumbnailEncSha256: mediaEntry.encFilehash || mediaEntry.encFilehashPlain || mediaEntry.filehash,
-              mediaKey: mediaEntry.mediaKey,
-              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
+              thumbnailDirectPath: uploadedInfo.directPath,
+              thumbnailSha256: plainSha,
+              thumbnailEncSha256: uploadedInfo.encFilehash,
+              mediaKey: uploadedInfo.mediaKey || mediaKey,
+              mediaKeyTimestamp: uploadedInfo.mediaKeyTimestamp,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
-            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | plainSha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | encSha=${String(entry.thumbnailEncSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | uploadKeys=${result && typeof result === 'object' ? Object.keys(result).join(',') : 'n/a'} | entryKeys=${mediaEntry && typeof mediaEntry === 'object' ? Object.keys(mediaEntry).join(',') : 'n/a'}`);
+            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | plainSha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | encSha=${String(entry.thumbnailEncSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | uploadKeys=${uploadedInfo && typeof uploadedInfo === 'object' ? Object.keys(uploadedInfo).join(',') : 'n/a'}`);
             return entry;
           }
 
