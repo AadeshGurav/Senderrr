@@ -731,6 +731,20 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             // Map to the native preview payload fields. Link preview thumbnails
             // use a standard encrypted media payload under the hood. The payload
             // requires the correct plaintext filehash along with the encryption keys.
+            
+            // DIAGNOSTIC LOGGING FOR THUMBNAIL-LINK
+            try {
+              const thbModule = window.require('WAWebMediaUploadMmsThumbnail');
+              const keys = Object.keys(thbModule || {});
+              console.log(`[PatchTrace] WAWebMediaUploadMmsThumbnail keys: ${keys.join(', ')}`);
+              
+              if (thbModule.uploadThumbnail) {
+                console.log(`[PatchTrace] WAWebMediaUploadMmsThumbnail.uploadThumbnail is available.`);
+              }
+            } catch (err: any) {
+              console.log(`[PatchTrace] WAWebMediaUploadMmsThumbnail extraction failed: ${err.message}`);
+            }
+
             const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
               thumbnailSha256: mediaData.filehash,
