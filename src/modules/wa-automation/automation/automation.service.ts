@@ -297,6 +297,18 @@ export class AutomationService {
       if (imageUrl) {
         absImageUrl = new URL(imageUrl, url).href;
         this.logger.log(`[LinkPreview] Stage 3/5 og:image raw: ${imageUrl} | encoded: ${absImageUrl}`);
+
+        // Rewrite the og:image in the HTML we serve to WhatsApp's native
+        // crawler to the percent-encoded ASCII URL. The site serves raw
+        // Unicode (e.g. Devanagari) filenames in og:image; WA's server-side
+        // crawl fetches the raw URL and fails, so native returns no thumbnail
+        // and we fall into the synthetic fallback. With an encoded URL the
+        // native crawl succeeds exactly like English-filename articles — no
+        // fallback needed.
+        if (imageUrl !== absImageUrl) {
+          $('meta[property="og:image"]').attr('content', absImageUrl);
+          $('meta[name="twitter:image"]').attr('content', absImageUrl);
+        }
         
         // Generate a SMALL inline thumbnail that embeds directly in the message.
         // WhatsApp's ExtendedTextMessage has tight inline data limits (~10KB max
@@ -333,7 +345,10 @@ export class AutomationService {
       await engine.warmUpLinkPreview(url, { 
         title, 
         description, 
-        pageHtml: html,
+        // Serve the REWRITTEN HTML (og:image percent-encoded to ASCII) so WA's
+        // native crawler fetches a URL it can actually request — the same
+        // behavior as English-filename articles.
+        pageHtml: $.html(),
         imageUrl: absImageUrl,
         jpegThumbnailBase64,
         thumbnailWidth: parseInt(imageWidth, 10) || 800,
