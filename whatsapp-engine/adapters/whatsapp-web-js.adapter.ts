@@ -720,36 +720,29 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 .InMemoryMediaBlobCache.put(mediaObject.filehash, formData);
             }
 
-            const { uploadMedia } = window.require('WAWebMediaMmsV4Upload');
-            const uploadedMedia = await uploadMedia({
+            const { uploadUnencryptedMedia } = window.require('WAWebMediaMmsV4Upload');
+            const uploadedMedia = await uploadUnencryptedMedia({
               mimetype: mediaData.mimetype,
               mediaObject,
               mediaType,
+              calculateToken: window.require('WAMediaCalculateFilehash').getRandomFilehash,
             });
 
             const mediaEntry = uploadedMedia && uploadedMedia.mediaEntry;
             if (!mediaEntry || !mediaEntry.directPath) {
-              throw new Error('uploadMedia returned no mediaEntry');
+              throw new Error('uploadUnencryptedMedia returned no mediaEntry');
             }
 
-            // Map to the native preview payload fields. The NATIVE (working)
-            // payload carries thumbnailDirectPath + thumbnailSha256 +
-            // thumbnailEncSha256 + mediaKey + mediaKeyTimestamp, where
-            // thumbnailSha256 == thumbnailEncSha256 == the ENCRYPTED CDN blob
-            // hash (mediaEntry.encFilehash). Remote clients download the CDN
-            // bytes and verify their hash against thumbnailSha256; using the
-            // plaintext hash here mismatches and renders a black banner. Keep
-            // the mediaKey/mediaKeyTimestamp from the upload so both sender
-            // and receiver can render the banner.
+            // Map to the native preview payload fields. Link preview thumbnails
+            // must be uploaded UNENCRYPTED. The native payload only provides
+            // thumbnailDirectPath and the plaintext thumbnailSha256. Remote
+            // clients will fail to render the banner if we provide encryption
+            // keys (mediaKey/thumbnailEncSha256) since they expect raw JPEGs.
             const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: mediaEntry.encFilehash || plainSha,
-              thumbnailEncSha256: mediaEntry.encFilehash || plainSha,
-              mediaKey: mediaEntry.mediaKey,
-              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
+              thumbnailSha256: plainSha,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
-            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | sha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | serverEncSha=${mediaEntry.encFilehash ? 'present' : 'MISSING'} | entryKeys=${mediaEntry && typeof mediaEntry === 'object' ? Object.keys(mediaEntry).join(',') : 'n/a'}`);
             return entry;
           }
 
@@ -801,19 +794,25 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   doNotPlayInline: false,
                   isLoading: false,
                   thumbnail: activePreview.jpegThumbnailBase64,
-                  // thumbnailHQ is the ONLY field the native (working) payload
-                  // needs for a banner. Its presence makes WA Web auto-upload
-                  // the HQ image via WAWebMediaUploadMmsThumbnail, which
-                  // produces a CORRECT thumbnailDirectPath + matching hashes +
-                  // mediaKey internally. Hand-injecting our own CDN upload
-                  // fields poisoned that flow (mismatched hashes -> black).
                   thumbnailHQ: activePreview.jpegThumbnailBase64,
                   psp: null,
                 };
-                if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
-                if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
+                
+                // Clamp thumbnail dimensions to a safe maximum (e.g., 600px)
+                // matching the canvas generation size. Passing overly large
+                // original dimensions (like 1672x941) can cause remote clients
+                // to reject the banner.
+                let tWidth = activePreview.thumbnailWidth || 800;
+                let tHeight = activePreview.thumbnailHeight || 400;
+                if (tWidth > 600) {
+                  const ratio = 600 / tWidth;
+                  tWidth = 600;
+                  tHeight = Math.round(tHeight * ratio);
+                }
+                fallbackData.thumbnailWidth = tWidth;
+                fallbackData.thumbnailHeight = tHeight;
 
-                // Upload the HQ thumbnail via WA's own pipeline so remote
+                // Upload the HQ thumbnail unencrypted to the CDN so remote
                 // clients get a real CDN thumbnailDirectPath → full banner.
                 if (activePreview.jpegThumbnailBase64) {
                   return uploadThumbnailHQ(activePreview.jpegThumbnailBase64)

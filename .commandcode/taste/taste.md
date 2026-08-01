@@ -25,7 +25,8 @@ See [workflow/taste.md](workflow/taste.md)
 - Design code to be explicit, flat, and sparse rather than implicit, nested, and dense (adhere to the Zen of Python philosophy). Confidence: 0.85
 - Maintain strict separation of concerns and clear boundaries between Data, Business Logic, and I/O layers. Confidence: 0.95
 - Favor composition over inheritance, and implement design patterns (Factory, Builder, Strategy) only when they measurably simplify the code. Confidence: 0.90
-- Reuse existing rate-limiting, anti-ban, and broadcast infrastructure instead of building ad-specific duplication. Confidence: 0.65
+- Reuse existing proven infrastructure and utilities (rate-limiting, anti-ban, broadcast, and WAF-bypass pipelines like BrowserFetchUtil's image fetch) instead of building ad-specific duplication — the user explicitly directs reuse of "already proven working" pipelines. Confidence: 0.75
+- Percent-encode non-ASCII image URLs (e.g., Devanagari/Marathi filenames on the client's WordPress site) via `new URL(raw, base).href` before fetching, and normalize URL comparisons by decoding both sides (safe `decodeURIComponent` + strip trailing slash/query/hash) before matching — the site serves raw Unicode in og:image while article URLs stay ASCII (/news/NNNNN/). The percent-encoding must also be applied to the HTML served to WhatsApp's native crawler (rewrite `og:image`/`twitter:image` to the encoded ASCII URL and pass the rewritten HTML as `pageHtml`) — that URL-layer rewrite was the accepted root-cause fix for the Devanagari link-preview failures, letting WA's native crawl succeed exactly like English-filename articles (user: "we just had to handle the non-ASCII image filename"). Note: a single 17-article dump showed some ASCII-named images ALSO failing, split by WA's flaky native crawl — so encoding alone doesn't cover WAF/flakiness cases, but for the Unicode-filename case the URL rewrite is the primary fix and the fallback pipeline is only a safety net. Follow-up evidence (Senderrr.log after the rewrite deployed) tempered this: the rewritten HTML was indeed served (htmlLen=244826 vs 245635) and all fetches used the encoded URL, yet native still returned `nativeThumbLen=0` — WA's server-side crawler cannot reach the Hostinger-hosted origin at all (network-level WAF block, independent of the filename), so the URL rewrite is necessary but not sufficient on its own; native success additionally requires the crawler to be able to reach the origin. Confidence: 0.6
 
 # error-handling
 - Never let errors pass silently unless they are explicitly caught, silenced, and documented. Confidence: 1
@@ -39,6 +40,7 @@ See [workflow/taste.md](workflow/taste.md)
 
 # loading-states
 - Use real component-specific skeletons and spinners for all async operations, not generic/fake loading indicators — e.g., show a skeleton of the QR code with a spinner overlay while session is initializing. Confidence: 1
+- Never return the full-page skeleton inside the component's return when `isLoading` is true unconditionally — this unmounts the input on every refetch, destroying focus, scroll position, and other DOM state. Only render skeletons on initial load (e.g. `isLoading && data.length === 0`); show subtle inline spinners or status indicators during background refetches so the page stays mounted. Confidence: 1
 
 # ui-ux
 See [ui-ux/taste.md](ui-ux/taste.md)

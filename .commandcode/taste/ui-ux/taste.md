@@ -10,3 +10,4 @@
 - Adhere strictly to an 8-point spatial system (8px, 16px, 24px) and align all layouts to a baseline grid. Confidence: 0.95
 - Limit typography to a focused scale: approximately 4 core sizes and 2 primary weights (Regular, SemiBold). Confidence: 0.85
 - Use specific, action-oriented microcopy for interactive elements (e.g., "Save changes" instead of "Submit"). Confidence: 0.95
+- Search inputs wired to server queries must be debounced (e.g. 300–400ms) to avoid firing a request on every keystroke — otherwise each keystroke triggers a refetch that unmounts the page and destroys input focus. Confidence: 1
