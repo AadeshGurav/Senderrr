@@ -1,6 +1,8 @@
 /* eslint-disable */
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
+import * as fs from 'fs';
+import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EngineFactory } from '@whatsapp-engine/engine.factory';
@@ -46,13 +48,52 @@ export class AutomationService {
   private readonly rateLimitRetryDelay: number;
 
   /**
-   * Cache of generated link-preview thumbnails keyed by article URL.
-   * Hostinger WAF rate-limits the Render IP when the same Devanagari image
-   * is re-fetched on every broadcast (429 on raw + browser fetch). Caching
-   * means each article's og:image is fetched at most once per process.
+   * Disk-backed cache of generated link-preview thumbnails keyed by article URL.
+   * Hostinger WAF rate-limits the Render IP when the same Devanagari image is
+   * re-fetched on every broadcast (429 on raw + browser fetch). Persisting to
+   * disk means each article's og:image is fetched at most once, even across
+   * process restarts.
    */
   private readonly previewThumbnailCache = new Map<string, { base64?: string; at: number }>();
-  private readonly PREVIEW_THUMBNAIL_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+  private readonly PREVIEW_THUMBNAIL_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+  private readonly previewThumbnailCacheFile = path.join(
+    process.cwd(),
+    'data',
+    'link-preview-thumbnails.json',
+  );
+
+  private loadPreviewThumbnailCache(): void {
+    try {
+      if (fs.existsSync(this.previewThumbnailCacheFile)) {
+        const parsed = JSON.parse(fs.readFileSync(this.previewThumbnailCacheFile, 'utf-8')) as Record<
+          string,
+          { base64?: string; at: number }
+        >;
+        for (const [k, v] of Object.entries(parsed)) {
+          if (v && v.base64 && Date.now() - v.at < this.PREVIEW_THUMBNAIL_TTL_MS) {
+            this.previewThumbnailCache.set(k, v);
+          }
+        }
+        this.logger.log(`[LinkPreview] Loaded ${this.previewThumbnailCache.size} cached thumbnails from disk`);
+      }
+    } catch (err) {
+      this.logger.warn(`[LinkPreview] Could not load thumbnail cache: ${(err as Error).message}`);
+    }
+  }
+
+  private persistPreviewThumbnailCache(): void {
+    try {
+      const dir = path.dirname(this.previewThumbnailCacheFile);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const payload: Record<string, { base64?: string; at: number }> = {};
+      for (const [k, v] of this.previewThumbnailCache.entries()) {
+        if (Date.now() - v.at < this.PREVIEW_THUMBNAIL_TTL_MS) payload[k] = v;
+      }
+      fs.writeFileSync(this.previewThumbnailCacheFile, JSON.stringify(payload), 'utf-8');
+    } catch (err) {
+      this.logger.warn(`[LinkPreview] Could not persist thumbnail cache: ${(err as Error).message}`);
+    }
+  }
 
   constructor(
     private readonly engineFactory: EngineFactory,
@@ -66,6 +107,7 @@ export class AutomationService {
   ) {
     this.maxRetries = configService.get<number>('automation.maxRetryAttempts', 3);
     this.rateLimitRetryDelay = configService.get<number>('automation.rateLimitRetryDelay', 3600);
+    this.loadPreviewThumbnailCache();
   }
 
   /**

@@ -669,12 +669,21 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             if (!mediaEntry || !mediaEntry.directPath) {
               throw new Error('thumbnailHQ upload returned no mediaEntry');
             }
-            const entry = {
+            // The native (working) payload carries BOTH the CDN path and the
+            // encryption fields. Remote clients decrypt the CDN thumbnail with
+            // mediaKey + mediaKeyTimestamp and verify it with thumbnailEncSha256
+            // (encrypted hash). Without them the CDN thumbnail is unreadable:
+            // senders render only the inline base64 (small card), receivers
+            // show no image or a stale cached one.
+            const entry: any = {
               thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: result.filehash,
+              thumbnailSha256: result.filehash || mediaEntry.filehash,
+              thumbnailEncSha256: mediaEntry.encFilehash || mediaEntry.encFilehashPlain || mediaEntry.filehash,
+              mediaKey: mediaEntry.mediaKey,
+              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
             };
             (window as any).__uploadedThumbnails[b64] = entry;
-            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | sha=${String(entry.thumbnailSha256).slice(0, 16)}...`);
+            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 50)} | plainSha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | encSha=${String(entry.thumbnailEncSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | uploadKeys=${result && typeof result === 'object' ? Object.keys(result).join(',') : 'n/a'} | entryKeys=${mediaEntry && typeof mediaEntry === 'object' ? Object.keys(mediaEntry).join(',') : 'n/a'}`);
             return entry;
           }
 
