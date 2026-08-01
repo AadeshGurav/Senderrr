@@ -692,7 +692,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             const mediaObject = window
               .require('WAWebMediaStorage')
               .getOrCreateMediaObject(mediaData.filehash);
-            const mediaType = 'image';
+            const mediaType = 'thumbnail-link';
 
             if (!(mediaData.mediaBlob instanceof OpaqueData)) {
               mediaData.mediaBlob = await OpaqueData.createFromData(
