@@ -356,7 +356,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   url: href,
                   keys: keys,
                   data: JSON.parse(JSON.stringify(preview, (k: string, v: any) => {
-                    if (k === 'thumbnail' && typeof v === 'string') return `<base64:${v.length}chars>`;
+                    if ((k === 'thumbnail' || k === 'thumbnailHQ') && typeof v === 'string') return `<base64:${v.length}chars>`;
                     return v;
                   }))
                 };
