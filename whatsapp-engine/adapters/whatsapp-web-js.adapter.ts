@@ -692,7 +692,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             const mediaObject = window
               .require('WAWebMediaStorage')
               .getOrCreateMediaObject(mediaData.filehash);
-            const mediaType = 'thumbnail-link';
+            const mediaType = 'image';
 
             if (!(mediaData.mediaBlob instanceof OpaqueData)) {
               mediaData.mediaBlob = await OpaqueData.createFromData(
@@ -768,13 +768,17 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
             return original(link)
               .then((native: any) => {
                 const nativeThumbnail: string = native?.data?.thumbnail || '';
-                console.log(`[PatchTrace] native resolved for ${href.slice(0, 100)} | nativeThumbLen=${nativeThumbnail.length} | nativeKeys=${native?.data ? Object.keys(native.data).join(',') : 'n/a'} | decide=${nativeThumbnail.length > 100 ? 'KEEP_NATIVE' : 'INJECT_FALLBACK'}`);
+                const safeNative = native?.data ? { ...native.data, thumbnail: nativeThumbnail ? `<base64:${nativeThumbnail.length}>` : undefined, thumbnailHQ: native?.data?.thumbnailHQ ? `<base64:${native.data.thumbnailHQ.length}>` : undefined } : {};
+                console.log(`[PatchTrace] native getLinkPreview resolved for ${href.slice(0, 100)}:\n` + JSON.stringify(safeNative, null, 2));
+                
                 if (nativeThumbnail.length > 100) {
                   // Native crawl succeeded with a real image — preserve banner.
+                  console.log(`[PatchTrace] native thumb found (${nativeThumbnail.length} chars) -> decide=KEEP_NATIVE`);
                   return native;
                 }
 
                 // Native has no usable thumbnail — inject ours as fallback.
+                console.log(`[PatchTrace] native thumb empty -> decide=INJECT_FALLBACK`);
                 if (!activePreview.jpegThumbnailBase64) {
                   console.log('[PatchTrace] native empty BUT no fallback thumbnail to inject — preview will be text-only');
                 }
@@ -793,6 +797,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   thumbnailHQ: activePreview.jpegThumbnailBase64,
                   psp: null,
                 };
+                
+                const safeFallback = { ...fallbackData, thumbnail: fallbackData.thumbnail ? `<base64:${fallbackData.thumbnail.length}>` : undefined, thumbnailHQ: fallbackData.thumbnailHQ ? `<base64:${fallbackData.thumbnailHQ.length}>` : undefined };
+                console.log(`[PatchTrace] fallbackData base constructed:\n` + JSON.stringify(safeFallback, null, 2));
                 
                 // Clamp thumbnail dimensions to a safe maximum (e.g., 600px)
                 // matching the canvas generation size. Passing overly large
@@ -814,7 +821,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   return uploadThumbnailHQ(activePreview.jpegThumbnailBase64)
                     .then((entry: any) => {
                       Object.assign(fallbackData, entry);
-                      console.log(`[PatchTrace] BANNER payload built: directPath=${String(fallbackData.thumbnailDirectPath).slice(0, 50)} | thumbnailHQ=${fallbackData.thumbnailHQ ? 'present' : 'MISSING'}`);
+                      const safePayload = { ...fallbackData, thumbnail: fallbackData.thumbnail ? `<base64:${fallbackData.thumbnail.length}>` : undefined, thumbnailHQ: fallbackData.thumbnailHQ ? `<base64:${fallbackData.thumbnailHQ.length}>` : undefined };
+                      console.log(`[PatchTrace] BANNER payload built (with CDN info):\n` + JSON.stringify(safePayload, null, 2));
                       return { url: href, data: fallbackData, preview: true, subtype: 'url' };
                     })
                     .catch((err: Error) => {
@@ -823,6 +831,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                     });
                 }
 
+                console.log(`[PatchTrace] BANNER payload built (NO CDN info, inline only)`);
                 return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               })
               .catch(() => {
@@ -846,6 +855,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   thumbnailHQ: activePreview.jpegThumbnailBase64,
                   psp: null,
                 };
+                
+                const safeFallback = { ...fallbackData, thumbnail: fallbackData.thumbnail ? `<base64:${fallbackData.thumbnail.length}>` : undefined, thumbnailHQ: fallbackData.thumbnailHQ ? `<base64:${fallbackData.thumbnailHQ.length}>` : undefined };
+                console.log(`[PatchTrace] (catch) fallbackData base constructed:\n` + JSON.stringify(safeFallback, null, 2));
+
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
                 if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
 
@@ -853,6 +866,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                   return uploadThumbnailHQ(activePreview.jpegThumbnailBase64)
                     .then((entry: any) => {
                       Object.assign(fallbackData, entry);
+                      const safePayload = { ...fallbackData, thumbnail: fallbackData.thumbnail ? `<base64:${fallbackData.thumbnail.length}>` : undefined, thumbnailHQ: fallbackData.thumbnailHQ ? `<base64:${fallbackData.thumbnailHQ.length}>` : undefined };
+                      console.log(`[PatchTrace] (catch) BANNER payload built (with CDN info):\n` + JSON.stringify(safePayload, null, 2));
                       return { url: href, data: fallbackData, preview: true, subtype: 'url' };
                     })
                     .catch(() => {
@@ -860,6 +875,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                     });
                 }
                 
+                console.log(`[PatchTrace] (catch) BANNER payload built (NO CDN info, inline only)`);
                 return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               });
           };
