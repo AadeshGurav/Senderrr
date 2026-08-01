@@ -645,114 +645,6 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
           const original = mod.getLinkPreview.bind(mod);
 
-          // Upload our resized JPEG through WA's regular encrypted MEDIA
-          // pipeline (WAWebMediaMmsV4Upload.uploadMedia, the same path wwebjs
-          // uses to send images — Utils.js processMediaData). This is what the
-          // NATIVE (working) link-preview thumbnail uses: its directPath is
-          // /v/t62...enc, a regular encrypted image CDN entry with a full
-          // mediaEntry (directPath + encFilehash + mediaKey +
-          // mediaKeyTimestamp). The previous encryptAndUpload(type:'image')
-          // produced /o1/v/t24/f2/m234/... — a "link thumbnail" CDN class that
-          // remote clients cannot decrypt (black banner), even with the right
-          // key fields present.
-          async function uploadThumbnailHQ(b64: string) {
-            if ((window as any).__uploadedThumbnails && (window as any).__uploadedThumbnails[b64]) {
-              return (window as any).__uploadedThumbnails[b64];
-            }
-            (window as any).__uploadedThumbnails = (window as any).__uploadedThumbnails || {};
-
-            // Decode base64 JPEG into a File for WA's media prep pipeline.
-            const binaryData = window.atob(b64);
-            const buffer = new ArrayBuffer(binaryData.length);
-            const view = new Uint8Array(buffer);
-            for (let i = 0; i < binaryData.length; i++) {
-              view[i] = binaryData.charCodeAt(i);
-            }
-            const file = new File([buffer], 'preview-thumbnail.jpg', {
-              type: 'image/jpeg',
-              lastModified: Date.now(),
-            });
-
-            // Plaintext SHA-256 of the JPEG bytes (computed directly, so there
-            // is no ambiguity with the encrypted hash).
-            const hashBuffer = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-            const plainSha = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
-
-            // Replicate wwebjs processMediaData (Utils.js) exactly.
-            const OpaqueData = window.require('WAWebMediaOpaqueData');
-            const opaqueData = await OpaqueData.createFromData(file, file.type);
-            const mediaPrep = window
-              .require('WAWebPrepRawMedia')
-              .prepRawMedia(opaqueData, { asSticker: false, asGif: false, isPtt: false, asDocument: false });
-            const mediaData = await mediaPrep.waitForPrep();
-            if (!mediaData.filehash) {
-              throw new Error('media-fault: thumbnail filehash undefined');
-            }
-
-            const mediaObject = window
-              .require('WAWebMediaStorage')
-              .getOrCreateMediaObject(mediaData.filehash);
-            const mediaType = window.require('WAWebMmsMediaTypes').msgToMediaType({
-              type: mediaData.type,
-              isGif: mediaData.isGif,
-              isNewsletter: false,
-            });
-
-            if (!(mediaData.mediaBlob instanceof OpaqueData)) {
-              mediaData.mediaBlob = await OpaqueData.createFromData(
-                mediaData.mediaBlob,
-                mediaData.mediaBlob.type,
-              );
-            }
-            mediaData.renderableUrl = mediaData.mediaBlob.url();
-            mediaObject.consolidate(mediaData.toJSON());
-            mediaData.mediaBlob.autorelease();
-
-            const shouldUseMediaCache = window
-              .require('WAWebMediaDataUtils')
-              .shouldUseMediaCache(
-                window.require('WAWebMmsMediaTypes').castToV4(mediaObject.type),
-              );
-            if (shouldUseMediaCache && mediaData.mediaBlob instanceof OpaqueData) {
-              const formData = mediaData.mediaBlob.formData();
-              window
-                .require('WAWebMediaInMemoryBlobCache')
-                .InMemoryMediaBlobCache.put(mediaObject.filehash, formData);
-            }
-
-            const { uploadMedia } = window.require('WAWebMediaMmsV4Upload');
-            const uploadedMedia = await uploadMedia({
-              mimetype: mediaData.mimetype,
-              mediaObject,
-              mediaType,
-            });
-
-            const mediaEntry = uploadedMedia && uploadedMedia.mediaEntry;
-            if (!mediaEntry || !mediaEntry.directPath) {
-              throw new Error('uploadMedia returned no mediaEntry');
-            }
-
-            // Map to the native preview payload fields. The NATIVE (working)
-            // payload carries thumbnailDirectPath + thumbnailSha256 +
-            // thumbnailEncSha256 + mediaKey + mediaKeyTimestamp, where
-            // thumbnailSha256 == thumbnailEncSha256 == the ENCRYPTED CDN blob
-            // hash (mediaEntry.encFilehash). Remote clients download the CDN
-            // bytes and verify their hash against thumbnailSha256; using the
-            // plaintext hash here mismatches and renders a black banner. Keep
-            // the mediaKey/mediaKeyTimestamp from the upload so both sender
-            // and receiver can render the banner.
-            const entry: any = {
-              thumbnailDirectPath: mediaEntry.directPath,
-              thumbnailSha256: mediaEntry.encFilehash || plainSha,
-              thumbnailEncSha256: mediaEntry.encFilehash || plainSha,
-              mediaKey: mediaEntry.mediaKey,
-              mediaKeyTimestamp: mediaEntry.mediaKeyTimestamp,
-            };
-            (window as any).__uploadedThumbnails[b64] = entry;
-            console.log(`[PatchTrace] thumbnailHQ uploaded: directPath=${String(entry.thumbnailDirectPath).slice(0, 60)} | sha=${String(entry.thumbnailSha256 || '').slice(0, 16)}... | mediaKey=${entry.mediaKey ? 'present' : 'MISSING'} | mediaKeyTs=${entry.mediaKeyTimestamp ? 'present' : 'MISSING'} | serverEncSha=${mediaEntry.encFilehash ? 'present' : 'MISSING'} | entryKeys=${mediaEntry && typeof mediaEntry === 'object' ? Object.keys(mediaEntry).join(',') : 'n/a'}`);
-            return entry;
-          }
-
           mod.getLinkPreview = (link: any) => {
             const href: string = link?.href || link?.url || (typeof link === 'string' ? link : '');
             
@@ -813,21 +705,13 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
                 if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
 
-                // Upload the HQ thumbnail via WA's own pipeline so remote
-                // clients get a real CDN thumbnailDirectPath → full banner.
-                if (activePreview.jpegThumbnailBase64) {
-                  return uploadThumbnailHQ(activePreview.jpegThumbnailBase64)
-                    .then((entry: any) => {
-                      Object.assign(fallbackData, entry);
-                      console.log(`[PatchTrace] BANNER payload built: directPath=${String(fallbackData.thumbnailDirectPath).slice(0, 50)} | thumbnailHQ=${fallbackData.thumbnailHQ ? 'present' : 'MISSING'}`);
-                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
-                    })
-                    .catch((err: Error) => {
-                      console.log(`[PatchTrace] thumbnailHQ upload FAILED (${err.message}) — inline-only fallback`);
-                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
-                    });
-                }
-
+                // Return fallback with thumbnailHQ — WA Web's own message
+                // serialization (WAWebMediaUploadMmsThumbnail) will upload
+                // the image through the correct CDN pipeline, producing a
+                // /v/t62...enc directPath that remote clients can decrypt.
+                // Previously, manual uploadThumbnailHQ produced /o1/v/t24/
+                // paths (link-thumbnail CDN class) → black/broken banners.
+                console.log(`[PatchTrace] FALLBACK payload: thumbnailHQ=${fallbackData.thumbnailHQ ? `present (${fallbackData.thumbnailHQ.length} chars)` : 'MISSING'} | dims=${fallbackData.thumbnailWidth}x${fallbackData.thumbnailHeight}`);
                 return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               })
               .catch(() => {
@@ -854,17 +738,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
                 if (activePreview.thumbnailWidth) fallbackData.thumbnailWidth = activePreview.thumbnailWidth;
                 if (activePreview.thumbnailHeight) fallbackData.thumbnailHeight = activePreview.thumbnailHeight;
 
-                if (activePreview.jpegThumbnailBase64) {
-                  return uploadThumbnailHQ(activePreview.jpegThumbnailBase64)
-                    .then((entry: any) => {
-                      Object.assign(fallbackData, entry);
-                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
-                    })
-                    .catch(() => {
-                      return { url: href, data: fallbackData, preview: true, subtype: 'url' };
-                    });
-                }
-                
+                console.log(`[PatchTrace] REJECTED FALLBACK payload: thumbnailHQ=${fallbackData.thumbnailHQ ? `present (${fallbackData.thumbnailHQ.length} chars)` : 'MISSING'} | dims=${fallbackData.thumbnailWidth}x${fallbackData.thumbnailHeight}`);
                 return { url: href, data: fallbackData, preview: true, subtype: 'url' };
               });
           };
