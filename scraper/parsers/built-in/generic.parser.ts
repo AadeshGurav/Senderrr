@@ -223,39 +223,12 @@ export class GenericParser implements IArticleParser {
         if (!isNaN(d.getTime())) publishedAt = d;
       }
 
-      // Bullet points: find the FIRST h3.wp-block-heading inside the primary
-      // content container, then collect it and all adjacent h3.wp-block-heading
-      // siblings that follow it directly. This picks up a clean list of headings
-      // like sub-topics/key-points without grabbing sidebar/footer noise.
-      const foundBulletPoints: string[] = [];
-      const containerSelectors = [
-        '.td-post-content', '.entry-content', '.post-content',
-        '.article-body', '.article-content', '.content',
-        '.td-block-row', '.story-body', '.news-body',
-        'article', 'main', '.post',
-      ];
-      for (const sel of containerSelectors) {
-        const $container = $(sel).first();
-        if ($container.length === 0) continue;
-
-        // Find the FIRST h3.wp-block-heading
-        const $first = $container.find('h3.wp-block-heading').first();
-        if ($first.length === 0) continue;
-
-        // Include it, then walk adjacent siblings one by one.
-        // Only include the next h3 if it directly follows without
-        // any non-whitespace-only elements in between (no <p>, <div>, ads, etc.).
-        const text = $first.text().trim();
-        if (text.length > 5) foundBulletPoints.push(text);
-        let $cur = $first.next();
-        while ($cur.length && $cur.is('h3.wp-block-heading')) {
-          const t = $cur.text().trim();
-          if (t.length > 5) foundBulletPoints.push(t);
-          $cur = $cur.next();
-        }
-
-        if (foundBulletPoints.length > 0) break;
-      }
+      // Bullet points: the client's markup is inconsistent (headings/classes vary),
+      // so anchor on the article image instead — the first text block that follows
+      // it is the lede/summary. Ad blocks (.code-block) may sit between the image
+      // and the content, so they are skipped. Falls back to the first text block
+      // in the content container when no image is present.
+      const foundBulletPoints = this.extractBulletPoints($);
       if (foundBulletPoints.length > 0) bulletPoints = foundBulletPoints;
 
       // JSON-LD fallback for date
@@ -337,6 +310,90 @@ export class GenericParser implements IArticleParser {
       lines.push(`🔗 *Read more:* ${article.url}`);
     }
     return lines.join('\n');
+  }
+
+  // ─── Bullet extraction helper ─────────────────────────────────
+
+  /**
+   * Finds the lede/summary block of an article.
+   *
+   * The client's markup is not consistent (the summary is not always an h3 or a
+   * fixed class), so we anchor on the article image instead: the first text block
+   * (p, h1-h6, blockquote, li) after the image is the lede. Ad blocks
+   * (.code-block) may sit between the image and the content, so they are skipped.
+   * When no image exists, falls back to the first text block in the content
+   * container.
+   */
+  private extractBulletPoints($: cheerio.CheerioAPI): string[] {
+    const textSelectors = 'p, h1, h2, h3, h4, h5, h6, blockquote, li';
+
+    const containerSelectors = [
+      '.td-post-content', '.entry-content', '.post-content',
+      '.article-body', '.article-content', '.content',
+      '.td-block-row', '.story-body', '.news-body',
+      'article', 'main', '.post',
+    ];
+
+    for (const sel of containerSelectors) {
+      const $container = $(sel).first();
+      if ($container.length === 0) continue;
+
+      // Prefer the featured image, then any image inside the container.
+      const $image = $container.find('.td-post-featured-image img').first()
+        || $container.find('img').first();
+
+      const candidates = $container.find(textSelectors);
+
+      let found = '';
+      if ($image.length) {
+        // Walk forward from the image, skipping ad blocks and empty text,
+        // and take the FIRST text block after it.
+        let $el = $image.first().parent();
+        while ($el.length && $el[0] !== $container[0]) {
+          if (!$el.is('.code-block')) {
+            const $text = $el.find(textSelectors).filter((_, node) => {
+              const $node = $(node);
+              return !$node.closest('.code-block').length && $node.text().trim().length > 5;
+            }).first();
+            if ($text.length) {
+              found = $text.text().trim();
+              break;
+            }
+          }
+          $el = $el.next();
+        }
+      }
+
+      // No image (or nothing after it) — take the first text block in the container.
+      if (!found) {
+        const $first = candidates.filter((_, node) => {
+          const $node = $(node);
+          return !$node.closest('.code-block').length && $node.text().trim().length > 5;
+        }).first();
+        if ($first.length) {
+          found = $first.text().trim();
+        }
+      }
+
+      if (found) {
+        // If a list item was captured, keep only its own text (not nested lists).
+        return [this.stripNestedListText(found, $)];
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * If the extracted text comes from an <li>, drop any nested list text so we
+   * don't leak child bullet items into the parent's summary.
+   */
+  private stripNestedListText(text: string, $: cheerio.CheerioAPI): string {
+    // If no list markup present, nothing to strip.
+    if (!/<ul|<\/?ol/i.test(text)) return text;
+    const $div = $('<div/>').html(text);
+    $div.find('ul, ol').remove();
+    return $div.text().trim();
   }
 
   // ─── Regex fallback helpers ───────────────────────────────────
