@@ -11,3 +11,4 @@
 - Limit typography to a focused scale: approximately 4 core sizes and 2 primary weights (Regular, SemiBold). Confidence: 0.85
 - Use specific, action-oriented microcopy for interactive elements (e.g., "Save changes" instead of "Submit"). Confidence: 0.95
 - Search inputs wired to server queries must be debounced (e.g. 300–400ms) to avoid firing a request on every keystroke — otherwise each keystroke triggers a refetch that unmounts the page and destroys input focus. Confidence: 1
+- Form numeric inputs must enforce only real business constraints — never arbitrary hardcoded caps. The campaign "Package Days" field was capped at 30 (`max="30"` + a blur clamp) even though campaigns can run any number of days; the fix removed the cap and enforced positive integers (≥1) with a clear validation message at submit (no negative or 0 input). Range limits should come from the domain, not convenience. Confidence: 0.7
