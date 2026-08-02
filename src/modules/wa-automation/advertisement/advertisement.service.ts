@@ -118,18 +118,107 @@ export class AdvertisementService {
   }
 
   /**
-   * Auto-transition ACTIVE ads whose package days have been fully used to COMPLETED.
-   * Called automatically at the start of findAll() and findOne().
+   * Per-status campaign counts for the filter chips, plus how many ACTIVE
+   * campaigns were sent at least once today (same signal as the green card tint).
+   */
+  async getCounts(): Promise<{
+    all: number;
+    draft: number;
+    active: number;
+    completed: number;
+    cancelled: number;
+    activeSentToday: number;
+  }> {
+    const ads = await this.adRepo.find({ select: ['id', 'status'] });
+
+    const counts = {
+      all: ads.length,
+      draft: 0,
+      active: 0,
+      completed: 0,
+      cancelled: 0,
+      activeSentToday: 0,
+    };
+
+    for (const ad of ads) {
+      if (ad.status === AdvertisementStatus.DRAFT) counts.draft++;
+      else if (ad.status === AdvertisementStatus.ACTIVE) counts.active++;
+      else if (ad.status === AdvertisementStatus.COMPLETED) counts.completed++;
+      else if (ad.status === AdvertisementStatus.CANCELLED) counts.cancelled++;
+    }
+
+    if (counts.active > 0) {
+      const activeAds = await this.adRepo.find({
+        where: { status: AdvertisementStatus.ACTIVE },
+        select: ['id'],
+      });
+      const activeIds = activeAds.map(a => a.id);
+
+      const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
+      const todayStart = this.getTodayStartInTimezone(tz);
+
+      const broadcastRows = await this.broadcastRepo
+        .createQueryBuilder('b')
+        .select('b.id', 'id')
+        .addSelect('b.advertisementId', 'advertisementId')
+        .where('b.advertisementId IN (:...activeIds)', { activeIds })
+        .getRawMany();
+      const broadcastIds = broadcastRows.map(r => (r as any).id);
+
+      if (broadcastIds.length > 0) {
+        const firedRows = await this.taskRepo
+          .createQueryBuilder('task')
+          .select('DISTINCT task.broadcastId', 'broadcastId')
+          .where('task.broadcastId IN (:...broadcastIds)', { broadcastIds })
+          .andWhere('task.status = :sent', { sent: MessageTaskStatus.SENT })
+          .andWhere('task.lastAttemptAt >= :todayStart', { todayStart })
+          .getRawMany();
+
+        const firedBroadcastIds = new Set(firedRows.map(r => (r as any).broadcastId));
+        const firedAds = new Set(
+          broadcastRows.filter(r => firedBroadcastIds.has(r.id)).map(r => (r as any).advertisementId),
+        );
+        counts.activeSentToday = firedAds.size;
+      }
+    }
+
+    return counts;
+  }
+
+  /**
+   * Auto-transition ACTIVE ads to COMPLETED once their package window has fully
+   * elapsed in the configured timezone:
+   *
+   * - Sent campaigns (daysUsed > 0): completed only after the final day's midnight
+   *   has passed — the last day itself stays ACTIVE until it ends. The reference
+   *   timestamp is the final day's dispatch (`lastDispatchedAt`).
+   * - Never-sent campaigns (daysUsed === 0): completed once `packageDays` days have
+   *   passed since the reference start (`lastDispatchedAt ?? createdAt`), so stale
+   *   ACTIVE campaigns do not linger forever.
+   *
+   * Called automatically at the start of findAll()/findOne() and on a minute cron.
    */
   async checkExpired(): Promise<void> {
     try {
-      const expired = await this.adRepo
+      const tz = await this.settingsService.get('TIMEZONE', 'Asia/Kolkata');
+      const todayStart = this.getTodayStartInTimezone(tz);
+
+      const activeAds = await this.adRepo
         .createQueryBuilder('ad')
         .leftJoinAndSelect('ad.mediaAttachments', 'media')
         .where('ad.status = :active', { active: AdvertisementStatus.ACTIVE })
-        .andWhere('ad.daysUsed >= ad.packageDays')
         .getMany();
-      for (const ad of expired) {
+
+      const dayMs = 24 * 60 * 60 * 1000;
+      for (const ad of activeAds) {
+        const isElapsed =
+          ad.daysUsed > 0
+            ? ad.daysUsed >= ad.packageDays &&
+              (!ad.lastDispatchedAt || new Date(ad.lastDispatchedAt) < todayStart)
+            : (!ad.lastDispatchedAt ? new Date(ad.createdAt) : new Date(ad.lastDispatchedAt)).getTime() + ad.packageDays * dayMs < todayStart.getTime();
+
+        if (!isElapsed) continue;
+
         ad.status = AdvertisementStatus.COMPLETED;
         await this.adRepo.save(ad);
         if (ad.mediaAttachments && ad.mediaAttachments.length > 0) {
@@ -304,6 +393,9 @@ export class AdvertisementService {
       .addSelect('task.lastAttemptAt', 'timestamp')
       .leftJoin('task.group', 'g')
       .where('task.broadcastId IN (:...broadcastIds)', { broadcastIds })
+      .andWhere('task.status IN (:...finalStatuses)', {
+        finalStatuses: [MessageTaskStatus.SENT, MessageTaskStatus.FAILED],
+      })
       .orderBy('task.lastAttemptAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -538,15 +630,6 @@ export class AdvertisementService {
     if (isNewDay) {
       ad.daysUsed++;
       ad.lastDispatchedAt = new Date();
-      // Only auto-complete if daysUsed exceeds packageDays AND it's a new day
-      if (ad.daysUsed >= ad.packageDays) {
-        ad.status = AdvertisementStatus.COMPLETED;
-        const adWithMedia = await this.findOne(id);
-        if (adWithMedia?.mediaAttachments?.length) {
-          await this.deleteMediaFilesOnDisk(adWithMedia.mediaAttachments);
-          await this.mediaRepo.remove(adWithMedia.mediaAttachments);
-        }
-      }
       await this.adRepo.save(ad);
       this.logger.log(`Ad #${id}: daysUsed=${ad.daysUsed}/${ad.packageDays} (new day)`);
     } else {

@@ -251,6 +251,14 @@ export function useWaAdvertisementsQuery(status?: string, search?: string) {
   });
 }
 
+export function useAdCountsQuery() {
+  return useQuery({
+    queryKey: [...waKeys.advertisements, 'counts'],
+    queryFn: () => adApi.getCounts(),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useAdTelemetryQuery(id: number) {
   return useQuery({
     queryKey: [...waKeys.advertisements, 'telemetry', id],

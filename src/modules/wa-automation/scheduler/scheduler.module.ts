@@ -7,6 +7,7 @@ import { ScraperModule } from '@scraper/scraper.module';
 import { CampaignModule } from '../campaign/campaign.module';
 import { AutomationModule } from '../automation/automation.module';
 import { SettingsModule } from '../settings/settings.module';
+import { AdvertisementModule } from '../advertisement/advertisement.module';
 import { BroadcastEvent } from '@database/entities/wa-automation/broadcast-event.entity';
 
 @Module({
@@ -18,6 +19,7 @@ import { BroadcastEvent } from '@database/entities/wa-automation/broadcast-event
     CampaignModule,
     AutomationModule,
     SettingsModule,
+    AdvertisementModule,
   ],
   providers: [SchedulerService],
 })

@@ -288,7 +288,7 @@ async function uploadFile<T>(endpoint: string, file: File, fieldName = 'file'): 
         try {
           const response = JSON.parse(xhr.responseText);
           resolve(response as T);
-        } catch (e) {
+        } catch {
           resolve({} as T);
         }
       } else {
@@ -296,7 +296,7 @@ async function uploadFile<T>(endpoint: string, file: File, fieldName = 'file'): 
         try {
           const body = JSON.parse(xhr.responseText);
           if (body.message) message = body.message;
-        } catch (e) {
+        } catch {
           // ignore
         }
         reject(new Error(message));
@@ -317,6 +317,7 @@ export const adApi = {
     const qs = params.toString();
     return request<ApiAd[]>(`/advertisements${qs ? `?${qs}` : ''}`);
   },
+  getCounts: () => request<{ all: number; draft: number; active: number; completed: number; cancelled: number; activeSentToday: number }>('/advertisements/counts'),
   get: (id: number) => request<ApiAd>(`/advertisements/${id}`),
   getStatistics: (id: number) => request<Record<string, unknown>>(`/advertisements/${id}/statistics`),
   getTelemetry: (id: number) => request<Record<string, unknown> & { status?: string }>(`/advertisements/${id}/telemetry`),

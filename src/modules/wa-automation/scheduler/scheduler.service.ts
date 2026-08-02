@@ -12,6 +12,7 @@ import { RateLimiterService } from '../automation/rate-limiter.service';
 import { WorkerTrackerService } from '../automation/worker-tracker.service';
 import { GroupSyncService } from '../automation/group-sync.service';
 import { SettingsService } from '../settings/settings.service';
+import { AdvertisementService } from '../advertisement/advertisement.service';
 import { BroadcastEvent, BroadcastStatus } from '@database/entities/wa-automation/broadcast-event.entity';
 import { GenericParser } from '@scraper/parsers/built-in/generic.parser';
 import { ConfigService } from '@nestjs/config';
@@ -33,6 +34,7 @@ export class SchedulerService {
     private readonly groupSyncService: GroupSyncService,
     private readonly settingsService: SettingsService,
     private readonly adminSessionService: AdminSessionService,
+    private readonly adService: AdvertisementService,
     @InjectRepository(BroadcastEvent, 'data')
     private readonly broadcastRepo: Repository<BroadcastEvent>,
     private readonly configService: ConfigService,
@@ -193,6 +195,17 @@ export class SchedulerService {
   async resolveStaleBroadcasts(): Promise<void> {
     const count = await this.campaignService.reDispatchStalledBroadcasts();
     if (count > 0) this.logger.log(`Resolved ${count} stale broadcasts stuck IN_PROGRESS`);
+  }
+
+  // ─── Ad campaign completion: every minute ───
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async checkAdCampaigns(): Promise<void> {
+    try {
+      await this.adService.checkExpired();
+    } catch (err) {
+      this.logger.warn(`Ad campaign completion check failed: ${(err as Error).message}`);
+    }
   }
 
   // ─── Private ──────────────────────────────────────────────────

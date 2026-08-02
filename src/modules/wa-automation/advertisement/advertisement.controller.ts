@@ -46,6 +46,12 @@ export class AdvertisementController {
     return this.adService.findAll(status, search);
   }
 
+  @Get('counts')
+  @ApiOperation({ summary: 'Per-status campaign counts plus active-sent-today' })
+  async getCounts() {
+    return this.adService.getCounts();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get advertisement details' })
   async findOne(@Param('id', ParseIntPipe) id: number) {

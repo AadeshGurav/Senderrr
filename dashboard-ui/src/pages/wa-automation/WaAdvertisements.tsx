@@ -11,6 +11,7 @@ import { CardGridSkeleton } from '../../components/Skeleton';
 import { useToast } from '../../components/Toast';
 import {
   useWaAdvertisementsQuery,
+  useAdCountsQuery,
   useDeleteAdMutation,
   useAdTelemetryQuery,
   useWaGroupsQuery,
@@ -128,6 +129,7 @@ export default function WaAdvertisements() {
   const [togglingStatus, setTogglingStatus] = useState<number | null>(null);
 
   const { data: ads = [], isLoading, isFetching } = useWaAdvertisementsQuery(statusFilter, debouncedSearch);
+  const { data: counts } = useAdCountsQuery();
   const { data: groups = [] } = useWaGroupsQuery();
   const { data: communities = [] } = useWaCommunitiesQuery();
   const deleteMutate = useDeleteAdMutation();
@@ -249,12 +251,18 @@ export default function WaAdvertisements() {
       return;
     }
 
+    const packageDays = Number(formData.packageDays);
+    if (!Number.isInteger(packageDays) || packageDays < 1) {
+      showError('Validation', 'Package Days must be a positive number');
+      return;
+    }
+
     setCreating(true);
     try {
       const payload: Record<string, unknown> = {
         title: formData.title,
         targetType: formData.targetType,
-        packageDays: formData.packageDays,
+        packageDays,
       };
       if (formData.targetType === 'specific') {
         payload.targetGroups = formData.selectedGroups.map((g: Group) => ({ id: g.id }));
@@ -327,20 +335,40 @@ export default function WaAdvertisements() {
       {/* ─── Filter Bar ────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div className="flex items-center gap-1 bg-[var(--color-bg-secondary)] rounded-xl p-1 border border-[var(--color-border)]">
-          {['all', 'draft', 'active', 'completed', 'cancelled'].map(s => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer capitalize ${
-                statusFilter === s
-                  ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg)]'
-              }`}
-            >
-              {s === 'all' ? 'All' : s}
-            </button>
-          ))}
+          {['all', 'draft', 'active', 'completed', 'cancelled'].map(s => {
+            const count = counts?.[s as keyof typeof counts];
+            const isActive = s === 'active';
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                title={isActive && counts ? `Active campaigns / sent today` : undefined}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer capitalize ${
+                  statusFilter === s
+                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg)]'
+                }`}
+              >
+                {s === 'all' ? 'All' : s}
+                {count !== undefined && (
+                  <span
+                    className={`ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                      isActive
+                        ? statusFilter === s
+                          ? 'bg-white/20'
+                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        : statusFilter === s
+                          ? 'bg-white/20'
+                          : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
+                    }`}
+                  >
+                    {isActive ? `${count}/${counts?.activeSentToday ?? 0}` : count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <div className="relative flex-1 max-w-xs w-full">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
@@ -665,13 +693,11 @@ export default function WaAdvertisements() {
                     label="Package Days"
                     type="number"
                     min="1"
-                    max="30"
                     value={packageDaysInput}
                     onChange={(e) => setPackageDaysInput(e.target.value)}
                     onBlur={() => {
                       let parsed = parseInt(packageDaysInput, 10);
                       if (isNaN(parsed) || parsed < 1) parsed = 1;
-                      if (parsed > 30) parsed = 30;
                       setPackageDaysInput(String(parsed));
                       setFormData(prev => ({ ...prev, packageDays: parsed }));
                     }}
@@ -828,21 +854,26 @@ function AdCard({
                 {loadingLogs ? (
                   <div className="text-[11px] text-[var(--color-text-muted)] text-center py-2">Loading logs...</div>
                 ) : logs && logs.length > 0 ? (
-                  logs.map((log: { groupName: string; status: string; timestamp: string }, i: number) => (
-                    <div key={i} className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-[var(--color-bg-secondary)]">
-                      <span className="text-[var(--color-text-secondary)] truncate mr-2">{log.groupName}</span>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={log.status === 'sent' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
-                          {log.status === 'sent' ? 'Sent' : 'Failed'}
-                        </span>
-                        <span className="text-[var(--color-text-muted)]">
-                          {new Date(log.timestamp).toLocaleString(undefined, {
-                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                          })}
-                        </span>
+                  logs.map((log: { groupName: string; status: string; timestamp: string | null }, i: number) => {
+                    const ts = log.timestamp ? new Date(log.timestamp) : null;
+                    return (
+                      <div key={i} className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-[var(--color-bg-secondary)]">
+                        <span className="text-[var(--color-text-secondary)] truncate mr-2">{log.groupName}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={log.status === 'sent' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+                            {log.status === 'sent' ? 'Sent' : 'Failed'}
+                          </span>
+                          <span className="text-[var(--color-text-muted)]">
+                            {ts
+                              ? ts.toLocaleString(undefined, {
+                                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                })
+                              : '—'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="text-[11px] text-[var(--color-text-muted)] text-center py-2">No logs found.</div>
                 )}
